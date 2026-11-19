@@ -102,7 +102,7 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
     if (!parsed.ok) return errorResponse(c, parsed.error);
     const view = VIEW_TABLE['missed-calls'].build(store, parsed.value);
     // The file name holds dates only, so it can't carry text from the URL.
-    return c.body(`﻿${callbacksToCsv(view.callbacks.rows)}`, 200, {
+    return c.body(`\uFEFF${callbacksToCsv(view.callbacks.rows)}`, 200, {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="callbacks-${view.range.start}-to-${view.range.end}.csv"`,
     });

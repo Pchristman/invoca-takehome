@@ -123,7 +123,7 @@ async function rawText(target: ReturnType<typeof createApp>, path: string): Prom
 
 /** The CSV text without its BOM, split into lines (the trailing CRLF leaves no empty last line). */
 function csvLines(text: string): string[] {
-  const lines = text.replace(/^﻿/, '').split('\r\n');
+  const lines = text.replace(/^\uFEFF/, '').split('\r\n');
   expect(lines.pop()).toBe('');
   return lines;
 }
@@ -140,7 +140,7 @@ describe('callbacks CSV', () => {
 
   it('has a BOM, the header, CRLF lines and the same rows as the JSON', async () => {
     const text = await rawText(app, `${CSV_PATH}?range=last7`);
-    expect(text.startsWith('﻿')).toBe(true);
+    expect(text.startsWith('\uFEFF')).toBe(true);
     expect(text.endsWith('\r\n')).toBe(true);
     const lines = csvLines(text);
     expect(lines[0]).toBe(CSV_HEADER);
@@ -183,7 +183,7 @@ describe('callbacks CSV', () => {
       },
     );
     const text = await rawText(createApp(odd), `${CSV_PATH}?range=all`);
-    expect(text.startsWith('﻿')).toBe(true);
+    expect(text.startsWith('\uFEFF')).toBe(true);
     const lines = csvLines(text);
     const spring = lines.find((l) => l.startsWith('h1,'))!;
     expect(spring).toContain(`"'=HYPERLINK(""x"")"`);
