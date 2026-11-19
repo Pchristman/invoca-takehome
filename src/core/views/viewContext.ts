@@ -44,6 +44,13 @@ export interface ViewContext {
 
 /** Resolve the comparison once and gather the caveats. A bad second range gives a reason, never a throw. */
 export function makeViewContext(store: CallStore, range: ResolvedRange, previous?: DateRange): ViewContext {
+  // Programmer-error guard: ranges from resolveRange are always valid, and Phase 6 validates user input.
+  if (!Number.isInteger(range.days) || range.days < 1) {
+    throw new Error(`Invalid range: days must be a positive integer, got ${range.days}`);
+  }
+  if (range.start > range.end) {
+    throw new Error(`Invalid range: start ${range.start} is after end ${range.end}`);
+  }
   const span = dataSpan(store.calls) ?? range;
   const result = resolveComparison(span, range, previous);
 

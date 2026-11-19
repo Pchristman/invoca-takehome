@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { buildCampaigns } from '../../../src/core/views/campaignsView';
 import { makeViewContext } from '../../../src/core/views/viewContext';
 import { callAt, makeStore, range } from './fixtures';
 
@@ -73,6 +74,19 @@ describe('makeViewContext', () => {
     expect(ctx.previous).toBeNull();
     expect(ctx.notes.asOf).toBe('2026-09-07');
     expect(ctx.notes.comparison.available).toBe(false);
+  });
+
+  test('a range whose days is not a positive integer, or whose start is after its end, throws', () => {
+    const good = range('2026-09-08', '2026-09-14');
+    expect(() => makeViewContext(store, { ...good, days: 0 })).toThrow(/days/);
+    expect(() => makeViewContext(store, { ...good, days: -7 })).toThrow(/days/);
+    expect(() => makeViewContext(store, { ...good, days: 2.5 })).toThrow(/days/);
+    expect(() => makeViewContext(store, { ...good, start: '2026-09-14', end: '2026-09-08' })).toThrow(/start/);
+  });
+
+  test('every view builder inherits the guard (checked through buildCampaigns)', () => {
+    const bad = { ...range('2026-09-08', '2026-09-14'), days: 0 };
+    expect(() => buildCampaigns(store, bad)).toThrow(/days/);
   });
 
   test('calls are placed by local date, not UTC date', () => {
