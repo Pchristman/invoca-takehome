@@ -245,6 +245,11 @@ describe('csvHref', () => {
     expect(href).toBe(PATH);
   });
 
+  it('never carries a comparison, even a half-typed one', () => {
+    const href = csvHref(state({ range: { kind: 'preset', preset: 'last7' }, compare: { start: '2026-09-01', end: '' } }));
+    expect(href).toBe(`${PATH}?range=last7`);
+  });
+
   it('percent-encodes an office id and decodes it back', () => {
     const href = csvHref(state({ location: 'a&b c' }));
     expect(new URL(href, 'http://x').searchParams.get('location')).toBe('a&b c');

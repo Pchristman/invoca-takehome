@@ -110,9 +110,10 @@ export function withLocation(state: UrlState, id: string | null): UrlState {
   return { ...state, location: id };
 }
 
-// The callback CSV for what is on screen: same range and office, no view, dev or campaign.
+// The callback CSV for what is on screen: same range and office, no view, dev, campaign or comparison
+// (Missed calls has no comparison, and a half-typed one would make the export fail).
 export function csvHref(state: UrlState): string {
-  const query = apiParams(state, 'missed-calls').toString();
+  const query = apiParams({ ...state, compare: null }, 'missed-calls').toString();
   return query === '' ? '/api/missed-calls/callbacks.csv' : `/api/missed-calls/callbacks.csv?${query}`;
 }
 
