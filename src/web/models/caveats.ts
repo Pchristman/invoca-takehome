@@ -11,15 +11,14 @@ export interface Caveat {
 
 /**
  * The caveats that apply, in a fixed order. `span` is the data's first and last date.
- * `options.range` is the resolved range, named in the clamped sentence (notes do not carry it); without it the data span is named.
+ * `options.range` is the resolved range, named in the clamped sentence (notes do not carry it), so it is required.
  * The previous-period ones appear only when the comparison is being shown and is usable.
  */
 export function caveatsFor(
   notes: ViewNotes,
   span: DateRange,
-  options: { comparing: boolean; range?: DateRange },
+  options: { comparing: boolean; range: DateRange },
 ): Caveat[] {
-  const shown = options.range ?? span;
   const found: Caveat[] = [];
   const add = (id: Caveat['id'], text: string) => found.push({ id, text });
   const showPrevious = options.comparing && notes.comparison.available;
@@ -27,7 +26,7 @@ export function caveatsFor(
   if (notes.clamped) {
     add(
       'clamped',
-      `Showing ${formatDateSpan(shown.start, shown.end)}: the range you asked for reached outside the data and was cut to fit.`,
+      `Showing ${formatDateSpan(options.range.start, options.range.end)}: the range you asked for reached outside the data and was cut to fit.`,
     );
   }
   if (notes.incompleteCurrent.includesFirstDay) {

@@ -28,6 +28,25 @@ function row(id: string, over: Partial<CampaignRow> = {}): CampaignRow {
   };
 }
 
+describe('columns', () => {
+  it('has the plan labels in order, with the three estimate columns flagged', () => {
+    const { columns } = campaignsModel(server, DEFAULT_SORT);
+    expect(columns.map((c) => c.label)).toEqual([
+      'Campaign',
+      'Channel',
+      'Calls',
+      'Bookings',
+      'Booking rate',
+      'Revenue',
+      'Est. spend',
+      'Est. cost per booking',
+      'Est. revenue per budget $',
+    ]);
+    expect(columns.map((c) => c.estimate)).toEqual([false, false, false, false, false, false, true, true, true]);
+    expect(columns.map((c) => c.numeric)).toEqual([false, false, true, true, true, true, true, true, true]);
+  });
+});
+
 describe('sorting', () => {
   it('DEFAULT_SORT keeps the API order', () => {
     expect(DEFAULT_SORT).toEqual({ key: 'calls', dir: 'desc' });
@@ -153,11 +172,29 @@ describe('unattributed', () => {
     const model = campaignsModel(view, DEFAULT_SORT);
     expect(model.rows.map((r) => r.id)).not.toContain(null);
     expect(model.unattributed!.id).toBeNull();
-    expect(model.unattributed!.trackingNumbers.map((t) => t.text)).toEqual(
-      view.unattributed!.trackingNumbers.map(
-        (t) => `${t.trackingNumber} · ${t.calls} ${t.calls === 1 ? 'call' : 'calls'}`,
-      ),
-    );
+    // Literal: the fixture's one tracking number, 14 unattributed calls.
+    expect(model.unattributed!.trackingNumbers.map((t) => t.text)).toEqual(['+1-555-0100 · 14 calls']);
+  });
+
+  it('prints a thousands separator and singular "call" in tracking numbers, in API order', () => {
+    const base = campaignsFor('range=all', storeWithZeroBudget());
+    // Hand-edited copy of real JSON: three tracking numbers with counts 1,204, 1 and 999.
+    const view: CampaignsView = {
+      ...base,
+      unattributed: {
+        ...base.unattributed!,
+        trackingNumbers: [
+          { trackingNumber: '+1-555-0100', calls: 1204 },
+          { trackingNumber: '+1-555-0101', calls: 1 },
+          { trackingNumber: '+1-555-0102', calls: 999 },
+        ],
+      },
+    };
+    expect(campaignsModel(view, DEFAULT_SORT).unattributed!.trackingNumbers.map((t) => t.text)).toEqual([
+      '+1-555-0100 · 1,204 calls',
+      '+1-555-0101 · 1 call',
+      '+1-555-0102 · 999 calls',
+    ]);
   });
 
   it('is null when the API has none', () => {

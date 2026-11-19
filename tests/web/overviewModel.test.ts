@@ -40,17 +40,34 @@ describe('overview tiles', () => {
     const byKey = Object.fromEntries(model.tiles.map((t) => [t.key, t]));
     expect(byKey.calls!.value).toBe('14');
     expect(byKey.calls!.previous).toBe('was 14');
+    // The Phase 7 plan text said $1,400 for range=last7; that is wrong. last7 is 7 days (Sep 8-14) of one
+    // booked $100 call a day = $700. ($1,400 is the all-data missed-calls estimate.) Record in DECISIONS.md.
     expect(byKey.revenueUsd!.value).toBe('$700');
     expect(byKey.answerRate!.value).toBe('50.0%');
   });
 
-  it("matches each tile's change to the API's change kind", () => {
-    for (const tile of model.tiles) {
-      const api = view.tiles[tile.key].change;
-      if (api.kind === 'none') expect(tile.change).toBeNull();
-      else if (api.kind === 'new') expect(tile.change).toEqual({ text: 'new', tone: 'new' });
-      else expect(tile.change?.text).toMatch(api.kind === 'points' ? / points$/ : /%$/);
-    }
+  it("prints each tile's change as the exact text and tone for the fixture", () => {
+    // The fixture is the same in both weeks: every count is a 0% change, the answer rate 0 points.
+    expect(model.tiles.map((t) => [t.key, view.tiles[t.key].change])).toEqual([
+      ['calls', { kind: 'percent', value: 0 }],
+      ['uniqueCallers', { kind: 'percent', value: 0 }],
+      ['answerRate', { kind: 'points', value: 0 }],
+      ['bookings', { kind: 'percent', value: 0 }],
+      ['revenueUsd', { kind: 'percent', value: 0 }],
+    ]);
+    expect(model.tiles.map((t) => t.change)).toEqual([
+      { text: '0.0%', tone: 'flat' },
+      { text: '0.0%', tone: 'flat' },
+      { text: '0.0 points', tone: 'flat' },
+      { text: '0.0%', tone: 'flat' },
+      { text: '0.0%', tone: 'flat' },
+    ]);
+  });
+
+  it('a "none" change from the API (all-data range, no previous) is null', () => {
+    const all = overviewFor('range=all');
+    expect(all.tiles.calls.change).toEqual({ kind: 'none' });
+    expect(overviewModel(all).tiles[0]!.change).toBeNull();
   });
 });
 
@@ -110,6 +127,21 @@ describe('empty range', () => {
 describe('top actions', () => {
   const view = overviewFor('range=last7');
   const model = overviewModel(view);
+
+  it('the missed-calls action carries a locationId when the API has one', () => {
+    // The fixture's missed-calls action has no office, so edit a copy of the real JSON to add one.
+    expect(view.topActions[2]!.action.link).toEqual({ view: 'missed-calls' });
+    const edited: OverviewView = {
+      ...view,
+      topActions: view.topActions.map((t, i) =>
+        i === 2 ? { ...t, action: { ...t.action, link: { view: 'missed-calls' as const, locationId: 'loc_b' } } } : t,
+      ),
+    };
+    const actions = overviewModel(edited).topActions;
+    expect(actions[2]!.link).toEqual({ view: 'missed-calls', locationId: 'loc_b' });
+    expect(actions[0]!.link).toEqual({ view: 'campaigns' });
+    expect(actions[1]!.link).toEqual({ view: 'missed-calls' });
+  });
 
   it('passes the API actions through in order', () => {
     expect(view.topActions.map((t) => t.view)).toEqual(['campaigns', 'locations', 'missed-calls']);

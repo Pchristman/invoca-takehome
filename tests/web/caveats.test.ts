@@ -9,9 +9,9 @@ import { overviewFor, toJson } from './fixtures';
 
 // The server fixture's data runs 2026-09-01 to 2026-09-14.
 const SPAN = { start: '2026-09-01', end: '2026-09-14' };
-const ids = (notes: ViewNotes, comparing = true) => caveatsFor(notes, SPAN, { comparing }).map((c) => c.id);
+const ids = (notes: ViewNotes, comparing = true) => caveatsFor(notes, SPAN, { comparing, range: SPAN }).map((c) => c.id);
 const textOf = (notes: ViewNotes, id: string, comparing = true) =>
-  caveatsFor(notes, SPAN, { comparing }).find((c) => c.id === id)?.text;
+  caveatsFor(notes, SPAN, { comparing, range: SPAN }).find((c) => c.id === id)?.text;
 
 /** Real notes for a range in the middle of a 30-day store. */
 function middleNotes(start: string, end: string): { notes: ViewNotes; span: { start: string; end: string } } {
@@ -69,19 +69,22 @@ describe('caveatsFor', () => {
     // Ends 14 days before the last day, well past any outcome lag.
     const { notes, span } = middleNotes('2026-09-10', '2026-09-16');
     expect(notes.comparison.available).toBe(true);
-    expect(caveatsFor(notes, span, { comparing: true })).toEqual([]);
+    expect(caveatsFor(notes, span, { comparing: true, range: { start: '2026-09-10', end: '2026-09-16' } })).toEqual([]);
   });
 
   it('the first and last day of the data', () => {
     const both = caveatsFor(overviewFor('range=all').notes, SPAN, {
       comparing: true,
+      range: SPAN,
     });
     expect(both.map((c) => c.id)).toEqual(['first_day', 'last_day']);
     expect(both[0]?.text).toBe('Sep 1, 2026, the first day in the data, may be incomplete.');
     expect(both[1]?.text).toBe('Sep 14, 2026, the last day in the data, may be incomplete.');
 
-    const lastOnly = caveatsFor(overviewFor('range=last7').notes, SPAN, {
+    const last7 = overviewFor('range=last7');
+    const lastOnly = caveatsFor(last7.notes, SPAN, {
       comparing: false,
+      range: last7.range,
     });
     expect(lastOnly.map((c) => c.id)).toEqual(['last_day']);
   });
@@ -131,6 +134,23 @@ describe('caveatsFor', () => {
       reason: 'No full previous period: x',
     };
     expect(ids({ ...notes, comparison: unavailable })).toEqual([]);
+  });
+
+  it('previous_first_day and previous_last_day come from real server notes', () => {
+    // Sep 8-14 against Sep 1-7: the comparison holds the first day of the data, the range holds the last.
+    const early = overviewFor('start=2026-09-08&end=2026-09-14');
+    expect(early.notes.comparison.previous).toEqual({ start: '2026-09-01', end: '2026-09-07' });
+    const shown = caveatsFor(early.notes, SPAN, { comparing: true, range: early.range });
+    expect(shown.map((c) => c.id)).toEqual(['last_day', 'previous_first_day']);
+    expect(shown[1]?.text).toBe('The comparison period includes the first day in the data, which may be incomplete.');
+    // The same range with the comparison hidden: only the range's own caveat.
+    expect(caveatsFor(early.notes, SPAN, { comparing: false, range: early.range }).map((c) => c.id)).toEqual(['last_day']);
+
+    // Sep 1-5 against a later Sep 10-14: now the comparison holds the last day, and the range the first.
+    const late = overviewFor('start=2026-09-01&end=2026-09-05&compareStart=2026-09-10&compareEnd=2026-09-14');
+    expect(late.notes.comparison.available).toBe(true);
+    const lateIds = caveatsFor(late.notes, SPAN, { comparing: true, range: late.range }).map((c) => c.id);
+    expect(lateIds).toEqual(['first_day', 'previous_last_day']);
   });
 
   it('previous-period caveats are absent for the real all-data range', () => {

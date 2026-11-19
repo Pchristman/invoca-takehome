@@ -147,3 +147,27 @@ export function storeWithZeroBudget(): CallStore {
     locations: [office('loc_a', 'Office A', 'America/Phoenix')],
   });
 }
+
+/** One answered $100 booked call a day for campaign cmp_a, every date from `first` to `last` (YYYY-MM-DD, inclusive). */
+export function storeOverDates(first: string, last: string): CallStore {
+  const calls: CleanCall[] = [];
+  const end = Date.parse(`${last}T00:00:00Z`);
+  for (let at = Date.parse(`${first}T00:00:00Z`); at <= end; at += 24 * 60 * 60 * 1000) {
+    const date = new Date(at).toISOString().slice(0, 10);
+    calls.push(
+      callAt(`${date}T16:00:00Z`, {
+        campaignId: 'cmp_a',
+        channel: 'social',
+        locationId: 'loc_a',
+        answered: true,
+        booked: true,
+        outcome: 'booked',
+        revenueUsd: 100,
+      }),
+    );
+  }
+  return makeStore(calls, {
+    campaigns: [campaign('cmp_a', 'Alpha', 'social', 10)],
+    locations: [office('loc_a', 'Office A', 'America/Phoenix')],
+  });
+}

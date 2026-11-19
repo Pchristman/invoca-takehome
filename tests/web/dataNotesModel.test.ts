@@ -59,7 +59,12 @@ describe('dataNotesModel sections', () => {
     expect(withNotes[withNotes.length - 1]?.list).toEqual(['calls.csv is empty: starting with zero calls']);
   });
 
-it('follows the Load notes rule on the real fixture too', () => {    const real = serverFixture().dataNotes;    const titles = dataNotesModel(respond(real)).map((s) => s.title);    expect(titles.includes('Load notes')).toBe(real.notes.length > 0);  });
+  it('follows the Load notes rule on the real fixture too', () => {
+    const real = serverFixture().dataNotes;
+    const titles = dataNotesModel(respond(real)).map((s) => s.title);
+    expect(titles.includes('Load notes')).toBe(real.notes.length > 0);
+  });
+
   it('every value is a non-empty string with no undefined, NaN or [object', () => {
     for (const section of dataNotesModel(respond(serverFixture().dataNotes))) {
       for (const item of section.items) {
