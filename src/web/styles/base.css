@@ -384,3 +384,30 @@ th .sort-button {
   margin: 0;
   overflow-x: auto;
 }
+
+/* ---------- shell additions ---------- */
+.range-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-down);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.range-control input:disabled,
+.button:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.caveats {
+  padding-left: var(--space-5);
+}
+
+.estimate-note {
+  margin: var(--space-3) 0;
+}
+
+.estimate-note summary {
+  cursor: pointer;
+}
