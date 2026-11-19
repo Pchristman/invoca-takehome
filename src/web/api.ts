@@ -34,6 +34,7 @@ function readServerError(body: unknown): ClientError | undefined {
   if (typeof error !== 'object' || error === null) return undefined;
   const { code, message, field } = error as { code?: unknown; message?: unknown; field?: unknown };
   if (typeof code !== 'string' || typeof message !== 'string') return undefined;
+  // The code may be one this client has never heard of; describeError has a default for that.
   const result: ClientError = { code: code as ApiErrorCode, message };
   if (typeof field === 'string') result.field = field;
   return result;
@@ -60,7 +61,9 @@ export async function fetchApi<T>(
   const body = await readJson(response);
 
   if (response.ok) {
-    if (body === undefined) return { ok: false, error: { code: 'bad_response', message: BAD_RESPONSE_MESSAGE } };
+    // Minimal check: the body must be a JSON object. Deeper shape checking is not done here.
+    if (typeof body !== 'object' || body === null || Array.isArray(body))
+      return { ok: false, error: { code: 'bad_response', message: BAD_RESPONSE_MESSAGE } };
     return { ok: true, data: body as T };
   }
 

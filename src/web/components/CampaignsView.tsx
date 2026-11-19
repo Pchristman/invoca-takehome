@@ -13,11 +13,13 @@ import { WeeklyChart } from './WeeklyChart';
 export function CampaignsView({
   view,
   span,
+  chartBusy = false,
   onSelectCampaign,
 }: {
   view: CampaignsData;
   state: UrlState;
   span: DateRange;
+  chartBusy?: boolean; // the chart's campaign is changing; the rest is the last reply
   onSelectCampaign(id: string): void;
 }) {
   const [sort, setSort] = useState(DEFAULT_SORT);
@@ -55,7 +57,7 @@ export function CampaignsView({
           <CampaignTable model={model} sort={sort} onSort={(key) => setSort((current) => nextSort(current, key))} />
         )}
       </section>
-      <section className="section">
+      <section className="section" aria-busy={chartBusy ? 'true' : undefined}>
         {model.chartChoices.length > 0 && (
           <label className="row small">
             Campaign for the weekly chart
@@ -71,6 +73,11 @@ export function CampaignsView({
               ))}
             </select>
           </label>
+        )}
+        {chartBusy && (
+          <p role="status" className="muted small">
+            Updating chart…
+          </p>
         )}
         {chart !== null && <WeeklyChart model={chart} />}
       </section>

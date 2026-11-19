@@ -55,5 +55,8 @@ export function describeError(error: ClientError): ErrorCopy {
         canReset: true,
         canRetry: false,
       };
+    default:
+      // A code this client does not know (a newer server, or an odd reply). Never leave the screen without copy.
+      return { title: 'Something went wrong', message: error.message, canReset: false, canRetry: true };
   }
 }

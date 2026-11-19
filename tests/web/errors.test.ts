@@ -150,3 +150,21 @@ describe('comparison wording matches the real server', () => {
     if (unequal.ok) expect(unequal.comparison.unavailableReason).toMatch(/^No like-for-like comparison:/);
   });
 });
+
+describe('describeError never returns undefined', () => {
+  it.each([...codes, 'rate_limited'])('%s gets copy', (code) => {
+    const d = describeError({ code: code as ClientErrorCode, message: 'Server words.' });
+    expect(d).toBeDefined();
+    expect(d.title.length).toBeGreaterThan(0);
+    expect(typeof d.canRetry).toBe('boolean');
+  });
+
+  it('an unknown code gets a generic title, passes the message through and offers retry', () => {
+    expect(describeError({ code: 'rate_limited' as ClientErrorCode, message: 'Slow down.' })).toEqual({
+      title: 'Something went wrong',
+      message: 'Slow down.',
+      canReset: false,
+      canRetry: true,
+    });
+  });
+});

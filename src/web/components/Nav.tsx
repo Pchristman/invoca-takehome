@@ -1,14 +1,7 @@
-import type { ViewName } from '../../core/views/facts';
+import { VIEW_LABELS } from '../models/viewLabels';
 import { VIEW_ORDER, withView, toSearch } from '../urlState';
 import type { UrlState } from '../urlState';
 import { Link } from './Link';
-
-export const VIEW_LABELS: Record<ViewName, string> = {
-  overview: 'Overview',
-  campaigns: 'Campaigns',
-  locations: 'Locations',
-  'missed-calls': 'Missed calls',
-};
 
 /** Four links. Each keeps the range, comparison and dev, and drops the campaign and location pick. */
 export function Nav({ state }: { state: UrlState }) {

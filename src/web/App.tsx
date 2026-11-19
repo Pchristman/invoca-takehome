@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DataNotesResponse, Meta } from '../server/api';
 import type { DateRange } from '../core/ranges';
 import type { CampaignsView as CampaignsData, OverviewView as OverviewData } from '../core/views';
@@ -7,11 +7,14 @@ import { ComingSoon } from './components/ComingSoon';
 import { DataNotesPanel } from './components/DataNotesPanel';
 import { OverviewView } from './components/OverviewView';
 import { DATA_NOTES_BUTTON_ID, Header } from './components/Header';
-import { Nav, VIEW_LABELS } from './components/Nav';
+import { Nav } from './components/Nav';
 import { RangeControl } from './components/RangeControl';
 import { RequestFrame } from './components/RequestFrame';
 import { dataNotesModel } from './models/dataNotesModel';
+import { shouldCloseDataNotes } from './models/escapeKey';
+import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
+import { VIEW_LABELS } from './models/viewLabels';
 import { useApi } from './useApi';
 import { useUrlState } from './useUrlState';
 import { apiParams, defaultsHref, withCampaign, withRange } from './urlState';
@@ -23,32 +26,33 @@ export function App() {
   const { state } = useUrlState();
   const meta = useApi<Meta>('/api/meta', NO_PARAMS);
   const resetHref = defaultsHref(state);
+  const screen = screenFor(meta.state);
 
   return (
     <div className="page">
-      <RequestFrame state={meta.state} loadingLabel="Loading the data..." resetHref={resetHref} onRetry={meta.retry}>
-        {(data) => <Shell state={state} meta={data} resetHref={resetHref} />}
-      </RequestFrame>
+      {screen.screen === 'empty' && <EmptyScreen notes={screen.notes} />}
+      {screen.screen === 'ready' && <ReadyShell state={state} meta={screen.meta} resetHref={resetHref} />}
+      {(screen.screen === 'loading' || screen.screen === 'error') && (
+        // Prints the loading message or the error; it never has data to show on these two screens.
+        <RequestFrame state={meta.state} loadingLabel="Loading the data..." resetHref={resetHref} onRetry={meta.retry}>
+          {() => null}
+        </RequestFrame>
+      )}
     </div>
   );
 }
 
-// Everything after /api/meta has arrived.
-function Shell({ state, meta, resetHref }: { state: UrlState; meta: Meta; resetHref: string }) {
-  const screen = screenFor({ status: 'ready', key: '', data: meta });
-  if (screen.screen === 'empty') {
-    return (
-      <section className="notice" role="status">
-        <h1>Inbound call performance</h1>
-        <p>There is no call data to show.</p>
-        {screen.notes.map((note) => (
-          <p key={note}>{note}</p>
-        ))}
-      </section>
-    );
-  }
-  if (screen.screen !== 'ready') return null; // loading and error are handled by the frame above
-  return <ReadyShell state={state} meta={screen.meta} resetHref={resetHref} />;
+/** The export has no calls at all. */
+export function EmptyScreen({ notes }: { notes: string[] }) {
+  return (
+    <section className="notice" role="status">
+      <h1>Inbound call performance</h1>
+      <p>This export has no calls</p>
+      {notes.map((note) => (
+        <p key={note}>{note}</p>
+      ))}
+    </section>
+  );
 }
 
 function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; resetHref: string }) {
@@ -57,6 +61,11 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   const dataNotesOpen = state.dev && dataNotesToggled; // without ?dev there is no panel, whatever the state says
   const hasView = state.view === 'overview' || state.view === 'campaigns';
   const view = useApi<unknown>(hasView ? `/api/${state.view}` : null, apiParams(state, state.view));
+  // The last reply that was ready, kept so a change of the chart's campaign does not unmount the screen.
+  const lastReady = useRef<{ key: string; data: unknown } | null>(null);
+  if (view.state?.status === 'ready') lastReady.current = { key: view.state.key, data: view.state.data };
+  else if (view.state?.status === 'failed' || view.state === null) lastReady.current = null;
+  const shown = displayState(lastReady.current, view.state);
   const closeDataNotes = () => {
     setDataNotesToggled(false);
     document.getElementById(DATA_NOTES_BUTTON_ID)?.focus();
@@ -65,7 +74,9 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   useEffect(() => {
     if (!dataNotesOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      const target = event.target;
+      const targetTag = target instanceof Element ? target.tagName : '';
+      if (!shouldCloseDataNotes({ key: event.key, defaultPrevented: event.defaultPrevented, targetTag })) return;
       setDataNotesToggled(false);
       document.getElementById(DATA_NOTES_BUTTON_ID)?.focus();
     };
@@ -74,6 +85,7 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   }, [dataNotesOpen]);
 
   const rangeError = view.state?.status === 'failed' ? view.state.error : null;
+  const hasSpan = meta.span !== null;
 
   return (
     <>
@@ -81,8 +93,12 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
       {dataNotesOpen && <DataNotes resetHref={resetHref} onClose={closeDataNotes} />}
       <Nav state={state} />
       <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} />
-      {hasView && meta.span !== null ? (
-        <RequestFrame state={view.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
+      {!hasView ? (
+        <ComingSoon view={VIEW_LABELS[state.view]} />
+      ) : !hasSpan ? (
+        <EmptyScreen notes={meta.notes} />
+      ) : (
+        <RequestFrame state={shown.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
           {(data) =>
             state.view === 'overview' ? (
               <OverviewView view={data as OverviewData} state={state} span={meta.span as DateRange} />
@@ -91,13 +107,12 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
                 view={data as CampaignsData}
                 state={state}
                 span={meta.span as DateRange}
+                chartBusy={shown.busy}
                 onSelectCampaign={(id) => navigate(withCampaign(state, id))}
               />
             )
           }
         </RequestFrame>
-      ) : (
-        <ComingSoon view={VIEW_LABELS[state.view]} />
       )}
     </>
   );
@@ -106,9 +121,17 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
 // Mounted only while the panel is open, so /api/data-notes is requested only then (and only with ?dev).
 function DataNotes({ resetHref, onClose }: { resetHref: string; onClose(): void }) {
   const notes = useApi<DataNotesResponse>('/api/data-notes', NO_PARAMS);
+  const ready = notes.state?.status === 'ready';
   return (
-    <RequestFrame state={notes.state} loadingLabel="Loading data notes..." resetHref={resetHref} onRetry={notes.retry}>
-      {(data) => <DataNotesPanel sections={dataNotesModel(data)} onClose={onClose} />}
-    </RequestFrame>
+    <>
+      {!ready && ( // the ready panel has its own Close button; while loading or failed this one is the way out
+        <button type="button" className="button" onClick={onClose}>
+          Close data notes
+        </button>
+      )}
+      <RequestFrame state={notes.state} loadingLabel="Loading data notes..." resetHref={resetHref} onRetry={notes.retry}>
+        {(data) => <DataNotesPanel sections={dataNotesModel(data)} onClose={onClose} />}
+      </RequestFrame>
+    </>
   );
 }

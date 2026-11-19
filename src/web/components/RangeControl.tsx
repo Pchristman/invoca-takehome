@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Meta } from '../../server/api';
 import type { ClientError } from '../api';
+import { isIsoDate } from '../format';
 import { customRange, presetOf } from '../urlState';
 import type { RangeChoice, UrlState } from '../urlState';
 
@@ -9,6 +10,11 @@ const PRESET_LABELS: Record<string, string> = {
   last28: 'Last 28 days',
   all: 'All data',
 };
+
+/** Only a real YYYY-MM-DD date may seed an input; anything else from the URL shows as blank. */
+function validOrBlank(value: string | undefined): string {
+  return value !== undefined && isIsoDate(value) ? value : '';
+}
 
 const RANGE_FIELDS = ['start', 'end', 'compareStart', 'compareEnd'];
 
@@ -25,16 +31,16 @@ export function RangeControl({
   onChange(range: RangeChoice | null): void;
 }) {
   const fromUrl = state.range?.kind === 'custom' ? state.range : null;
-  const [start, setStart] = useState(fromUrl?.start ?? '');
-  const [end, setEnd] = useState(fromUrl?.end ?? '');
+  const [start, setStart] = useState(validOrBlank(fromUrl?.start));
+  const [end, setEnd] = useState(validOrBlank(fromUrl?.end));
   // Back and forward buttons change the URL under the inputs.
   useEffect(() => {
-    setStart(fromUrl?.start ?? '');
-    setEnd(fromUrl?.end ?? '');
+    setStart(validOrBlank(fromUrl?.start));
+    setEnd(validOrBlank(fromUrl?.end));
   }, [fromUrl?.start, fromUrl?.end]);
 
   const active = presetOf(state, meta.defaultPreset);
-  const applied = customRange(start, end);
+  const applied = isIsoDate(start) && isIsoDate(end) ? customRange(start, end) : null;
   const showError = error !== null && error.field !== undefined && RANGE_FIELDS.includes(error.field);
 
   return (
@@ -63,8 +69,9 @@ export function RangeControl({
       <button type="button" className="button" disabled={applied === null} onClick={() => onChange(applied)}>
         Apply
       </button>
+      {/* Plain text on purpose: the request frame below already announces this same error as an alert. */}
       {showError && (
-        <p role="alert" className="range-error">
+        <p className="range-error">
           {error.message}
         </p>
       )}

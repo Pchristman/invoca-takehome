@@ -9,6 +9,7 @@ import { dataSpan } from '../../src/core/ranges';
 import type { DateRange } from '../../src/core/ranges';
 import type { Meta } from '../../src/server/api';
 import type { ClientError } from '../../src/web/api';
+import { EmptyScreen } from '../../src/web/App';
 import { CampaignTable } from '../../src/web/components/CampaignTable';
 import { CampaignsView as CampaignsScreen } from '../../src/web/components/CampaignsView';
 import { Caveats } from '../../src/web/components/Caveats';
@@ -18,6 +19,7 @@ import { EstimateNote } from '../../src/web/components/EstimateNote';
 import { Header } from '../../src/web/components/Header';
 import { Nav } from '../../src/web/components/Nav';
 import { OverviewView } from '../../src/web/components/OverviewView';
+import { ErrorBoundary, ErrorFallback } from '../../src/web/components/ErrorBoundary';
 import { RangeControl } from '../../src/web/components/RangeControl';
 import { RequestFrame } from '../../src/web/components/RequestFrame';
 import { WeeklyChart } from '../../src/web/components/WeeklyChart';
@@ -173,12 +175,51 @@ describe('RangeControl', () => {
     expect(custom).toContain('value="2026-09-01"');
   });
 
-  it('shows a range error as an alert only for a range field', () => {
-    const html = render('?start=nope&end=2026-09-05', { code: 'bad_date', message: 'Start date is not a date.', field: 'start' });
-    expect(html).toMatch(/<p role="alert"[^>]*>Start date is not a date\.<\/p>/);
+  it('shows a range error as plain text (the frame owns the alert) only for a range field', () => {
+    const html = render('?start=2026-09-01&end=2026-09-05', { code: 'bad_date', message: 'Start date is not a date.', field: 'start' });
+    expect(html).toMatch(/<p class="range-error">Start date is not a date\.<\/p>/);
+    expect(html).not.toContain('role="alert"');
     const other = render('', { code: 'unknown_campaign', message: 'No such campaign.', field: 'campaign' });
-    expect(other).not.toContain('role="alert"');
-    expect(render('')).not.toContain('role="alert"');
+    expect(other).not.toContain('range-error');
+    expect(render('')).not.toContain('range-error');
+  });
+
+  it('a URL date that is not a date never seeds the inputs and keeps Apply disabled', () => {
+    const html = render('?start=nope&end=2026-09-05');
+    expect(html).not.toContain('nope');
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Apply</);
+    expect(render('?start=2026-02-30&end=2026-09-05')).toMatch(/<button[^>]*disabled=""[^>]*>Apply</);
+  });
+});
+
+describe('ErrorBoundary', () => {
+  it('the fallback is a plain sentence with a Reload button', () => {
+    const html = renderToStaticMarkup(<ErrorFallback />);
+    expect(html).toContain('Something went wrong showing this page. Reload to try again.');
+    expect(html).toContain('role="alert"');
+    expect(html).toMatch(/<button[^>]*>Reload</);
+  });
+
+  it('a render error moves it to the failed state', () => {
+    expect(ErrorBoundary.getDerivedStateFromError()).toEqual({ failed: true });
+  });
+});
+
+describe('RequestFrame with an unknown error code', () => {
+  it('shows generic copy and the server message, with Try again', () => {
+    const html = renderToStaticMarkup(
+      <RequestFrame
+        state={{ status: 'failed', key: 'k', error: { code: 'rate_limited' as never, message: 'Slow down.', status: 429 } }}
+        loadingLabel="x"
+        resetHref="/"
+        onRetry={noop}
+      >
+        {() => null}
+      </RequestFrame>,
+    );
+    expect(html).toContain('Something went wrong');
+    expect(html).toContain('Slow down.');
+    expect(html).toContain('Try again');
   });
 });
 
@@ -440,5 +481,62 @@ describe('ComingSoon', () => {
     const html = renderToStaticMarkup(<ComingSoon view="Locations" />);
     expect(html).toContain('Not built yet');
     expect(html).toContain('Locations');
+  });
+});
+
+describe('Phase 7 review fixes (group C)', () => {
+  const real = campaignsFor('range=all');
+  const strip = (html: string) => html.replace(/<[^>]*>/g, '|').replace(/\|+/g, '|');
+
+  it('puts each cell under its own header, whatever the column order', () => {
+    const model = campaignsModel(real, DEFAULT_SORT);
+    const reversed = { ...model, columns: [...model.columns].reverse() };
+    const html = renderToStaticMarkup(<CampaignTable model={reversed} sort={DEFAULT_SORT} onSort={noop} />);
+    const body = html.slice(html.indexOf('<tbody>'));
+    const row = rowsOf(body)[0] ?? '';
+    const cells = row.match(/<t[hd][ >].*?<\/t[hd]>/g) ?? [];
+    expect(cells).toHaveLength(model.columns.length);
+    const first = model.rows[0]!;
+    reversed.columns.forEach((column, i) => {
+      expect(strip(cells[i] ?? '')).toContain(esc(first.cells[column.key].text));
+    });
+    expect(cells[cells.length - 1]).toContain('<th scope="row"'); // the name column moved with its header
+  });
+
+  it('separates the Best and Worst badge from the name', () => {
+    // Hand-edited copy of real data, as in the Best and Worst test above.
+    const rows = real.rows.map((row, i) => ({ ...row, isBest: i === 0, isWorst: i === real.rows.length - 1 }));
+    const marked = { ...real, rows, bestWorst: { eligible: 3, reason: null } };
+    const html = renderToStaticMarkup(
+      <CampaignTable model={campaignsModel(marked, DEFAULT_SORT)} sort={DEFAULT_SORT} onSort={noop} />,
+    );
+    expect(html).toContain('class="badge badge-');
+    expect(html).not.toMatch(/[^\s>]<span class="badge/);
+  });
+
+  it('says there are no calls when every week is zero, and keeps the table', () => {
+    const chart = weeklyChartModel(real.weekly)!;
+    const zero = { ...chart, allZero: true, bars: chart.bars.map((bar) => ({ ...bar, calls: 0 })) };
+    const html = renderToStaticMarkup(<WeeklyChart model={zero} />);
+    expect(html).toContain('No calls in these weeks.');
+    expect(html).toContain('visually-hidden');
+    expect(renderToStaticMarkup(<WeeklyChart model={{ ...chart, allZero: false }} />)).not.toContain('No calls in these weeks.');
+  });
+
+  it('marks the chart section busy while the chart campaign updates', () => {
+    const html = (busy: boolean) =>
+      renderToStaticMarkup(
+        <CampaignsScreen view={real} state={parseUrlState('?view=campaigns')} span={span} chartBusy={busy} onSelectCampaign={noop} />,
+      );
+    expect(html(true)).toContain('aria-busy="true"');
+    expect(html(true)).toContain('Updating chart');
+    expect(html(false)).not.toContain('aria-busy');
+    expect(html(false)).not.toContain('Updating chart');
+  });
+
+  it('an empty export says it has no calls, in the words of the error screen', () => {
+    const html = renderToStaticMarkup(<EmptyScreen notes={['A note.']} />);
+    expect(html).toContain('This export has no calls');
+    expect(html).toContain('A note.');
   });
 });

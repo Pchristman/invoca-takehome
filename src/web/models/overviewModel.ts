@@ -5,6 +5,7 @@ import { formatCount, formatPercentChange, formatPointsChange, formatRate, forma
 import type { ActionLink } from '../../core/views/facts';
 import type { OverviewView, Tile } from '../../core/views/overviewView';
 import { BLANK } from '../format';
+import { VIEW_LABELS } from './viewLabels';
 
 export type Tone = 'up' | 'down' | 'flat' | 'new';
 
@@ -63,12 +64,6 @@ function changeModel(change: Change): TileModel['change'] {
   }
 }
 
-const VIEW_LABELS: Record<string, string> = {
-  overview: 'Overview',
-  campaigns: 'Campaigns',
-  locations: 'Locations',
-  'missed-calls': 'Missed calls',
-};
 
 export function overviewModel(view: OverviewView): OverviewModel {
   const { comparison } = view.notes;

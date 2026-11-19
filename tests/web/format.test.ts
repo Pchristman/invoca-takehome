@@ -105,3 +105,12 @@ describe('formatSpendUsd', () => {
     expect(formatSpendUsd(12.5)).toBe('$12.5000');
   });
 });
+
+describe('isIsoDate', () => {
+  it('accepts real YYYY-MM-DD dates only', async () => {
+    const { isIsoDate } = await import('../../src/web/format');
+    for (const ok of ['2026-09-01', '2024-02-29']) expect(isIsoDate(ok)).toBe(true);
+    for (const bad of ['', 'nope', '2026-9-1', '2026-02-30', '2025-02-29', '2026-13-01', ' 2026-09-01', '2026-09-01x'])
+      expect(isIsoDate(bad)).toBe(false);
+  });
+});

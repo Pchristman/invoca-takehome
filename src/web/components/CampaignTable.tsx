@@ -14,16 +14,25 @@ function cellClass(key: SortKey): string | undefined {
   return key === 'name' || key === 'channel' ? undefined : 'num';
 }
 
-function Row({ row, trackingNumbers }: { row: CampaignRowModel; trackingNumbers?: { text: string }[] }) {
+function Row({
+  row,
+  columns,
+  trackingNumbers,
+}: {
+  row: CampaignRowModel;
+  columns: CampaignsModel['columns'];
+  trackingNumbers?: { text: string }[];
+}) {
   return (
     <tr className={trackingNumbers ? 'row-unattributed' : undefined}>
-      {(Object.keys(row.cells) as SortKey[]).map((key) =>
+      {columns.map(({ key }) =>
         key === 'name' ? (
           <th scope="row" key={key} title={row.name}>
             {row.name}
             {row.marks.map((mark) => (
-              <span key={mark} className={`badge badge-${mark}`}>
-                {mark === 'best' ? 'Best' : 'Worst'}
+              <span key={mark}>
+                {' '}
+                <span className={`badge badge-${mark}`}>{mark === 'best' ? 'Best' : 'Worst'}</span>
               </span>
             ))}
             {trackingNumbers && trackingNumbers.length > 0 && (
@@ -77,9 +86,9 @@ export function CampaignTable({
           </thead>
           <tbody>
             {model.rows.map((row) => (
-              <Row key={row.id ?? row.name} row={row} />
+              <Row key={row.id ?? row.name} row={row} columns={model.columns} />
             ))}
-            {model.unattributed && <Row row={model.unattributed} trackingNumbers={model.unattributed.trackingNumbers} />}
+            {model.unattributed && <Row row={model.unattributed} columns={model.columns} trackingNumbers={model.unattributed.trackingNumbers} />}
           </tbody>
         </table>
       </div>

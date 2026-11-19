@@ -95,3 +95,30 @@ describe('fetchApi', () => {
     expect(result).toEqual({ ok: false, error: { code: 'bad_param', message, status: 400 } });
   });
 });
+
+describe('fetchApi odd replies', () => {
+  it('an unknown server code is kept, with its status', async () => {
+    const f = fake(() => json({ error: { code: 'rate_limited', message: 'm' } }, 429));
+    const result = await fetchApi('/api/overview', undefined, undefined, f.fn);
+    expect(result).toEqual({ ok: false, error: { code: 'rate_limited', message: 'm', status: 429 } });
+  });
+
+  it.each([
+    ['null', null],
+    ['array', [1, 2]],
+    ['string', 'hello'],
+    ['number', 7],
+  ])('a 200 with a %s body is bad_response', async (_name, body) => {
+    const result = await fetchApi('/api/overview', undefined, undefined, fake(() => json(body)).fn);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('bad_response');
+  });
+
+  it('a non-string message or code is not trusted: falls back to network', async () => {
+    for (const error of [{ code: 'bad_param', message: 42 }, { code: 7, message: 'm' }]) {
+      const result = await fetchApi('/api/overview', undefined, undefined, fake(() => json({ error }, 400)).fn);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toMatchObject({ code: 'network', status: 400 });
+    }
+  });
+});

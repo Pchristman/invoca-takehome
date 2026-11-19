@@ -26,7 +26,8 @@ export function WeeklyChart({ model }: { model: WeeklyChartModel }) {
       <figcaption>
         <h3 className="chart-title">{model.title}</h3>
       </figcaption>
-      <div role="img" aria-label={`${model.title}. The same values are in the table below.`}>
+      {model.allZero && <p role="status">No calls in these weeks.</p>}
+      <div role="img" aria-label={`${model.title}. The same values are in the table below.`} hidden={model.allZero}>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={model.bars} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
             <defs>
