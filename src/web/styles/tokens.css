@@ -2,55 +2,75 @@
   Design tokens: the only file that sets a color, font, spacing step or
   motion duration. Everything else uses var(--name). To restyle, edit here.
 
-  Contrast checked (WCAG, text needs 4.5:1):
-    text on bg 14.8, text on surface 13.8
-    text-muted on bg 6.5, text-muted on surface 6.0
-    accent-text on accent 6.4, accent on bg 6.4
-    up on bg 6.3, up on surface 5.9
-    down on bg 7.3, down on surface 6.8
-    notice-text on notice-bg 8.6
-  Non-text parts (border, chart bars) need 3:1, on bg and on surface: border 3.4, 3.1;
-  chart bar 4.3, 4.0; chart bar partial 3.4, 3.2. tests/web/tokens.test.ts checks all of these.
+  Look: modeled on Invoca's own design language, read from their public stylesheet
+  (invoca.com): near-black evergreen chrome, brand green for primary actions, warm
+  "sand" neutrals, near-black text with grey secondary text, white panels with a soft
+  border, weight-500 headings with tight tracking, series colors green and indigo.
+  Their font (Saans) is commercial, so IBM Plex Sans stands in for it.
+  Invoca's brand green (#00b388) is too light for text or 3:1 marks on sand, so text-bearing
+  accents use a deeper green and the true brand green stays on the dark chrome.
+  Meaning is never carried by color alone (signs, words, badges, hatch).
+
+  Contrast is checked by tests/web/tokens.test.ts:
+    text needs 4.5:1 (text, text-muted, accent, up, down on bg, panel and surface;
+    accent on accent-soft; accent-text on accent; notice-text on notice-bg;
+    chrome-text and chrome-muted on chrome).
+    Non-text parts need 3:1: border, chart bar, chart bar partial on bg, panel and surface;
+    chrome-accent on chrome.
+  --color-rule is a decorative hairline between rows and around panels; it carries no
+  meaning and is exempt, because every row is also separated by spacing.
 */
 :root {
   /* color */
-  --color-text: #1f2933;
-  --color-text-muted: #52606d;
-  --color-bg: #ffffff;
-  --color-surface: #f5f7fa;
-  --color-border: #7f8e9b;
-  --color-accent: #1f5fa8;
+  --color-text: #1f2121;
+  --color-text-muted: #5c5f5f;
+  --color-bg: #f7f8f4;
+  --color-panel: #ffffff;
+  --color-surface: #f0f3e6;
+  --color-border: #74846b;
+  --color-rule: #d9dfd0;
+  --color-accent: #00684f;
+  --color-accent-soft: #dcf3e8;
   --color-accent-text: #ffffff;
-  --color-up: #1b6e3c;
-  --color-down: #a12b2b;
-  --color-notice-bg: #fff4d6;
-  --color-notice-text: #5c4200;
-  --color-chart-bar: #3b7dbd;
-  --color-chart-bar-partial: #5f8fc0;
+  --color-up: #00694f;
+  --color-down: #bf2217;
+  --color-notice-bg: #fff7bf;
+  --color-notice-text: #5a4100;
+  --color-chart-bar: #00936c;
+  --color-chart-bar-partial: #5e74e3;
+  --color-chrome: #0a231e;
+  --color-chrome-text: #ffffff;
+  --color-chrome-muted: #a9c0b8;
+  --color-chrome-accent: #00b388;
 
   /* type */
-  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-heading: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-heading: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-md: 1rem;
-  --text-lg: 1.25rem;
+  --text-lg: 1.375rem;
   --text-xl: 1.75rem;
+  --text-2xl: 2rem;
+  --tracking-caps: 0.06em;
+  --tracking-tight: -0.02em;
 
   /* space */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.5rem;
-  --space-6: 2.5rem;
-  --radius: 4px;
+  --space-4: 1.25rem;
+  --space-5: 2rem;
+  --space-6: 3rem;
+  --radius: 12px;
+  --radius-sm: 4px;
 
   /* motion */
   --motion-fast: 150ms;
   --motion-base: 200ms;
   --motion-slow: 300ms;
-  --ease-standard: ease-in-out;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {

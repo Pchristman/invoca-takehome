@@ -134,16 +134,19 @@ describe('design tokens', () => {
       return (hi + 0.05) / (lo + 0.05);
     };
     const text: [string, string][] = [
-      ['--color-text', '--color-bg'], ['--color-text', '--color-surface'],
-      ['--color-text-muted', '--color-bg'], ['--color-text-muted', '--color-surface'],
-      ['--color-accent-text', '--color-accent'], ['--color-accent', '--color-bg'],
-      ['--color-up', '--color-bg'], ['--color-up', '--color-surface'],
-      ['--color-down', '--color-bg'], ['--color-down', '--color-surface'],
+      ...['--color-bg', '--color-panel', '--color-surface'].flatMap((bg) =>
+        ['--color-text', '--color-text-muted', '--color-accent', '--color-up', '--color-down'].map((fg) => [fg, bg] as [string, string]),
+      ),
+      ['--color-accent-text', '--color-accent'], ['--color-accent', '--color-accent-soft'], ['--color-up', '--color-accent-soft'],
       ['--color-notice-text', '--color-notice-bg'],
+      ['--color-chrome-text', '--color-chrome'], ['--color-chrome-muted', '--color-chrome'],
     ];
-    const nonText: [string, string][] = ['--color-border', '--color-chart-bar', '--color-chart-bar-partial'].flatMap(
-      (part) => [[part, '--color-bg'], [part, '--color-surface']] as [string, string][],
-    );
+    const nonText: [string, string][] = [
+      ...['--color-border', '--color-chart-bar', '--color-chart-bar-partial'].flatMap((part) =>
+        ['--color-bg', '--color-panel', '--color-surface'].map((bg) => [part, bg] as [string, string]),
+      ),
+      ['--color-chrome-accent', '--color-chrome'],
+    ];
     const weak = [
       ...text.filter(([a, b]) => ratio(a, b) < 4.5).map(([a, b]) => `${a} on ${b}: ${ratio(a, b).toFixed(2)} (needs 4.5)`),
       ...nonText.filter(([a, b]) => ratio(a, b) < 3).map(([a, b]) => `${a} on ${b}: ${ratio(a, b).toFixed(2)} (needs 3)`),

@@ -1,6 +1,8 @@
 /*
   Layout and component styles. Tokens only: no color, font size or duration
-  is written here. Each later component task adds to its own section.
+  is written here. Selectors are the same as the plain version; only the look
+  differs. The look follows Invoca's own: dark evergreen chrome, green actions,
+  white panels on sand, weight-500 headings with tight tracking.
 */
 
 /* ---------- base ---------- */
@@ -17,22 +19,32 @@ body {
   font-family: var(--font-body);
   font-size: var(--text-md);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 h1,
 h2,
 h3 {
   font-family: var(--font-heading);
-  line-height: 1.25;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: var(--tracking-tight);
   margin: 0 0 var(--space-3);
 }
 h1 { font-size: var(--text-xl); }
-h2 { font-size: var(--text-lg); }
+h2 {
+  font-size: var(--text-lg);
+  margin-top: var(--space-6);
+}
 h3 { font-size: var(--text-md); }
 
 p { margin: 0 0 var(--space-3); }
 
-a { color: var(--color-accent); }
+a {
+  color: var(--color-accent);
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
 
 code,
 pre {
@@ -41,7 +53,7 @@ pre {
 }
 
 :focus-visible {
-  outline: 3px solid var(--color-accent);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
@@ -73,13 +85,17 @@ pre {
 
 /* ---------- layout ---------- */
 .page {
-  max-width: 64rem;
+  max-width: 76rem;
   margin: 0 auto;
-  padding: var(--space-4);
+  padding: 0 var(--space-5) var(--space-6);
 }
 
 .section {
   margin: var(--space-5) 0;
+}
+
+.section h2:first-child {
+  margin-top: 0;
 }
 
 .row {
@@ -89,110 +105,193 @@ pre {
   align-items: center;
 }
 
-/* ---------- header ---------- */
+/* ---------- chrome: header and nav share one dark band that runs edge to edge ---------- */
+.app-header,
+.nav {
+  background: var(--color-chrome);
+  color: var(--color-chrome-text);
+  box-shadow: 0 0 0 100vmax var(--color-chrome);
+  clip-path: inset(0 -100vmax);
+}
+
 .app-header {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-2) var(--space-4);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--color-border);
+  padding-top: var(--space-4);
 }
 
 .app-header h1 {
   margin: 0;
+  color: var(--color-chrome-text);
+}
+
+.app-header .row {
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-chrome-muted);
+}
+
+.app-header .button {
+  background: transparent;
+  border-color: var(--color-chrome-muted);
+  color: var(--color-chrome-text);
+}
+
+.app-header .button:hover {
+  background: var(--color-chrome-text);
+  color: var(--color-chrome);
+}
+
+.app-header .button[aria-pressed="true"] {
+  background: var(--color-chrome-accent);
+  border-color: var(--color-chrome-accent);
+  color: var(--color-chrome);
+}
+
+.app-header :focus-visible,
+.nav :focus-visible {
+  outline-color: var(--color-chrome-accent);
 }
 
 /* ---------- nav ---------- */
 .nav {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin: var(--space-3) 0;
-  padding: 0;
+  gap: var(--space-5);
+  margin: -1px 0 0; /* overlaps the header band by a pixel so no seam shows */
+  padding: calc(var(--space-3) + 1px) 0 0;
   list-style: none;
 }
 
 .nav a {
   display: inline-block;
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  color: var(--color-text);
+  padding: var(--space-2) 0 var(--space-3);
+  border-bottom: 3px solid transparent;
+  color: var(--color-chrome-muted);
+  font-weight: 500;
   text-decoration: none;
-  transition: background var(--motion-fast) var(--ease-standard);
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
 }
 
 .nav a:hover {
-  background: var(--color-surface);
+  color: var(--color-chrome-text);
 }
 
 .nav a[aria-current="page"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-accent-text);
+  color: var(--color-chrome-text);
+  border-bottom-color: var(--color-chrome-accent);
 }
 
 /* ---------- range control ---------- */
 .range-control {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-3) var(--space-5);
   align-items: end;
-  padding: var(--space-3);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  margin: var(--space-5) 0 var(--space-4);
+}
+
+.range-control > .row {
+  gap: 0;
 }
 
 .range-control label {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .range-control input,
 .range-control select,
 .button {
   font: inherit;
-  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
   color: var(--color-text);
-  background: var(--color-bg);
+  background: var(--color-panel);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
+}
+
+.range-control input {
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .button {
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-standard);
+  font-weight: 500;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
 }
 
 .button:hover {
   background: var(--color-surface);
 }
 
+/* The presets read as one segmented control. */
+.range-control > .row .button {
+  margin-left: -1px;
+  border-radius: 0;
+}
+
+.range-control > .row .button:first-child {
+  margin-left: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.range-control > .row .button:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 .button[aria-pressed="true"],
 .button.is-active {
+  position: relative;
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* A button with no pressed state is an action: filled green, as on Invoca's own site. */
+button.button:not([aria-pressed]):not(:disabled) {
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: var(--color-accent-text);
 }
 
-/* ---------- tiles ---------- */
+button.button:not([aria-pressed]):not(:disabled):hover {
+  background: var(--color-chrome);
+  border-color: var(--color-chrome);
+}
+
+/* ---------- tiles: one joined strip of headline numbers ---------- */
 .tile-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: var(--space-3);
-  margin: var(--space-4) 0;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin: var(--space-4) 0 var(--space-3);
+  background: var(--color-panel);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius);
+  overflow: hidden; /* also clips the hairlines each tile draws on its top and left edge */
 }
 
 .tile {
-  padding: var(--space-3);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  padding: var(--space-4);
+  background: var(--color-panel);
+  box-shadow: -1px -1px 0 0 var(--color-rule);
   overflow-wrap: anywhere;
 }
 
@@ -202,79 +301,180 @@ pre {
 }
 
 .tile-value {
-  font-size: var(--text-lg);
-  font-weight: 600;
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--text-2xl);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
   font-variant-numeric: tabular-nums;
 }
 
 .tile-change {
   font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
-.tone-up { color: var(--color-up); }
-.tone-down { color: var(--color-down); }
+.tone-up { color: var(--color-up); font-weight: 500; }
+.tone-down { color: var(--color-down); font-weight: 500; }
 .tone-flat { color: var(--color-text-muted); }
 
-/* ---------- tables ---------- */
+/* ---------- lists of actions: one white panel, a row each ---------- */
+.section > ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--color-panel);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius);
+}
+
+.section > ul > li {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-rule);
+}
+
+.section > ul > li:first-child {
+  border-top: 0;
+}
+
+/* Tracking numbers: short lines, set in columns so they don't stretch the page. */
+.section > ul ul {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  columns: 2 14rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ---------- tables: a white panel that scrolls sideways on a narrow screen ---------- */
 .table-wrap {
   overflow-x: auto;
   max-width: 100%;
-  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  border: 1px solid var(--color-rule);
   border-radius: var(--radius);
 }
 
 table {
   width: 100%;
+  min-width: 58rem;
   border-collapse: collapse;
   font-size: var(--text-sm);
 }
 
 th,
 td {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3);
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-rule);
   overflow-wrap: anywhere;
 }
 
-th {
+th:first-child,
+td:first-child {
+  padding-left: var(--space-4);
+}
+
+th:last-child,
+td:last-child {
+  padding-right: var(--space-4);
+}
+
+/* Column headings never break inside a word. */
+thead th {
   background: var(--color-surface);
+  font-size: var(--text-xs);
   font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  vertical-align: bottom;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+
+tbody th {
+  font-weight: 500;
+}
+
+tbody td:not(.num) {
+  min-width: 6.5rem;
 }
 
 th.num,
 td.num {
   text-align: right;
+  white-space: nowrap;
 }
 
+tbody tr:last-child th,
 tbody tr:last-child td {
   border-bottom: 0;
 }
 
+tbody tr {
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+tbody tr:hover {
+  background: var(--color-bg);
+}
+
 th .sort-button {
   font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
   font-weight: inherit;
   color: inherit;
   background: none;
   border: 0;
   padding: 0;
   cursor: pointer;
-  text-decoration: underline;
+  text-align: inherit;
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+
+th .sort-button:hover {
+  color: var(--color-accent);
+}
+
+th[aria-sort] {
+  color: var(--color-text);
+}
+
+th[aria-sort="descending"] .sort-button::after {
+  content: " \2193";
+}
+
+th[aria-sort="ascending"] .sort-button::after {
+  content: " \2191";
 }
 
 /* The calls with no campaign: last row, set apart. */
 tr.row-unattributed th,
 tr.row-unattributed td {
   background: var(--color-surface);
-  border-top: 2px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 0;
+  color: var(--color-text-muted);
+}
+
+tr.row-unattributed th {
   font-style: italic;
 }
 
 tr.row-unattributed ul {
-  margin: var(--space-1) 0 0;
-  padding-left: var(--space-4);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   font-style: normal;
+  white-space: nowrap;
 }
 
 th .badge {
@@ -283,13 +483,18 @@ th .badge {
 
 /* ---------- notices ---------- */
 .notice {
-  margin: var(--space-3) 0;
-  padding: var(--space-3);
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
   background: var(--color-notice-bg);
   color: var(--color-notice-text);
-  border: 1px solid var(--color-notice-text);
-  border-radius: var(--radius);
+  border-left: 4px solid var(--color-notice-text);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
+}
+
+.notice > :first-child {
+  margin-top: 0;
 }
 
 .notice p:last-child {
@@ -308,18 +513,22 @@ th .badge {
 /* ---------- badges ---------- */
 .badge {
   display: inline-block;
-  padding: 0 var(--space-2);
-  font-size: var(--text-sm);
+  padding: 1px var(--space-2);
+  font-size: var(--text-xs);
   font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  vertical-align: middle;
   color: var(--color-text);
-  background: var(--color-bg);
+  background: transparent;
   border: 1px solid var(--color-text);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
 .badge-best {
   color: var(--color-up);
+  background: var(--color-accent-soft);
   border-color: var(--color-up);
 }
 
@@ -334,9 +543,13 @@ th .badge {
   border-color: var(--color-notice-text);
 }
 
-/* ---------- chart ---------- */
+/* ---------- chart: a white panel ---------- */
 .chart {
   margin: var(--space-4) 0;
+  padding: var(--space-4);
+  background: var(--color-panel);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius);
 }
 
 .chart-title {
@@ -361,6 +574,7 @@ th .badge {
   flex-wrap: wrap;
   gap: var(--space-4);
   font-size: var(--text-sm);
+  color: var(--color-text-muted);
 }
 
 .chart-swatch {
@@ -372,29 +586,31 @@ th .badge {
   background: var(--color-chart-bar);
 }
 
-/* Partial weeks carry a hatch as well as a lighter color. */
+/* Partial weeks carry a hatch as well as a different color. */
 .chart-swatch-partial {
   background: repeating-linear-gradient(
     45deg,
     var(--color-chart-bar-partial),
     var(--color-chart-bar-partial) 3px,
-    var(--color-bg) 3px,
-    var(--color-bg) 6px
+    var(--color-panel) 3px,
+    var(--color-panel) 6px
   );
-  border: 1px solid var(--color-chart-bar);
+  border: 1px solid var(--color-chart-bar-partial);
 }
 
 /* ---------- notes panel (dev mode) ---------- */
 .notes-panel {
   margin: var(--space-5) 0;
-  padding: var(--space-3);
-  background: var(--color-surface);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-panel);
+  border: 1px solid var(--color-rule);
+  border-left: 4px solid var(--color-chrome-accent);
+  border-radius: var(--radius-sm) var(--radius) var(--radius) var(--radius-sm);
   font-size: var(--text-sm);
 }
 
 .notes-panel h2 {
+  margin-top: 0;
   font-size: var(--text-md);
 }
 
@@ -415,19 +631,25 @@ th .badge {
 .range-control input:disabled,
 .button:disabled {
   color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-color: var(--color-rule);
   cursor: not-allowed;
 }
 
 .caveats {
-  padding-left: var(--space-5);
+  margin: 0;
+  padding-left: var(--space-4);
 }
 
 .estimate-note {
   margin: var(--space-3) 0;
+  font-size: var(--text-sm);
 }
 
 .estimate-note summary {
   cursor: pointer;
+  color: var(--color-accent);
+  font-weight: 500;
 }
 
 /* ---------- data notes panel items ---------- */
