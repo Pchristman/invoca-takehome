@@ -102,7 +102,20 @@ describe('estimateMissedCallValue', () => {
 
 describe('buildMissedValueRates', () => {
   test('pending and unanswered calls are left out of the denominators', () => {
-    expect(rates.byCampaign.get('cmp_a')).toEqual({ answeredWithOutcome: 30, bookings: 6, revenueUsd: 600 });
+    expect(rates.byCampaign.get('cmp_a')).toEqual({ answeredWithOutcome: 30, bookings: 6, revenueCents: 60000 });
+  });
+
+  test('revenue is summed in whole cents, so the average booking value is exact', () => {
+    const mixed = [
+      makeCall({ campaignId: 'cmp_a', revenueUsd: 0.1 }),
+      makeCall({ campaignId: 'cmp_a', revenueUsd: 0.2 }),
+      makeCall({ campaignId: 'cmp_a', revenueUsd: 0.3 }),
+      ...answered('cmp_a', 'social', 27, 0, 0),
+    ];
+    const exact = buildMissedValueRates(mixed);
+    expect(exact.byCampaign.get('cmp_a')?.revenueCents).toBe(60);
+    const value = estimateMissedCallValue(exact, { campaignId: 'cmp_a', channel: 'social' });
+    expect(value.avgBookingValueUsd).toBe(0.2);
   });
 
   test('rates use every call passed in, so the caller chooses the window', () => {

@@ -6,7 +6,8 @@ import type { Channel, CleanCall } from './types';
 export interface RateBasis {
   answeredWithOutcome: number;
   bookings: number;
-  revenueUsd: number;
+  /** Whole cents, so sums are exact. */
+  revenueCents: number;
 }
 
 export interface MissedValueRates {
@@ -25,12 +26,12 @@ export interface MissedCallValue {
   avgBookingValueUsd: number | null;
 }
 
-const emptyBasis = (): RateBasis => ({ answeredWithOutcome: 0, bookings: 0, revenueUsd: 0 });
+const emptyBasis = (): RateBasis => ({ answeredWithOutcome: 0, bookings: 0, revenueCents: 0 });
 
 function add(basis: RateBasis, call: CleanCall): void {
   basis.answeredWithOutcome += 1;
   if (call.booked) basis.bookings += 1;
-  basis.revenueUsd += call.revenueUsd;
+  basis.revenueCents += Math.round(call.revenueUsd * 100);
 }
 
 function basisFor<K>(map: Map<K, RateBasis>, key: K): RateBasis {
@@ -83,9 +84,9 @@ export function estimateMissedCallValue(
 
   return {
     // Booking rate x average booking value is revenue / answered calls; this form needs no bookings to divide by.
-    valueUsd: basis.answeredWithOutcome === 0 ? 0 : basis.revenueUsd / basis.answeredWithOutcome,
+    valueUsd: basis.answeredWithOutcome === 0 ? 0 : basis.revenueCents / basis.answeredWithOutcome / 100,
     source,
     bookingRate: rate(basis.bookings, basis.answeredWithOutcome),
-    avgBookingValueUsd: basis.bookings === 0 ? null : basis.revenueUsd / basis.bookings,
+    avgBookingValueUsd: basis.bookings === 0 ? null : basis.revenueCents / basis.bookings / 100,
   };
 }

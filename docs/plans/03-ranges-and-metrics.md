@@ -423,7 +423,7 @@ docs/DECISIONS.md          (modify) already holds this plan's proposed rows
 - Produces:
   ```ts
   /** Answered calls that have an outcome (pending calls are left out). */
-  export interface RateBasis { answeredWithOutcome: number; bookings: number; revenueUsd: number }
+  export interface RateBasis { answeredWithOutcome: number; bookings: number; revenueCents: number } // whole cents
   export interface MissedValueRates {
     byCampaign: Map<string, RateBasis>;
     byChannel: Map<Channel, RateBasis>;
