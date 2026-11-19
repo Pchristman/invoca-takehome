@@ -118,6 +118,17 @@ describe('cleanExport', () => {
     expect(store.dataNotes.pendingCalls).toBe(1);
   });
 
+  test('calls with no caller hash are counted in the data notes, not hidden', () => {
+    const store = clean([
+      goodRow({ call_id: 'c1', caller_number_hash: '' }),
+      goodRow({ call_id: 'c2', caller_number_hash: '' }),
+      goodRow({ call_id: 'c3', caller_number_hash: 'h_9' }),
+    ]);
+    expect(store.calls).toHaveLength(3);
+    expect(store.dataNotes.callsWithoutCallerHash).toBe(2);
+    expect(clean([goodRow()]).dataNotes.callsWithoutCallerHash).toBe(0);
+  });
+
   test('rule 7: unanswered with no outcome is not pending', () => {
     const store = clean([goodRow({ answered: 'false', outcome: '', revenue_usd: '' })]);
     expect(store.calls[0]!.pending).toBe(false);

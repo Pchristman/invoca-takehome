@@ -16,6 +16,7 @@ export function cleanExport(loaded: LoadedExport): CallStore {
   let revenueOnNonBookedCalls = 0;
   let bookedWithoutRevenueCalls = 0;
   let unattributedWithoutTrackingNumber = 0;
+  let callsWithoutCallerHash = 0;
   let revenueOnNonBookedCents = 0;
 
   for (const winner of dedupe.winners) {
@@ -30,6 +31,7 @@ export function cleanExport(loaded: LoadedExport): CallStore {
     const unattributed = call.campaignId === null;
 
     if (pending) pendingCalls += 1;
+    if (call.callerHash === '') callsWithoutCallerHash += 1;
     if (unattributed && call.trackingNumber === '') unattributedWithoutTrackingNumber += 1;
     else if (unattributed) trackingCounts.set(call.trackingNumber, (trackingCounts.get(call.trackingNumber) ?? 0) + 1);
     if (booked && call.revenueUsd === null) bookedWithoutRevenueCalls += 1;
@@ -80,6 +82,7 @@ export function cleanExport(loaded: LoadedExport): CallStore {
       tiedCalls: dedupe.tiedCalls,
       unattributedCalls: calls.filter((c) => c.unattributed).length,
       unattributedWithoutTrackingNumber,
+      callsWithoutCallerHash,
       unattributedTrackingNumbers,
       pendingCalls,
       badCallsByReason,

@@ -1,4 +1,4 @@
-import { rate } from './metrics';
+import { rate, toCents } from './metrics';
 import { THRESHOLDS } from './thresholds';
 import type { Channel, CleanCall } from './types';
 
@@ -31,7 +31,7 @@ const emptyBasis = (): RateBasis => ({ answeredWithOutcome: 0, bookings: 0, reve
 function add(basis: RateBasis, call: CleanCall): void {
   basis.answeredWithOutcome += 1;
   if (call.booked) basis.bookings += 1;
-  basis.revenueCents += Math.round(call.revenueUsd * 100);
+  if (call.booked) basis.revenueCents += toCents(call.revenueUsd); // revenue counts on booked calls only
 }
 
 function basisFor<K>(map: Map<K, RateBasis>, key: K): RateBasis {
@@ -70,6 +70,8 @@ export function estimateMissedCallValue(
   minAnswered: number = THRESHOLDS.MIN_ANSWERED_FOR_RATE,
 ): MissedCallValue {
   const own = call.campaignId === null ? undefined : rates.byCampaign.get(call.campaignId);
+  // The channel is the call's own marketing_channel. The brief says it always matches the campaign's
+  // channel in this export; nothing here checks that, so a mismatch would borrow the call's channel.
   const channel = rates.byChannel.get(call.channel);
 
   let source: MissedCallValue['source'] = 'overall';

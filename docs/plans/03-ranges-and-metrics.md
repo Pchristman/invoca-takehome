@@ -604,3 +604,14 @@ docs/DECISIONS.md          (modify) already holds this plan's proposed rows
 - **Spec coverage:** each metric in 4.1 (tiles), 4.2 (booking rate, spend, cost per booking, revenue per budget dollar, best/worst), 4.3 (best campaign at office, outlier), 4.4 (missed-call value, estimated per call) and 4.5 (all five thresholds consumed) maps to a task. The callback list, the heatmap and the lost-value total are Phase 5 view logic and are not built here; they use `estimateMissedCallValue` and `callsInRange`.
 - **Type consistency:** `DateRange` (Task 2) is the type Tasks 3, 4, 7 and 8 take; `Change`, `Tally`, `rate` (Task 4) are used by Task 5; `makeCall` (Task 2) is used by Tasks 4, 6, 7.
 - **Not in this phase:** presenting any of this (wording of "est.", the "new" label, notes text) is the UI's job from Phase 7; Phase 3 returns data and one-line reasons only.
+
+## Changes after the adversarial review
+
+The review's findings were all fixed test-first; the decisions are in `docs/DECISIONS.md` (the four rows dated 2026-11-18 after the cents row). Where the code now differs from the text above:
+
+- `resolveComparison` makes a second range of a different length **unavailable** (Task 3's "allowed and flagged" test became "unavailable until per-day comparison exists"), returns `overlaps`, and validates `current` first.
+- `RangeError` carries `field` (`'start' | 'end'`) for a bad date, and shortens a long bad value in the message.
+- `inclusiveDays(start, end)` in `localDate.ts` replaces the two private `lengthOf` copies.
+- `metrics.ts` exports `toCents`; `tally` counts revenue on booked calls only and skips blank caller hashes; non-finite inputs give null, "none", $0 or "not eligible" instead of NaN.
+- `pickBestWorst` skips non-finite values and breaks ties for worst by the lower campaign id; `twoProportionZ` returns null for impossible groups.
+- `DataNotes.callsWithoutCallerHash` (Phase 2 type) counts calls with no caller hash.

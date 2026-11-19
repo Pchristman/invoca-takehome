@@ -3,6 +3,7 @@ import type { CleanCall } from './types';
 
 export interface Tally {
   calls: number;
+  /** Distinct caller hashes. Calls with no hash can't be told apart, so they add to `calls` but not here. */
   uniqueCallers: number;
   /** Includes answered calls whose outcome is still pending. */
   answered: number;
@@ -10,12 +11,20 @@ export interface Tally {
   revenueUsd: number;
 }
 
-/** How a value changed. Both numbers are ready to display: 25 is +25%, and 5 is +5 percentage points. */
+/**
+ * How a value changed. `value` is not rounded (25.000000000000004 is possible): the UI rounds when it
+ * formats. 25 means +25%, and 5 means +5 percentage points.
+ */
 export type Change =
   | { kind: 'none' }
   | { kind: 'new' }
   | { kind: 'percent'; value: number }
   | { kind: 'points'; value: number };
+
+/** Whole cents for an amount of dollars. A value that isn't a finite number counts as $0. */
+export function toCents(usd: number): number {
+  return Number.isFinite(usd) ? Math.round(usd * 100) : 0;
+}
 
 /** The calls whose local date falls in the range, inclusive at both ends. */
 export function callsInRange(calls: readonly CleanCall[], range: DateRange): CleanCall[] {
@@ -28,21 +37,25 @@ export function tally(calls: readonly CleanCall[]): Tally {
   let bookings = 0;
   let revenueCents = 0; // whole cents, so float sums can't drift
   for (const call of calls) {
-    callers.add(call.callerHash);
+    if (call.callerHash !== '') callers.add(call.callerHash);
     if (call.answered) answered += 1;
-    if (call.booked) bookings += 1;
-    revenueCents += Math.round(call.revenueUsd * 100);
+    if (call.booked) {
+      bookings += 1;
+      revenueCents += toCents(call.revenueUsd); // revenue counts on booked calls only (rule 6)
+    }
   }
   return { calls: calls.length, uniqueCallers: callers.size, answered, bookings, revenueUsd: revenueCents / 100 };
 }
 
-/** A share between 0 and 1, or null when there is nothing to divide by. */
+/** A share between 0 and 1, or null when there is nothing to divide by or an input isn't a finite number. */
 export function rate(numerator: number, denominator: number): number | null {
-  return denominator === 0 ? null : numerator / denominator;
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return null;
+  return numerator / denominator;
 }
 
 /** Change in a count or an amount of money: a percentage, "new" from zero, or nothing when both are zero. */
 export function changeInCount(current: number, previous: number): Change {
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return { kind: 'none' };
   if (previous === 0) return current === 0 ? { kind: 'none' } : { kind: 'new' };
   return { kind: 'percent', value: ((current - previous) / previous) * 100 };
 }
@@ -50,21 +63,28 @@ export function changeInCount(current: number, previous: number): Change {
 /** Change in a rate, in percentage points. Nothing when either rate is missing or both are zero. */
 export function changeInRate(current: number | null, previous: number | null): Change {
   if (current === null || previous === null) return { kind: 'none' };
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return { kind: 'none' };
   if (current === 0 && previous === 0) return { kind: 'none' };
   return { kind: 'points', value: (current - previous) * 100 };
 }
 
-/** The daily budget over the days in the range. Always an estimate: the data holds budgets, not spend. */
+/**
+ * The daily budget over the days in the range, to whole cents. Always an estimate: the data holds budgets,
+ * not spend. A budget or day count that isn't a finite number gives $0, which leaves cost per booking blank.
+ */
 export function estimatedSpend(dailyBudgetUsd: number, days: number): number {
-  return dailyBudgetUsd * days;
+  if (!Number.isFinite(dailyBudgetUsd) || !Number.isFinite(days)) return 0;
+  return toCents(dailyBudgetUsd * days) / 100;
 }
 
-/** Blank (null) when nothing was spent or nothing was booked. */
+/** Blank (null) when nothing was spent, nothing was booked, or an input isn't a finite number. */
 export function costPerBooking(estimatedSpendUsd: number, bookings: number): number | null {
+  if (!Number.isFinite(estimatedSpendUsd) || !Number.isFinite(bookings)) return null;
   return estimatedSpendUsd === 0 || bookings === 0 ? null : estimatedSpendUsd / bookings;
 }
 
-/** Blank (null) when nothing was spent. */
+/** Blank (null) when nothing was spent or an input isn't a finite number. */
 export function revenuePerBudgetDollar(revenueUsd: number, estimatedSpendUsd: number): number | null {
+  if (!Number.isFinite(revenueUsd) || !Number.isFinite(estimatedSpendUsd)) return null;
   return estimatedSpendUsd === 0 ? null : revenueUsd / estimatedSpendUsd;
 }

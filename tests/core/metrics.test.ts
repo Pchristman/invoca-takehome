@@ -96,6 +96,47 @@ describe('spend and cost', () => {
   });
 });
 
+describe('numbers that are not finite never reach the screen', () => {
+  test.each([
+    [Number.NaN, 3],
+    [3, Number.NaN],
+    [Number.POSITIVE_INFINITY, 2],
+  ])('rate(%s, %s) is null', (numerator, denominator) => {
+    expect(rate(numerator, denominator)).toBeNull();
+  });
+
+  test.each([
+    [5, Number.NaN],
+    [Number.NaN, 5],
+    [Number.POSITIVE_INFINITY, 5],
+  ])('changeInCount(%s, %s) shows no change', (current, previous) => {
+    expect(changeInCount(current, previous)).toEqual({ kind: 'none' });
+  });
+
+  test('changeInRate with a NaN rate shows no change', () => {
+    expect(changeInRate(Number.NaN, 0.2)).toEqual({ kind: 'none' });
+    expect(changeInRate(0.2, Number.NaN)).toEqual({ kind: 'none' });
+  });
+
+  test('a non-finite budget or day count estimates $0, which makes cost per booking blank', () => {
+    expect(estimatedSpend(Number.NaN, 3)).toBe(0);
+    expect(estimatedSpend(10, Number.NaN)).toBe(0);
+    expect(costPerBooking(Number.NaN, 5)).toBeNull();
+    expect(revenuePerBudgetDollar(900, Number.NaN)).toBeNull();
+    expect(revenuePerBudgetDollar(Number.NaN, 600)).toBeNull();
+  });
+
+  test('estimated spend is rounded to whole cents', () => {
+    expect(estimatedSpend(0.1, 3)).toBe(0.3);
+  });
+
+  test('tally treats a non-finite revenue as $0', () => {
+    const total = tally([makeCall({ revenueUsd: Number.NaN }), makeCall({ revenueUsd: 50 })]);
+    expect(total.revenueUsd).toBe(50);
+    expect(total.bookings).toBe(2);
+  });
+});
+
 describe('callsInRange', () => {
   const onDay = (localDate: string) => makeCall({ localDate });
 
@@ -125,6 +166,19 @@ describe('tally', () => {
       makeCall({ callerHash: 'h3', outcome: null, booked: false, pending: true, revenueUsd: 0 }),
     ];
     expect(tally(calls)).toEqual({ calls: 4, uniqueCallers: 3, answered: 3, bookings: 1, revenueUsd: 250 });
+  });
+
+  test('tally counts revenue on booked calls only, whatever a call carries', () => {
+    const calls = [
+      makeCall({ revenueUsd: 100 }),
+      makeCall({ outcome: 'qualified_lead', booked: false, revenueUsd: 50 }),
+    ];
+    expect(tally(calls).revenueUsd).toBe(100);
+  });
+
+  test('calls with no caller hash are not counted as one shared caller', () => {
+    const calls = [makeCall({ callerHash: '' }), makeCall({ callerHash: '' }), makeCall({ callerHash: 'h1' })];
+    expect(tally(calls)).toMatchObject({ calls: 3, uniqueCallers: 1 });
   });
 
   test('tally sums money in whole cents', () => {

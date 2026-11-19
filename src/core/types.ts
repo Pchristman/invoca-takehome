@@ -130,6 +130,8 @@ export interface DataNotes {
   unattributedCalls: number;
   /** Unattributed calls with an empty tracking_number (left out of the list below). */
   unattributedWithoutTrackingNumber: number;
+  /** Calls with an empty caller_number_hash: they count as calls but not toward unique callers. */
+  callsWithoutCallerHash: number;
   /** Tracking numbers on unattributed calls, most calls first, ties by number. */
   unattributedTrackingNumbers: { trackingNumber: string; calls: number }[];
   pendingCalls: number;

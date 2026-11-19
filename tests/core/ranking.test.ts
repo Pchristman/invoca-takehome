@@ -57,6 +57,21 @@ describe('pickBestWorst', () => {
     }
   });
 
+  test('ties for worst go to the lower campaign id too, whatever the input order', () => {
+    const rows = [perf('cmp_c', 10, 600, 2), perf('cmp_b', 10, 600, 2), perf('cmp_a', 10, 600, 9)];
+    for (const order of [rows, [...rows].reverse()]) {
+      const result = pickBestWorst(order);
+      expect(result.best?.campaignId).toBe('cmp_a');
+      expect(result.worst?.campaignId).toBe('cmp_b');
+    }
+  });
+
+  test('a campaign whose value is not a finite number is not eligible, so it can never be best', () => {
+    const result = pickBestWorst([A, B, C, perf('cmp_n', 10, 600, Number.NaN)]);
+    expect(result.eligible).toBe(3);
+    expect(result.best?.campaignId).toBe('cmp_b');
+  });
+
   test('minBookings can be overridden', () => {
     const tooFew = perf('cmp_d', 4, 600, 20);
     expect(pickBestWorst([A, B, C, tooFew], 1).best?.campaignId).toBe('cmp_d');
@@ -97,6 +112,12 @@ describe('twoProportionZ', () => {
   test('matches the formula', () => {
     expect(twoProportionZ({ successes: 30, calls: 100 }, { successes: 500, calls: 1000 })).toBeCloseTo(-3.82, 1);
     expect(twoProportionZ({ successes: 500, calls: 1000 }, { successes: 30, calls: 100 })).toBeCloseTo(3.82, 1);
+  });
+
+  test('is null for impossible groups: more successes than calls, negatives, or NaN', () => {
+    expect(twoProportionZ({ successes: 11, calls: 10 }, { successes: 5, calls: 10 })).toBeNull();
+    expect(twoProportionZ({ successes: -1, calls: 10 }, { successes: 5, calls: 10 })).toBeNull();
+    expect(twoProportionZ({ successes: Number.NaN, calls: 10 }, { successes: 5, calls: 10 })).toBeNull();
   });
 
   test('is null with no calls or no variance, never NaN', () => {
@@ -160,8 +181,12 @@ describe('officeOutlier', () => {
     expect(result).toMatchObject({ eligible: true, z: null, flagged: false });
   });
 
-  test('defaults come from THRESHOLDS', () => {
-    expect(officeOutlier({ successes: 30, calls: 100 }, rest).flagged).toBe(true); // |z| about 3.82 >= 2.5
-    expect(officeOutlier({ successes: 40, calls: 100 }, rest).flagged).toBe(false); // |z| about 1.9 < 2.5
+  test('the default threshold sits at 2.5: z of about -2.67 flags and about -2.48 does not', () => {
+    const above = officeOutlier({ successes: 36, calls: 100 }, rest);
+    const below = officeOutlier({ successes: 37, calls: 100 }, rest);
+    expect(above.z).toBeCloseTo(-2.67, 1);
+    expect(below.z).toBeCloseTo(-2.48, 1);
+    expect(above.flagged).toBe(true);
+    expect(below.flagged).toBe(false);
   });
 });

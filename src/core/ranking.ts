@@ -29,16 +29,25 @@ export function pickBestWorst(
   rows: readonly CampaignPerformance[],
   minBookings: number = THRESHOLDS.MIN_BOOKINGS_TO_RANK,
 ): BestWorst {
+  // Highest value first; equal values by the lower campaign id, so the order never depends on the input order.
   const eligible = rows
-    .filter((row) => row.estimatedSpendUsd > 0 && row.bookings >= minBookings && row.revenuePerBudgetDollar !== null)
+    .filter(
+      (row) =>
+        row.estimatedSpendUsd > 0 &&
+        row.bookings >= minBookings &&
+        row.revenuePerBudgetDollar !== null &&
+        Number.isFinite(row.revenuePerBudgetDollar),
+    )
     .sort((a, b) => b.revenuePerBudgetDollar! - a.revenuePerBudgetDollar! || byId(a.campaignId, b.campaignId));
 
   const best = eligible[0];
-  const worst = eligible[eligible.length - 1];
-  if (eligible.length < 2 || best!.revenuePerBudgetDollar === worst!.revenuePerBudgetDollar) {
+  const lowest = eligible[eligible.length - 1];
+  if (eligible.length < 2 || best!.revenuePerBudgetDollar === lowest!.revenuePerBudgetDollar) {
     return { eligible: eligible.length, best: null, worst: null };
   }
-  return { eligible: eligible.length, best: best!, worst: worst! };
+  // Ties for worst also go to the lower campaign id: the first row at the lowest value in this order.
+  const worst = eligible.find((row) => row.revenuePerBudgetDollar === lowest!.revenuePerBudgetDollar)!;
+  return { eligible: eligible.length, best: best!, worst };
 }
 
 export interface CampaignAtOffice {
@@ -69,8 +78,16 @@ export interface ProportionGroup {
   calls: number;
 }
 
-/** Two-proportion z-test of `a` against `b`, pooled. Null when a group has no calls or the rates have no variance. */
+function isValidGroup(group: ProportionGroup): boolean {
+  return Number.isFinite(group.successes) && Number.isFinite(group.calls) && group.successes >= 0 && group.successes <= group.calls;
+}
+
+/**
+ * Two-proportion z-test of `a` against `b`, pooled. Null when a group has no calls, is impossible (more
+ * successes than calls, negative or not a number), or the rates have no variance.
+ */
 export function twoProportionZ(a: ProportionGroup, b: ProportionGroup): number | null {
+  if (!isValidGroup(a) || !isValidGroup(b)) return null;
   if (a.calls === 0 || b.calls === 0) return null;
   const pooled = (a.successes + b.successes) / (a.calls + b.calls);
   const standardError = Math.sqrt(pooled * (1 - pooled) * (1 / a.calls + 1 / b.calls));

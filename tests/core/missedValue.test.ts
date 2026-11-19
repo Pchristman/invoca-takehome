@@ -105,6 +105,36 @@ describe('buildMissedValueRates', () => {
     expect(rates.byCampaign.get('cmp_a')).toEqual({ answeredWithOutcome: 30, bookings: 6, revenueCents: 60000 });
   });
 
+  test('revenue on a call that is not booked is not counted', () => {
+    const stray = [
+      makeCall({ campaignId: 'cmp_a', outcome: 'not_qualified', booked: false, revenueUsd: 50 }),
+      ...answered('cmp_a', 'social', 29, 0, 0),
+    ];
+    expect(buildMissedValueRates(stray).byCampaign.get('cmp_a')?.revenueCents).toBe(0);
+  });
+
+  test('a non-finite revenue is counted as $0, so the value stays a finite number', () => {
+    const odd = [makeCall({ campaignId: 'cmp_a', revenueUsd: Number.NaN }), ...answered('cmp_a', 'social', 29, 0, 0)];
+    const value = estimateMissedCallValue(buildMissedValueRates(odd), { campaignId: 'cmp_a', channel: 'social' });
+    expect(Number.isFinite(value.valueUsd)).toBe(true);
+  });
+
+  test('a channel with exactly MIN_ANSWERED_FOR_RATE answered calls is used; one fewer falls to overall', () => {
+    const channels = [
+      ...answered('cmp_t', 'direct', 10, 2, 100), // direct: 10 + 20 = 30 answered
+      ...answered('cmp_u', 'direct', 20, 0, 0),
+      ...answered('cmp_v', 'referral', 10, 0, 0), // referral: 10 + 19 = 29 answered
+      ...answered('cmp_w', 'referral', 19, 0, 0),
+    ];
+    const built = buildMissedValueRates(channels);
+
+    const direct = estimateMissedCallValue(built, { campaignId: 'cmp_t', channel: 'direct' });
+    expect(direct.source).toBe('channel');
+    expect(direct.valueUsd).toBeCloseTo(200 / 30, 9);
+
+    expect(estimateMissedCallValue(built, { campaignId: 'cmp_v', channel: 'referral' }).source).toBe('overall');
+  });
+
   test('revenue is summed in whole cents, so the average booking value is exact', () => {
     const mixed = [
       makeCall({ campaignId: 'cmp_a', revenueUsd: 0.1 }),
