@@ -65,4 +65,38 @@ describe('measureOutcomeLagDays', () => {
   test('no rows gives 0', () => {
     expect(measureOutcomeLagDays([], [])).toBe(0);
   });
+
+  test('an identical row after the real update does not extend the lag', () => {
+    const rows = [
+      goodRow({ started_at: START, outcome: '', revenue_usd: '', updated_at: hoursAfterStart(0.1) }),
+      goodRow({ started_at: START, outcome: 'booked', revenue_usd: '250', updated_at: hoursAfterStart(2) }),
+      goodRow({ started_at: START, outcome: 'booked', revenue_usd: '250', updated_at: hoursAfterStart(100) }),
+    ];
+    expect(lag(rows)).toBe(1);
+  });
+
+  test('an outcome that changes and changes back counts up to its last change', () => {
+    const rows = [
+      goodRow({ started_at: START, outcome: 'booked', revenue_usd: '250', updated_at: hoursAfterStart(1) }),
+      goodRow({ started_at: START, outcome: 'not_qualified', revenue_usd: '', updated_at: hoursAfterStart(25) }),
+      goodRow({ started_at: START, outcome: 'booked', revenue_usd: '250', updated_at: hoursAfterStart(70) }),
+    ];
+    expect(lag(rows)).toBe(3);
+  });
+
+  test('rows are compared in updated_at order, not file order', () => {
+    const rows = [
+      goodRow({ started_at: START, outcome: 'booked', revenue_usd: '250', updated_at: hoursAfterStart(30) }),
+      goodRow({ started_at: START, outcome: '', revenue_usd: '', updated_at: hoursAfterStart(1) }),
+    ];
+    expect(lag(rows)).toBe(2);
+  });
+
+  test('a bad earlier row is not compared: only good rows show an update', () => {
+    const rows = [
+      goodRow({ started_at: START, duration_seconds: '-1', outcome: '', revenue_usd: '', updated_at: hoursAfterStart(1) }),
+      goodRow({ started_at: START, outcome: 'booked', revenue_usd: '250', updated_at: hoursAfterStart(96) }),
+    ];
+    expect(lag(rows)).toBe(0);
+  });
 });

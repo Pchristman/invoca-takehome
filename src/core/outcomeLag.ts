@@ -2,25 +2,28 @@ import type { Call, RowResult } from './types';
 
 const MS_PER_DAY = 86_400_000;
 
-const goodCalls = (group: RowResult[]): Call[] => group.flatMap((row) => (row.ok ? [row.call] : []));
-
 /**
- * The longest gap, in whole days (rounded up), between a call starting and a later row changing its
- * outcome or revenue. A call qualifies when its winning row is good, it has two or more good rows with a
- * parseable updated_at, and the winner's outcome or revenue differs from the earliest row's.
- * Pure duplicates and single-row calls say nothing about how late outcomes arrive. 0 when none qualify.
+ * The longest gap, in whole days (rounded up), between a call starting and the last row that changed its
+ * outcome or revenue. For each call whose winning row is good, take its good rows that have a parseable
+ * updated_at, oldest first; the call's lag runs to the last row that differs (in outcome or revenue) from
+ * the row before it. Identical rows, single-row calls and bad rows say nothing about how late outcomes
+ * arrive. 0 when no call qualifies. A gap below 0 counts as 0.
  */
 export function measureOutcomeLagDays(groups: RowResult[][], winners: RowResult[]): number {
   let longestMs = 0;
   groups.forEach((group, index) => {
     const winner = winners[index];
     if (!winner?.ok) return;
-    const rows = goodCalls(group).filter((c) => c.updatedAt !== null);
-    if (rows.length < 2) return;
-    const earliest = rows.reduce((a, b) => (b.updatedAt!.getTime() < a.updatedAt!.getTime() ? b : a));
-    const changed = winner.call.outcome !== earliest.outcome || winner.call.revenueUsd !== earliest.revenueUsd;
-    if (!changed || winner.call.updatedAt === null) return;
-    longestMs = Math.max(longestMs, winner.call.updatedAt.getTime() - winner.call.startedAt.getTime());
+    const rows = group
+      .flatMap((row): Call[] => (row.ok && row.call.updatedAt !== null ? [row.call] : []))
+      .sort((a, b) => a.updatedAt!.getTime() - b.updatedAt!.getTime()); // stable: ties keep file order
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i]!;
+      const before = rows[i - 1]!;
+      if (row.outcome !== before.outcome || row.revenueUsd !== before.revenueUsd) {
+        longestMs = Math.max(longestMs, row.updatedAt!.getTime() - winner.call.startedAt.getTime());
+      }
+    }
   });
   return Math.ceil(longestMs / MS_PER_DAY);
 }

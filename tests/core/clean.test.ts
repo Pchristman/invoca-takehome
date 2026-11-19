@@ -164,4 +164,75 @@ describe('cleanExport', () => {
     ]);
     expect(store.dataNotes.outcomeLagDays).toBe(3);
   });
+
+  test('a tie between a good row and a later bad row makes the call bad and counts the tie', () => {
+    const store = clean([
+      goodRow({ updated_at: '2026-03-03T08:00:00Z' }),
+      goodRow({ location_id: 'loc_zzz', updated_at: '2026-03-03T08:00:00Z' }),
+    ]);
+    expect(store.calls).toEqual([]);
+    expect(store.dataNotes.badCallsByReason.unknown_location).toBe(1);
+    expect(store.dataNotes.tiedCalls).toBe(1);
+  });
+
+  test('a single bad latest row is one bad call and one bad raw row', () => {
+    const loaded = loadFixture([
+      goodRow({ updated_at: '2026-03-03T08:00:00Z' }),
+      goodRow({ location_id: 'loc_zzz', updated_at: '2026-03-09T08:00:00Z' }),
+    ]);
+    const { dataNotes } = cleanExport(loaded);
+    expect(dataNotes.badCalls).toBe(1);
+    expect(dataNotes.badRows).toBe(1);
+    expect(dataNotes.badRowsByReason.unknown_location).toBe(1);
+  });
+
+  test('revenue ignored on non-booked calls is summed to the cent', () => {
+    const store = clean([
+      goodRow({ call_id: 'r1', outcome: 'qualified_lead', revenue_usd: '0.10' }),
+      goodRow({ call_id: 'r2', outcome: 'qualified_lead', revenue_usd: '0.20' }),
+    ]);
+    expect(store.dataNotes.revenueOnNonBookedUsd).toBe(0.3);
+  });
+
+  test('an explicit 0 revenue on a non-booked call is not an anomaly', () => {
+    const store = clean([goodRow({ outcome: 'qualified_lead', revenue_usd: '0' })]);
+    expect(store.dataNotes.revenueOnNonBookedCalls).toBe(0);
+  });
+
+  test('an unattributed call with no tracking number is counted apart, not listed as a blank number', () => {
+    const store = clean([
+      goodRow({ call_id: 'n1', campaign_id: '', tracking_number: '' }),
+      goodRow({ call_id: 'n2', campaign_id: '', tracking_number: '+1-555-0190' }),
+    ]);
+    expect(store.dataNotes.unattributedCalls).toBe(2);
+    expect(store.dataNotes.unattributedWithoutTrackingNumber).toBe(1);
+    expect(store.dataNotes.unattributedTrackingNumbers).toEqual([{ trackingNumber: '+1-555-0190', calls: 1 }]);
+  });
+
+  test('tracking numbers with equal counts sort by plain character order, not locale', () => {
+    const store = clean([
+      goodRow({ call_id: 'n1', campaign_id: '', tracking_number: 'b' }),
+      goodRow({ call_id: 'n2', campaign_id: '', tracking_number: 'B' }),
+    ]);
+    expect(store.dataNotes.unattributedTrackingNumbers.map((t) => t.trackingNumber)).toEqual(['B', 'b']);
+  });
+
+  test('Phase 1 reference issues, raw bad-row counts and ended_at count survive cleaning', () => {
+    const campaigns = CAMPAIGNS + 'cmp_x,Broken,social,abc\n';
+    const loaded = loadFixture(
+      [goodRow({ ended_at: 'garbage' }), goodRow({ call_id: 'c2', campaign_id: 'cmp_x' })],
+      campaigns,
+    );
+    const { dataNotes } = cleanExport(loaded);
+    expect(loaded.referenceIssues.some((i) => i.file === 'campaigns.csv')).toBe(true);
+    expect(dataNotes.referenceIssues).toEqual(loaded.referenceIssues);
+    expect(dataNotes.badRows).toBe(1);
+    expect(dataNotes.badRowsByReason.unknown_campaign).toBe(1);
+    expect(dataNotes.unparseableEndedAt).toBe(1);
+  });
+
+  test('a good call whose location is missing is an error, not a silent host-zone guess', () => {
+    const loaded = loadFixture([goodRow()]);
+    expect(() => cleanExport({ ...loaded, locations: [] })).toThrow(/location/);
+  });
 });

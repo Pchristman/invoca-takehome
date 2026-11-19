@@ -128,12 +128,19 @@ export interface DataNotes {
   /** Calls whose latest updated_at was shared by two or more rows. */
   tiedCalls: number;
   unattributedCalls: number;
+  /** Unattributed calls with an empty tracking_number (left out of the list below). */
+  unattributedWithoutTrackingNumber: number;
   /** Tracking numbers on unattributed calls, most calls first, ties by number. */
   unattributedTrackingNumbers: { trackingNumber: string; calls: number }[];
   pendingCalls: number;
   /** Per CALL after dedupe. Every reason is present. */
   badCallsByReason: Record<BadReason, number>;
   badCalls: number;
+  /** Per RAW row, as Phase 1 counted them; every reason is present. The header "rows skipped" uses badRows. */
+  badRowsByReason: Record<BadReason, number>;
+  badRows: number;
+  /** Campaign or location rows skipped or flagged while loading; they explain some bad calls. */
+  referenceIssues: ReferenceIssue[];
   /** Calls with revenue on a non-booked current row (ignored), and the dollars ignored. */
   revenueOnNonBookedCalls: number;
   revenueOnNonBookedUsd: number;
@@ -143,6 +150,8 @@ export interface DataNotes {
   outcomeLagDays: number;
   /** Carried over from LoadedExport. */
   unparseableUpdatedAt: number;
+  /** Valid rows whose ended_at could not be parsed. */
+  unparseableEndedAt: number;
   notes: string[];
 }
 

@@ -34,9 +34,11 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
 export function localParts(instant: Date, timeZone: string): LocalParts {
   const parts: Record<string, string> = {};
   for (const part of formatterFor(timeZone).formatToParts(instant)) parts[part.type] = part.value;
+  const weekday = WEEKDAYS.indexOf(parts.weekday!);
+  if (weekday === -1) throw new Error(`unexpected weekday "${parts.weekday}" for zone ${timeZone}`);
   return {
     date: `${parts.year}-${parts.month}-${parts.day}`,
     hour: Number(parts.hour),
-    weekday: WEEKDAYS.indexOf(parts.weekday!),
+    weekday,
   };
 }

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { cleanExport } from '../../src/core/clean';
+import { readExportFromDir } from '../../src/node/readDataDir';
 import { goodRow, loadFixture } from './helpers';
 
 // An export that shares no names, zones or dates with the shipped one.
@@ -51,15 +52,29 @@ describe('cleaning a different export', () => {
 });
 
 describe('nothing in src/ is tied to the shipped dataset', () => {
-  const sourceFiles = readdirSync(join(__dirname, '..', '..', 'src'), { recursive: true, encoding: 'utf8' })
+  const srcDir = join(__dirname, '..', '..', 'src');
+  const sourceFiles = readdirSync(srcDir, { recursive: true, encoding: 'utf8' })
     .filter((f) => f.endsWith('.ts'))
-    .map((f) => ({ file: f, text: readFileSync(join(__dirname, '..', '..', 'src', f), 'utf8') }));
+    .map((f) => ({ file: f, text: readFileSync(join(srcDir, f), 'utf8') }));
 
-  test.each(['Phoenix', 'Denver', '2026-', 'cmp_', 'loc_', '+1-555'])('no source file contains "%s"', (needle) => {
+  // Every name, id and zone in the shipped export, plus the tracking-number prefix.
+  const shipped = readExportFromDir(join(__dirname, '..', 'fixtures', 'original-export'));
+  const needles = [
+    ...shipped.campaigns.flatMap((c) => [c.id, c.name]),
+    ...shipped.locations.flatMap((l) => [l.id, l.name, l.timezone]),
+    '+1-555',
+  ];
+
+  test('the shipped export gave us names to look for', () => {
+    expect(needles.length).toBeGreaterThan(30);
+    expect(sourceFiles.length).toBeGreaterThan(5);
+  });
+
+  test.each([...new Set(needles)])('no source file contains "%s"', (needle) => {
     expect(sourceFiles.filter((f) => f.text.includes(needle)).map((f) => f.file)).toEqual([]);
   });
 
-  test('the scan found the source files', () => {
-    expect(sourceFiles.length).toBeGreaterThan(5);
+  test('no source file contains a literal year-month such as 2026-10', () => {
+    expect(sourceFiles.filter((f) => /\b20\d\d-\d\d/.test(f.text)).map((f) => f.file)).toEqual([]);
   });
 });

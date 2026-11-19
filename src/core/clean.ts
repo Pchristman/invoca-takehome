@@ -14,8 +14,9 @@ export function cleanExport(loaded: LoadedExport): CallStore {
   let badCalls = 0;
   let pendingCalls = 0;
   let revenueOnNonBookedCalls = 0;
-  let revenueOnNonBookedUsd = 0;
   let bookedWithoutRevenueCalls = 0;
+  let unattributedWithoutTrackingNumber = 0;
+  let revenueOnNonBookedCents = 0;
 
   for (const winner of dedupe.winners) {
     if (!winner.ok) {
@@ -29,15 +30,19 @@ export function cleanExport(loaded: LoadedExport): CallStore {
     const unattributed = call.campaignId === null;
 
     if (pending) pendingCalls += 1;
-    if (unattributed) trackingCounts.set(call.trackingNumber, (trackingCounts.get(call.trackingNumber) ?? 0) + 1);
+    if (unattributed && call.trackingNumber === '') unattributedWithoutTrackingNumber += 1;
+    else if (unattributed) trackingCounts.set(call.trackingNumber, (trackingCounts.get(call.trackingNumber) ?? 0) + 1);
     if (booked && call.revenueUsd === null) bookedWithoutRevenueCalls += 1;
-    if (!booked && call.revenueUsd !== null) {
+    // An explicit 0 on a non-booked call is not an anomaly.
+    if (!booked && call.revenueUsd !== null && call.revenueUsd > 0) {
       revenueOnNonBookedCalls += 1;
-      revenueOnNonBookedUsd += call.revenueUsd;
+      revenueOnNonBookedCents += Math.round(call.revenueUsd * 100); // whole cents: no float drift
     }
 
-    // Phase 1 guarantees a good row's location exists and has a valid zone.
-    const local = localParts(call.startedAt, zoneByLocation.get(call.locationId)!);
+    // Phase 1 guarantees a good row's location exists and has a valid zone; Intl would silently use the host zone otherwise.
+    const zone = zoneByLocation.get(call.locationId);
+    if (zone === undefined) throw new Error(`call ${call.callId}: location "${call.locationId}" is not in the loaded locations`);
+    const local = localParts(call.startedAt, zone);
     calls.push({
       callId: call.callId,
       startedAt: call.startedAt,
@@ -62,7 +67,7 @@ export function cleanExport(loaded: LoadedExport): CallStore {
 
   const unattributedTrackingNumbers = [...trackingCounts]
     .map(([trackingNumber, count]) => ({ trackingNumber, calls: count }))
-    .sort((a, b) => b.calls - a.calls || a.trackingNumber.localeCompare(b.trackingNumber));
+    .sort((a, b) => b.calls - a.calls || (a.trackingNumber < b.trackingNumber ? -1 : a.trackingNumber > b.trackingNumber ? 1 : 0));
 
   return {
     calls,
@@ -74,15 +79,20 @@ export function cleanExport(loaded: LoadedExport): CallStore {
       duplicateRowsCollapsed: dedupe.duplicateRowsCollapsed,
       tiedCalls: dedupe.tiedCalls,
       unattributedCalls: calls.filter((c) => c.unattributed).length,
+      unattributedWithoutTrackingNumber,
       unattributedTrackingNumbers,
       pendingCalls,
       badCallsByReason,
       badCalls,
+      badRowsByReason: loaded.badByReason,
+      badRows: BAD_REASONS.reduce((sum, reason) => sum + loaded.badByReason[reason], 0),
+      referenceIssues: loaded.referenceIssues,
       revenueOnNonBookedCalls,
-      revenueOnNonBookedUsd,
+      revenueOnNonBookedUsd: revenueOnNonBookedCents / 100,
       bookedWithoutRevenueCalls,
       outcomeLagDays: measureOutcomeLagDays(dedupe.groups, dedupe.winners),
       unparseableUpdatedAt: loaded.unparseableUpdatedAt,
+      unparseableEndedAt: loaded.unparseableEndedAt,
       notes: loaded.notes,
     },
   };
