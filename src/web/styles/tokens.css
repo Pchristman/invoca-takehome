@@ -1,0 +1,61 @@
+/*
+  Design tokens: the only file that sets a color, font, spacing step or
+  motion duration. Everything else uses var(--name). To restyle, edit here.
+
+  Contrast checked (WCAG, text needs 4.5:1):
+    text on bg 14.8, text on surface 13.8
+    text-muted on bg 6.5, text-muted on surface 6.0
+    accent-text on accent 6.4, accent on bg 6.4
+    up on bg 6.3, up on surface 5.9
+    down on bg 7.3, down on surface 6.8
+    notice-text on notice-bg 8.6
+  Non-text parts (border, chart bars) need 3:1: border on bg 3.1, chart bar on bg 4.3.
+*/
+:root {
+  /* color */
+  --color-text: #1f2933;
+  --color-text-muted: #52606d;
+  --color-bg: #ffffff;
+  --color-surface: #f5f7fa;
+  --color-border: #8795a1;
+  --color-accent: #1f5fa8;
+  --color-accent-text: #ffffff;
+  --color-up: #1b6e3c;
+  --color-down: #a12b2b;
+  --color-notice-bg: #fff4d6;
+  --color-notice-text: #5c4200;
+  --color-chart-bar: #3b7dbd;
+  --color-chart-bar-partial: #9db9d6;
+
+  /* type */
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-heading: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+
+  /* space */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.5rem;
+  --radius: 4px;
+
+  /* motion */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --motion-slow: 300ms;
+  --ease-standard: ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
+}
