@@ -80,18 +80,25 @@ export function buildCallbackList(
     if (answeredAfter && answeredAfter.startedAt.getTime() > last.startedAt.getTime()) continue;
 
     const location = store.locations.find((l) => l.id === last.locationId);
-    const campaign = last.campaignId === null ? undefined : store.campaigns.find((c) => c.id === last.campaignId);
+    // Cleaning drops calls whose office or campaign is not in the store, so both lookups succeed.
+    if (!location) throw new Error(`Call ${last.callId} is at unknown office ${last.locationId}`);
+    let campaignName = 'Unattributed';
+    if (last.campaignId !== null) {
+      const campaign = store.campaigns.find((c) => c.id === last.campaignId);
+      if (!campaign) throw new Error(`Call ${last.callId} is in unknown campaign ${last.campaignId}`);
+      campaignName = campaign.name;
+    }
     const cents = toCents(estimateMissedCallValue(rates, last).valueUsd);
     totalCents += cents;
     rows.push({
       callerHash,
       unansweredAttempts: group.length,
       lastAttemptAt: last.startedAt,
-      lastAttemptLocal: localDateTime(last.startedAt, location?.timezone ?? 'UTC'),
+      lastAttemptLocal: localDateTime(last.startedAt, location.timezone),
       locationId: last.locationId,
-      officeName: location?.name ?? last.locationId,
+      officeName: location.name,
       campaignId: last.campaignId,
-      campaignName: last.campaignId === null ? 'Unattributed' : (campaign?.name ?? last.campaignId),
+      campaignName,
       trackingNumber: last.trackingNumber,
       estimatedValueUsd: cents / 100,
     });

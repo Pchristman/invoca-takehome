@@ -103,6 +103,8 @@ describe('buildMissedCalls', () => {
     expect(formula).toContain('30');
     expect(formula).toContain('channel');
     expect(formula).toContain('whole export');
+    expect(formula).toContain('Unattributed calls use their channel');
+    expect(formula).toContain('Pending calls');
   });
 
   test('busiest slot names the office, weekday and hour', () => {
@@ -194,9 +196,18 @@ describe('buildMissedCalls', () => {
     expect(view.callbacks.unidentifiedUnanswered).toBe(2);
     expect(view.callbacks.rows).toEqual([]);
     expect(view.actions[0]!.kind).toBe('no_callbacks');
+    expect(view.actions[0]!.text).toBe(
+      `No call-back list: 2 calls went unanswered without a caller number, so those callers cannot be identified. Busiest missed slot: ${TUE}.`,
+    );
+    expect(view.actions[0]!.text).not.toContain('no one to call back');
+    const one = setup([miss('2026-09-10T16:00:00Z', '')]);
+    expect(one.actions[0]!.text).toContain('1 call went unanswered without a caller number');
   });
 
-  test('the limit note says callers are identified by hash', () => {
-    expect(setup([]).limitNote).toContain('hash');
+  test('the limit note says callers are identified by hash and can be matched by tracking number and time', () => {
+    const { limitNote } = setup([]);
+    expect(limitNote).toContain('hash');
+    expect(limitNote).toContain('tracking number');
+    expect(limitNote).toContain('time');
   });
 });

@@ -45,6 +45,7 @@ export interface MissedCallsView extends ViewBase {
 }
 
 const CALLERS = ['caller', 'callers'] as const;
+const CALLS = ['call', 'calls'] as const;
 const zeroHours = (): number[] => Array.from({ length: 24 }, () => 0);
 
 export function buildMissedCalls(
@@ -80,7 +81,8 @@ export function buildMissedCalls(
 
   const callbacks = buildCallbackList(store, range, rates, options);
   const slot = busiestMissedSlot(missed);
-  const slotOffice = slot ? store.locations.find((l) => l.id === slot.locationId)?.name ?? slot.locationId : null;
+  // Cleaning drops calls at unknown offices, so a slot's office is always in the store.
+  const slotOffice = slot ? (store.locations.find((l) => l.id === slot.locationId)?.name ?? failUnknownOffice(slot.locationId)) : null;
   const link: ActionLink = filterId === undefined ? { view: 'missed-calls' } : { view: 'missed-calls', locationId: filterId };
   const action = chooseAction(callbacks, slot, slotOffice, link);
 
@@ -101,12 +103,13 @@ export function buildMissedCalls(
       bySource,
       formula:
         `Each missed call is valued at its campaign's booking rate times its average booking value. A campaign with fewer than ${min} answered calls with an outcome uses its channel's rates, ` +
-        `and a channel with fewer than ${min} uses the overall rates. Rates come from the whole export, not just this range.`,
+        `and a channel with fewer than ${min} uses the overall rates. Unattributed calls use their channel's rates. ` +
+        `Pending calls (answered, no outcome yet) are left out of the rates. Rates come from the whole export, not just this range.`,
     },
     callbacks,
     busiestSlot: slot && slotOffice !== null ? { ...slot, officeName: slotOffice } : null,
     limitNote:
-      'The export carries only a hash of the caller number, so callers are identified by that hash. A person who called from a different number cannot be matched.',
+      'The export carries only a hash of the caller number, so callers are identified by that hash. A person who called from a different number cannot be matched. A marketer can match callers by tracking number and time in their call platform.',
   };
 }
 
@@ -124,6 +127,15 @@ function chooseAction(callbacks: CallbackList, slot: MissedSlot | null, slotOffi
     'slot.weekday': { kind: 'weekday', value: slot.weekday },
     'slot.hour': { kind: 'hour', value: slot.hour },
   };
+  if (callbacks.rows.length === 0 && callbacks.unidentifiedUnanswered > 0) {
+    // Callers exist but the export has no caller hash for them, so there is nobody we can name.
+    return makeAction(
+      'no_callbacks',
+      'No call-back list: {missed.unidentified} went unanswered without a caller number, so those callers cannot be identified. Busiest missed slot: {slot.office} {slot.weekday} {slot.hour}.',
+      { 'missed.unidentified': { kind: 'count', value: callbacks.unidentifiedUnanswered, noun: CALLS }, ...slotFacts },
+      link,
+    );
+  }
   if (callbacks.rows.length === 0) {
     return makeAction(
       'no_callbacks',
@@ -142,4 +154,8 @@ function chooseAction(callbacks: CallbackList, slot: MissedSlot | null, slotOffi
     },
     link,
   );
+}
+
+function failUnknownOffice(locationId: string): never {
+  throw new Error(`Missed slot at unknown office ${locationId}`);
 }
