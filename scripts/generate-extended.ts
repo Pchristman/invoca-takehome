@@ -1,6 +1,8 @@
 // Builds the extended export: the shipped calls untouched, plus synthetic calls that plant patterns.
 // A one-off tool, not part of the app. It imports nothing from src/ (Node cannot resolve src's
 // extensionless imports). Output depends only on (input text, config, seed): own PRNG, no clock.
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { parse } from 'csv-parse/sync';
 
 export interface ExportTexts {
@@ -314,4 +316,30 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
   // All synthetic rows go after the original text, oldest update first.
   synthetic.sort((x, y) => (x.updated_at ?? '').localeCompare(y.updated_at ?? '') || (x.call_id ?? '').localeCompare(y.call_id ?? ''));
   return input.calls + synthetic.map((row) => serialise(header, row) + '\r\n').join('');
+}
+
+/** Read fromDir/{calls,campaigns,locations}.csv; write toDir/calls.csv (generated) and byte copies of the other two. */
+export function writeExtended(fromDir: string, toDir: string, config: Partial<ExtendedConfig> = {}): void {
+  if (resolve(fromDir) === resolve(toDir)) throw new GenerateError('The output folder must not be the input folder: the original export stays untouched');
+  const read = (file: string): string => readFileSync(join(fromDir, file), 'utf8');
+  const generated = generateExtendedCalls({ calls: read('calls.csv'), campaigns: read('campaigns.csv'), locations: read('locations.csv') }, config);
+  mkdirSync(toDir, { recursive: true });
+  writeFileSync(join(toDir, 'calls.csv'), generated);
+  copyFileSync(join(fromDir, 'campaigns.csv'), join(toDir, 'campaigns.csv'));
+  copyFileSync(join(fromDir, 'locations.csv'), join(toDir, 'locations.csv'));
+}
+
+// Command line: node scripts/generate-extended.ts [fromDir=. [toDir=data/extended]]
+if (import.meta.main) {
+  const [fromDir = '.', toDir = 'data/extended'] = process.argv.slice(2);
+  try {
+    writeExtended(fromDir, toDir);
+    console.log(`Wrote the extended export to ${toDir}`);
+  } catch (error) {
+    if (error instanceof GenerateError) {
+      console.error(`Could not generate the extended export: ${error.message}`);
+      process.exit(1);
+    }
+    throw error;
+  }
 }

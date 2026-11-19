@@ -9,6 +9,7 @@ A small local web product that helps a marketing manager track inbound call perf
 | `npm install` | available |
 | `npm test` | available (vitest) |
 | `npm run typecheck` | available |
+| `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
 | `npm start` | not built yet (Phase 6/7) |
 | `npm run dev` | not built yet (Phase 6/7) |
 
@@ -19,3 +20,16 @@ Copy `.env.example` to `.env` to configure. Never commit `.env`.
 The app reads three CSVs: `calls.csv`, `campaigns.csv` and `locations.csv`. They come from the folder named by `DATA_DIR` (set in the shell or in `.env`; the shell wins), or the current directory when it is unset or blank. A relative `DATA_DIR` is relative to the current directory. Columns are matched by header name, so extra or reordered columns are fine; a missing required column stops startup with a message naming the file and column.
 
 The loader returns every `calls.csv` row as either a typed call or a bad row, with bad rows counted by reason (bad timestamp, unknown location, unknown campaign, and so on). Bad rows never crash the app. Removing duplicate calls and everything after that comes in later phases.
+
+### Extended export (synthetic)
+
+`data/extended/` holds a larger export that **contains synthetic rows**. Its `calls.csv` is the shipped file, unchanged, followed by 1,500 invented rows (call ids start `x_`); `campaigns.csv` and `locations.csv` are copies. It plants four patterns the shipped data lacks, so the Locations and Campaigns views have something to find:
+
+- a low answer rate at Canyon Office on weekday mornings (local time);
+- a low booking rate at Riverside Office, with a normal answer rate;
+- a surge in one campaign's calls over the last 28 days;
+- a fade in another campaign's calls over the 28 days before that.
+
+It also carries the same mess as the original: duplicate rows, unattributed calls and pending calls. It has no bad rows.
+
+The default stays the shipped export. To use the extended one, set `DATA_DIR=data/extended`. To regenerate it (same seed, same bytes), run `npm run generate:extended`; the script and its settings are in `scripts/generate-extended.ts`.
