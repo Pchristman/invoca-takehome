@@ -8,8 +8,10 @@ import { buildMissedValueRates, estimateMissedCallValue } from '../../src/core/m
 import { dataSpan, resolveRange } from '../../src/core/ranges';
 import type { RangeSpec } from '../../src/core/ranges';
 import { callsPerWeek } from '../../src/core/weeks';
+import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../../src/core/views';
 import { readExportFromDir } from '../../src/node/readDataDir';
 import { goodRow, loadFixture } from './helpers';
+import { expectAllFinite } from './views/fixtures';
 
 // An export that shares no names, zones or dates with the shipped one.
 const CAMPAIGNS = 'campaign_id,name,channel,daily_budget_usd\nzz_c1,Quokka Promo,referral,40\nzz_c2,Wombat Weekend,paid_search,0\n';
@@ -104,6 +106,52 @@ describe('ranges and metrics on a different export', () => {
     const value = estimateMissedCallValue(buildMissedValueRates(store.calls), { campaignId: 'zz_c1', channel: 'referral' });
     expect(value.valueUsd).toBe(100);
     expect(value.source).toBe('overall'); // only 4 answered calls, below the minimum for the campaign's own rate
+  });
+});
+
+describe('views on a different export', () => {
+  const days = ['2031-05-05', '2031-05-07', '2031-05-12', '2031-05-18'];
+  const store = cleanExport(
+    loadFixture(
+      [
+        ...days.flatMap((day, i) => [
+          row({ call_id: `p${i}`, caller_number_hash: `hp${i}`, started_at: `${day}T12:00:00Z`, outcome: 'booked', revenue_usd: '100' }),
+          row({ call_id: `w${i}`, caller_number_hash: `hw${i}`, campaign_id: 'zz_c2', marketing_channel: 'paid_search', location_id: 'zz_akl', started_at: `${day}T08:00:00Z`, outcome: 'not_qualified', revenue_usd: '' }),
+          row({ call_id: `q${i}`, caller_number_hash: `hq${i}`, started_at: `${day}T13:00:00Z`, location_id: 'zz_lon', answered: 'false', outcome: 'missed', revenue_usd: '' }),
+        ]),
+        row({ call_id: 'u1', caller_number_hash: 'hu1', campaign_id: '', marketing_channel: 'direct', location_id: 'zz_lon', started_at: '2031-05-18T09:00:00Z', answered: 'false', outcome: 'missed', revenue_usd: '' }),
+      ],
+      CAMPAIGNS,
+      LOCATIONS,
+    ),
+  );
+  const span = dataSpan(store.calls)!;
+
+  const resolve = (spec: RangeSpec) => {
+    const result = resolveRange(span, spec);
+    if (!result.ok) throw new Error(result.error.message);
+    return result.range;
+  };
+
+  test.each(['all', 'last7'] as const)('every view builds for %s', (preset) => {
+    const range = resolve({ kind: 'preset', preset });
+    const comparison = resolveComparison(span, range);
+    const previous = comparison.ok && comparison.comparison.available ? comparison.comparison.previous : undefined;
+
+    const overview = buildOverview(store, range, previous);
+    const campaigns = buildCampaigns(store, range, previous);
+    const locations = buildLocations(store, range, previous);
+    const missed = buildMissedCalls(store, range, previous);
+    for (const view of [overview, campaigns, locations, missed]) {
+      expectAllFinite(view);
+      expect(view.actions.length).toBeGreaterThan(0);
+      for (const action of view.actions) expect(action.text.length).toBeGreaterThan(0);
+    }
+
+    expect(campaigns.rows.map((r) => r.name)).toEqual(expect.arrayContaining(['Quokka Promo', 'Wombat Weekend']));
+
+    const london = buildMissedCalls(store, range, previous, { locationId: 'zz_lon' });
+    expect(london.officeFilter).toEqual({ locationId: 'zz_lon', name: 'London Desk' });
   });
 });
 
