@@ -66,7 +66,7 @@ const toIso = (ms: number): string => new Date(ms).toISOString().replace(/\.\d{3
 
 /**
  * Shift a start time by a random whole number of weeks so it lands in [lo, hi] (milliseconds).
- * Weekday and time of day are kept. Returns null when no whole-week shift fits.
+ * Weekday and time of DAY are kept. Returns null when no whole-week shift fits.
  */
 function shiftByWeeksInto(startMs: number, lo: number, hi: number, rng: () => number): number | null {
   const fewest = Math.ceil((lo - startMs) / WEEK);
@@ -155,6 +155,7 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
   const templates = finalStates(rows).filter((r) => !Number.isNaN(Date.parse(r.started_at ?? '')));
   const synthetic: string[] = [];
   const locations = parse(input.locations, { columns: true, skip_empty_lines: true }) as Row[];
+  const campaigns = parse(input.campaigns, { columns: true, skip_empty_lines: true }) as Row[];
 
   /** A copy of `template` starting at `startMs`, with new id, caller hash and timestamps. */
   const clone = (template: Row, startMs: number): Row => {
@@ -171,8 +172,8 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
   };
 
   /** A start for a copy of `template`, whole weeks away, inside the span margin. */
-  const shiftedStart = (template: Row): number => {
-    const startMs = shiftByWeeksInto(Date.parse(template.started_at ?? ''), lo, hi, rng);
+  const shiftedStart = (template: Row, from = lo, to = hi): number => {
+    const startMs = shiftByWeeksInto(Date.parse(template.started_at ?? ''), from, to, rng);
     if (startMs === null) throw new GenerateError(`The data span is too short to place a copy of call ${template.call_id}`);
     return startMs;
   };
@@ -242,6 +243,37 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
       synthetic.push(serialise(header, { ...clone(template, startMs), location_id: b.locationId }));
     }
   }
+
+  // Patterns C and D: one campaign's calls added to one window, using that campaign's own calls as templates.
+  // Windows are offsets from the last call: "recent" is the last windowDays days (not counting the margin DAY
+  // at the end), "earlier" is the windowDays days before it.
+  const recent = { from: last - (config.windowDays - 1) * DAY, to: last - DAY };
+  const earlier = { from: last - (2 * config.windowDays - 1) * DAY, to: last - config.windowDays * DAY };
+  const plantInWindow = (name: string, block: ExtendedConfig['campaignSurge'], window: { from: number; to: number }): void => {
+    if (block.calls <= 0) return;
+    if (!campaigns.some((c) => c.campaign_id === block.campaignId)) throw new GenerateError(`${name}: campaign ${block.campaignId} is not in campaigns.csv`);
+    const notBooked = block.calls - block.unanswered - block.booked;
+    if (block.unanswered < 0 || block.booked < 0 || notBooked < 0) throw new GenerateError(`${name}: unanswered (${block.unanswered}) plus booked (${block.booked}) must fit within calls (${block.calls})`);
+    if (last - first < 2 * config.windowDays * DAY) throw new GenerateError(`${name}: the data span is under ${2 * config.windowDays} days, so two ${config.windowDays}-DAY windows do not fit`);
+    const own = attributed.filter((r) => r.campaign_id === block.campaignId);
+    const ownUnanswered = own.filter((r) => r.answered === 'false');
+    const ownBooked = own.filter((r) => r.outcome === 'booked' && Number(r.revenue_usd) > 0);
+    const ownNotBooked = own.filter((r) => r.answered === 'true' && (r.outcome === 'qualified_lead' || r.outcome === 'not_qualified'));
+    if (block.unanswered > 0 && ownUnanswered.length === 0) throw new GenerateError(`${name}: ${block.campaignId} has no unanswered calls to copy`);
+    if (block.booked > 0 && ownBooked.length === 0) throw new GenerateError(`${name}: ${block.campaignId} has no booked calls with revenue to copy`);
+    if (notBooked > 0 && ownNotBooked.length === 0) throw new GenerateError(`${name}: ${block.campaignId} has no answered, not booked calls to copy`);
+    const plan: Row[][] = [
+      ...Array.from({ length: block.unanswered }, () => ownUnanswered),
+      ...Array.from({ length: block.booked }, () => ownBooked),
+      ...Array.from({ length: notBooked }, () => ownNotBooked),
+    ];
+    for (const pool of plan) {
+      const template = pick(pool);
+      synthetic.push(serialise(header, clone(template, shiftedStart(template, window.from, window.to))));
+    }
+  };
+  plantInWindow('Pattern C', config.campaignSurge, recent);
+  plantInWindow('Pattern D', config.campaignFade, earlier);
 
   return input.calls + synthetic.map((line) => line + '\r\n').join('');
 }

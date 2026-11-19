@@ -251,3 +251,92 @@ describe('generateExtendedCalls: pattern B, office low conversion', () => {
     expect(() => generateExtendedCalls(noQualified, withB())).toThrow(/not booked/i);
   });
 });
+
+// ---------- Task 4: patterns C and D, the campaign surge and fade ----------
+
+const CD = {
+  ...OFF,
+  windowDays: 28,
+  campaignSurge: { campaignId: 'camp_a', calls: 6, unanswered: 1, booked: 2 },
+  campaignFade: { campaignId: 'camp_b', calls: 6, unanswered: 1, booked: 0 },
+};
+
+/** 'YYYY-MM-DD' minus a number of days. */
+const minusDays = (date: string, days: number): string => new Date(Date.parse(`${date}T00:00:00Z`) - days * DAY).toISOString().slice(0, 10);
+
+describe('generateExtendedCalls: patterns C and D, campaign surge and fade', () => {
+  const store = cleaned(generateExtendedCalls(FIXTURE, CD));
+  const realCalls = store.calls.filter((c) => !c.callId.startsWith('x_'));
+  const synth = store.calls.filter((c) => c.callId.startsWith('x_'));
+  const surge = synth.filter((c) => c.campaignId === 'camp_a');
+  const fade = synth.filter((c) => c.campaignId === 'camp_b');
+  const lastDate = realCalls.map((c) => c.localDate).sort().at(-1) as string;
+
+  it('surge calls are camp_a, in the last 28 days; fade calls are camp_b, in the 28 days before', () => {
+    expect(synth).toHaveLength(12);
+    expect(surge).toHaveLength(6);
+    expect(fade).toHaveLength(6);
+    for (const c of surge) {
+      expect(c.localDate >= minusDays(lastDate, 27)).toBe(true);
+      expect(c.localDate <= minusDays(lastDate, 1)).toBe(true);
+    }
+    for (const c of fade) {
+      expect(c.localDate >= minusDays(lastDate, 55)).toBe(true);
+      expect(c.localDate <= minusDays(lastDate, 28)).toBe(true);
+    }
+  });
+
+  it('counts are exact', () => {
+    const count = (calls: typeof synth) => ({
+      unanswered: calls.filter((c) => !c.answered).length,
+      booked: calls.filter((c) => c.booked).length,
+      notBooked: calls.filter((c) => c.answered && !c.booked).length,
+    });
+    expect(count(surge)).toEqual({ unanswered: 1, booked: 2, notBooked: 3 });
+    expect(count(fade)).toEqual({ unanswered: 1, booked: 0, notBooked: 5 });
+  });
+
+  it("the campaign's own channel and tracking number are kept", () => {
+    for (const c of synth) {
+      const real = realCalls.filter((r) => r.campaignId === c.campaignId);
+      expect(real.some((r) => r.channel === c.channel && r.trackingNumber === c.trackingNumber)).toBe(true);
+    }
+  });
+
+  it('no bad rows, no unattributed', () => {
+    expect(store.dataNotes.badCalls).toBe(0);
+    expect(synth.some((c) => c.unattributed || c.pending)).toBe(false);
+  });
+
+  it('a span under 2 x windowDays throws GenerateError', () => {
+    const forty = { ...FIXTURE, calls: callsText([
+      { id: 'c1', start: '2026-10-01T10:00:00Z', outcome: 'booked', revenue: '100' },
+      { id: 'c2', start: '2026-10-10T10:00:00Z', answered: false, outcome: 'missed' },
+      { id: 'c3', start: '2026-10-20T10:00:00Z', outcome: 'qualified_lead' },
+      { id: 'c4', start: '2026-11-10T10:00:00Z', outcome: 'qualified_lead' },
+    ]) };
+    expect(() => generateExtendedCalls(forty, CD)).toThrow(GenerateError);
+    expect(() => generateExtendedCalls(forty, CD)).toThrow(/span/i);
+  });
+
+  it('an unknown campaign throws GenerateError naming it', () => {
+    const config = { ...CD, campaignSurge: { ...CD.campaignSurge, campaignId: 'camp_zz' } };
+    expect(() => generateExtendedCalls(FIXTURE, config)).toThrow(/camp_zz/);
+  });
+
+  it('a campaign with no booked calls to clone throws GenerateError', () => {
+    const noBooked = { ...FIXTURE, calls: callsText([
+      { id: 'c1', start: '2026-09-01T10:00:00Z', outcome: 'booked', revenue: '100' },
+      { id: 'c2', start: '2026-09-10T10:00:00Z', campaign: 'camp_b', answered: false, outcome: 'missed' },
+      { id: 'c3', start: '2026-11-10T10:00:00Z', campaign: 'camp_b', outcome: 'qualified_lead' },
+    ]) };
+    const config = { ...CD, campaignSurge: { campaignId: 'camp_b', calls: 6, unanswered: 1, booked: 2 } };
+    expect(() => generateExtendedCalls(noBooked, config)).toThrow(GenerateError);
+    expect(() => generateExtendedCalls(noBooked, config)).toThrow(/booked/i);
+  });
+
+  it('counts that do not fit within calls throw GenerateError', () => {
+    const config = { ...CD, campaignFade: { campaignId: 'camp_b', calls: 3, unanswered: 2, booked: 2 } };
+    expect(() => generateExtendedCalls(FIXTURE, config)).toThrow(GenerateError);
+  });
+});
