@@ -119,7 +119,7 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 
 **Actions:**
 
-1. **Shift budget:** "Shift budget from {worst} (est. ${x} per booking) toward {best} (est. ${y} per booking)." Do not project extra bookings from the shift; the data can't support that claim.
+1. **Shift budget:** "Shift budget from {worst} (est. ${x} revenue per budget dollar) toward {best} (est. ${y} revenue per budget dollar)." Do not project extra bookings from the shift; the data can't support that claim.
 2. **Fix attribution** (only when unattributed calls exist in range): "{n} calls ({b} bookings, ${r}) came in on {m} tracking numbers not tied to any campaign. Assign them." The tracking numbers are listed with their call counts.
 
 **Definitions:**
@@ -263,7 +263,7 @@ One call per view turns that view's fact sheet into a 2–3 sentence takeaway: w
 
 ### The model never writes numbers
 
-The model writes text with **placeholders** that name fact-sheet keys, e.g. `{worst.name} costs {worst.cost_per_booking} per booking, versus {best.cost_per_booking} for {best.name}.` Code substitutes the formatted values. The model therefore cannot produce or alter a metric.
+The model writes text with **placeholders** that name fact-sheet keys, e.g. `{worst.name} earns {worst.revenue_per_dollar} per budget dollar, versus {best.revenue_per_dollar} for {best.name}.` Code substitutes the formatted values. The model therefore cannot produce or alter a metric.
 
 ### Checker
 
