@@ -7,7 +7,9 @@ const NOT_BUILT = 'The web app is not built yet. The data is available at /api/m
 
 /**
  * Serves the built web app. Registered last, after every /api route.
- * Whether `index.html` exists is decided once, at startup: a build made later is not picked up until a restart.
+ * Whether a build exists is decided once, at startup: a build made after that is not picked up until a restart,
+ * and deleting the build later also needs a restart. Once there is a build, `index.html` is read on every
+ * request, like the assets, so a rebuild shows up at once.
  */
 export function serveWebApp(webRoot: string): MiddlewareHandler {
   const indexPath = join(webRoot, 'index.html');
@@ -16,7 +18,6 @@ export function serveWebApp(webRoot: string): MiddlewareHandler {
     return async (c) => (c.req.path === '/' ? c.text(NOT_BUILT) : c.text('Not found', 404));
   }
 
-  const indexHtml = readFileSync(indexPath, 'utf-8');
   // serveStatic reads relative to the current directory and refuses paths that leave its root.
   const files = serveStatic({ root: relative(process.cwd(), webRoot) });
   const noop = async () => {};
@@ -27,6 +28,11 @@ export function serveWebApp(webRoot: string): MiddlewareHandler {
     // A path with a file extension is an asset: if it isn't there, say so rather than hide a broken build behind the app.
     if (extname(c.req.path) !== '') return c.text('Not found', 404);
     // Anything else is a view path; the URL holds the view state, so a refresh must return the app.
-    return c.html(indexHtml);
+    try {
+      return c.html(readFileSync(indexPath, 'utf-8'));
+    } catch {
+      // The build was removed after startup.
+      return c.text('Not found', 404);
+    }
   };
 }

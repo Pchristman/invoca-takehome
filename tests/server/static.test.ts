@@ -68,6 +68,39 @@ describe('serving the built web app', () => {
     },
   );
 
+  it('only GET and HEAD get the app; other methods are a 404', async () => {
+    const app = appWithWeb();
+    const post = await get(app, '/campaigns', { method: 'POST' });
+    expect(post.status).toBe(404);
+    expect(post.text).not.toContain('<html>');
+    expect((await get(app, '/', { method: 'DELETE' })).status).toBe(404);
+    const apiPost = await get(app, '/api/meta', { method: 'POST' });
+    expect(apiPost.status).toBe(404);
+    expect(apiPost.json).toMatchObject({ error: { code: 'not_found' } });
+    expect((await get(app, '/campaigns', { method: 'HEAD' })).status).toBe(200);
+  });
+
+  it('/api without a trailing slash is the API, not the app', async () => {
+    const result = await get(appWithWeb(), '/api');
+    expect(result.status).toBe(404);
+    expect(result.json).toMatchObject({ error: { code: 'not_found' } });
+  });
+
+  it('a rebuilt index.html is served without a restart', async () => {
+    const app = appWithWeb();
+    expect((await get(app, '/campaigns')).text).toBe('<html>app</html>');
+    writeFileSync(join(webRoot, 'index.html'), '<html>rebuilt</html>');
+    expect((await get(app, '/campaigns')).text).toBe('<html>rebuilt</html>');
+  });
+
+  it('if index.html vanishes after startup, a view path is a plain 404', async () => {
+    const app = appWithWeb();
+    rmSync(join(webRoot, 'index.html'));
+    const result = await get(app, '/campaigns');
+    expect(result.status).toBe(404);
+    expect(result.headers.get('content-type')).toContain('text/plain');
+  });
+
   it('no build yet', async () => {
     const app = createApp(serverFixture(), { webRoot: join(webRoot, 'does-not-exist') });
     const home = await get(app, '/');

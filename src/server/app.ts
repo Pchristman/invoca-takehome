@@ -108,12 +108,16 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
     });
   });
 
-  // Last, and never for the API: an unknown /api/ path must stay a JSON 404, not the app.
+  // Last, and only for GET and HEAD, never for the API: an unknown API path must stay a JSON 404, not the app.
+  const isApiPath = (path: string) => path === '/api' || path.startsWith('/api/');
   const webApp = serveWebApp(options.webRoot ?? 'dist');
-  app.use('*', async (c, next) => (c.req.path.startsWith('/api/') ? next() : webApp(c, next)));
+  app.use('*', async (c, next) => {
+    const readsPage = c.req.method === 'GET' || c.req.method === 'HEAD';
+    return isApiPath(c.req.path) || !readsPage ? next() : webApp(c, next);
+  });
 
   app.notFound((c) => {
-    if (c.req.path.startsWith('/api/')) {
+    if (isApiPath(c.req.path)) {
       return errorResponse(c, { code: 'not_found', message: 'There is no such endpoint.' });
     }
     return c.text('Not found', 404);
