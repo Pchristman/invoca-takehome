@@ -14,23 +14,11 @@ import { officeOutlier, pickBestWorst } from '../../src/core/ranking';
 import type { CampaignPerformance } from '../../src/core/ranking';
 import { readExportFromDir } from '../../src/node/readDataDir';
 import { OFF } from '../scripts/extendedFixture';
+import { EXTENDED_TOTALS as OBSERVED } from './extendedTotals';
 
 const ORIGINAL_DIR = join(__dirname, '..', 'fixtures', 'original-export');
 const EXTENDED_DIR = join(__dirname, '..', '..', 'data', 'extended');
 const text = (dir: string, file: string) => readFileSync(join(dir, file), 'utf8');
-
-// Observed on the committed seed, recorded not derived. If a generator change moves one of these, look at why.
-const OBSERVED = {
-  bookings: 1470,
-  revenueUsd: 531431,
-  // The shipped export has 2,040 distinct callers in 5,000 calls; copies reuse real callers at that same share.
-  uniqueCallers: 2605,
-  // Best and worst campaign by revenue per budget dollar over all data: the same as in the original export.
-  bestWorst: { best: 'cmp_11', worst: 'cmp_07' },
-  // cmp_04 / cmp_06 calls in the last 28 days against the 28 before.
-  surge: { current: 342, previous: 218 },
-  fade: { current: 113, previous: 261 },
-};
 
 const original = cleanExport(readExportFromDir(ORIGINAL_DIR));
 const loadedExtended = readExportFromDir(EXTENDED_DIR);
@@ -101,7 +89,7 @@ describe('extended export: loads clean', () => {
   it('totals', () => {
     const notes = extended.dataNotes;
     expect(notes.rowsRead).toBe(6911);
-    expect(extended.calls).toHaveLength(6400);
+    expect(extended.calls).toHaveLength(OBSERVED.calls);
     expect(notes.callsAfterDedup).toBe(6400);
     expect(notes.duplicateRowsCollapsed).toBe(511);
     expect(notes.badCalls).toBe(0);

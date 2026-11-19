@@ -3,9 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { start } from '../../src/server/start';
 import type { RunningServer } from '../../src/server/start';
 
-// The call total pinned in tests/snapshot/extended-export.test.ts ('totals': 6400). OBSERVED there is not exported
-// and holds no call count, and importing a test file would re-run its suites.
-const EXTENDED_CALLS = 6400;
+import { EXTENDED_TOTALS } from './extendedTotals';
 
 const EXTENDED_DIR = join(__dirname, '..', '..', 'data', 'extended');
 
@@ -26,7 +24,7 @@ async function getJson(path: string): Promise<{ status: number; body: any }> {
 describe('extended export over HTTP', () => {
   it('meta counts every call', async () => {
     const { body } = await getJson('/api/meta');
-    expect(body.callCount).toBe(EXTENDED_CALLS);
+    expect(body.callCount).toBe(EXTENDED_TOTALS.calls);
   });
 
   it('locations flags an office to review', async () => {
