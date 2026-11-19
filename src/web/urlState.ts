@@ -106,6 +106,16 @@ export function withCampaign(state: UrlState, id: string | null): UrlState {
   return { ...state, campaign: id };
 }
 
+export function withLocation(state: UrlState, id: string | null): UrlState {
+  return { ...state, location: id };
+}
+
+// The callback CSV for what is on screen: same range and office, no view, dev or campaign.
+export function csvHref(state: UrlState): string {
+  const query = apiParams(state, 'missed-calls').toString();
+  return query === '' ? '/api/missed-calls/callbacks.csv' : `/api/missed-calls/callbacks.csv?${query}`;
+}
+
 export function customRange(start: string, end: string): RangeChoice | null {
   const trimmedStart = start.trim();
   const trimmedEnd = end.trim();

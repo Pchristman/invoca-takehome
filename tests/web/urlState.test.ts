@@ -7,6 +7,8 @@ import {
   withView,
   withRange,
   withCampaign,
+  withLocation,
+  csvHref,
   customRange,
   presetOf,
   actionHref,
@@ -207,6 +209,46 @@ describe('with* helpers', () => {
     expect(withCampaign(s, null).campaign).toBeNull();
     expect(withCampaign(s, 'camp_b').campaign).toBe('camp_b');
   });
+
+  it('withLocation sets and clears, and keeps the rest', () => {
+    const s = state({
+      view: 'missed-calls',
+      range: { kind: 'preset', preset: 'last7' },
+      compare: { start: '2026-08-01', end: '2026-08-05' },
+      campaign: 'camp_a',
+      dev: true,
+    });
+    expect(withLocation(s, 'loc_a')).toEqual({ ...s, location: 'loc_a' });
+    expect(withLocation(withLocation(s, 'loc_a'), null)).toEqual(s);
+  });
+});
+
+describe('csvHref', () => {
+  const PATH = '/api/missed-calls/callbacks.csv';
+
+  it('is the bare path for the default state', () => {
+    expect(csvHref(DEFAULTS)).toBe(PATH);
+  });
+
+  it('carries a preset range and the office', () => {
+    const s = state({ range: { kind: 'preset', preset: 'last7' }, location: 'loc_a' });
+    expect(csvHref(s)).toBe(`${PATH}?range=last7&location=loc_a`);
+  });
+
+  it('carries a custom range', () => {
+    const s = state({ range: { kind: 'custom', start: '2026-09-01', end: '2026-09-05' } });
+    expect(csvHref(s)).toBe(`${PATH}?start=2026-09-01&end=2026-09-05`);
+  });
+
+  it('never carries view, dev or campaign', () => {
+    const href = csvHref(state({ view: 'missed-calls', campaign: 'camp_a', dev: true }));
+    expect(href).toBe(PATH);
+  });
+
+  it('percent-encodes an office id and decodes it back', () => {
+    const href = csvHref(state({ location: 'a&b c' }));
+    expect(new URL(href, 'http://x').searchParams.get('location')).toBe('a&b c');
+  });
 });
 
 describe('customRange', () => {
@@ -271,6 +313,16 @@ describe('hrefs', () => {
     });
     expect(defaultsHref(messy)).toBe('/?view=campaigns&dev');
     expect(defaultsHref(DEFAULTS)).toBe('/');
+  });
+
+  it('a link to Missed calls for an office with special characters round-trips', () => {
+    const href = actionHref(DEFAULTS, { view: 'missed-calls', locationId: 'a&b c' });
+    const search = href.slice(href.indexOf('?'));
+    expect(parseUrlState(search).location).toBe('a&b c');
+  });
+
+  it('defaultsHref from Missed calls drops the office', () => {
+    expect(defaultsHref(state({ view: 'missed-calls', location: 'nope', dev: true }))).toBe('/?view=missed-calls&dev');
   });
 
   it('every href starts with a slash', () => {

@@ -30,6 +30,28 @@ describe('keepPreviousFor', () => {
   });
 });
 
+describe('keepPreviousFor with an office', () => {
+  const LA = '/api/missed-calls?range=last28&location=a#0';
+  const LB = '/api/missed-calls?range=last28&location=b#0';
+  it('keeps when only the office changes, including to and from none', () => {
+    expect(keepPreviousFor(LA, LB)).toBe(true);
+    expect(keepPreviousFor('/api/missed-calls?range=last28#0', LB)).toBe(true);
+    expect(keepPreviousFor(LA, '/api/missed-calls?range=last28#0')).toBe(true);
+  });
+  it('drops for a range change, a comparison change, a retry or another view', () => {
+    expect(keepPreviousFor(LA, '/api/missed-calls?range=last7&location=b#0')).toBe(false);
+    expect(keepPreviousFor(LA, '/api/missed-calls?range=last28&compareStart=2026-01-01&compareEnd=2026-01-28&location=b#0')).toBe(false);
+    expect(keepPreviousFor(LA, '/api/missed-calls?range=last28&location=a#1')).toBe(false);
+    expect(keepPreviousFor(LA, '/api/overview?range=last28#0')).toBe(false);
+  });
+  it('displayState keeps the old data, marked busy, while an office-only change loads', () => {
+    expect(displayState({ key: LA, data: 'old' }, { status: 'loading', key: LB })).toEqual({
+      state: { status: 'ready', key: LB, data: 'old' },
+      busy: true,
+    });
+  });
+});
+
 describe('displayState', () => {
   const ready = { key: A, data: 'old' };
   const error: ClientError = { code: 'network', message: 'x' };
