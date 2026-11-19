@@ -9,6 +9,8 @@ const TOKEN_NAMES = [
   '--color-text', '--color-text-muted', '--color-bg', '--color-surface', '--color-border',
   '--color-accent', '--color-accent-text', '--color-up', '--color-down',
   '--color-notice-bg', '--color-notice-text', '--color-chart-bar', '--color-chart-bar-partial',
+  '--color-heat-0', '--color-heat-1', '--color-heat-2', '--color-heat-3', '--color-heat-4',
+  '--color-heat-ink', '--color-heat-ink-inverse',
   '--font-body', '--font-heading', '--font-mono',
   '--text-sm', '--text-md', '--text-lg', '--text-xl',
   '--space-1', '--space-2', '--space-3', '--space-4', '--space-5', '--space-6', '--radius',
@@ -140,12 +142,16 @@ describe('design tokens', () => {
       ['--color-accent-text', '--color-accent'], ['--color-accent', '--color-accent-soft'], ['--color-up', '--color-accent-soft'],
       ['--color-notice-text', '--color-notice-bg'],
       ['--color-chrome-text', '--color-chrome'], ['--color-chrome-muted', '--color-chrome'],
+      ...['--color-heat-0', '--color-heat-1', '--color-heat-2'].map((bg) => ['--color-heat-ink', bg] as [string, string]),
+      ...['--color-heat-3', '--color-heat-4'].map((bg) => ['--color-heat-ink-inverse', bg] as [string, string]),
     ];
     const nonText: [string, string][] = [
       ...['--color-border', '--color-chart-bar', '--color-chart-bar-partial'].flatMap((part) =>
         ['--color-bg', '--color-panel', '--color-surface'].map((bg) => [part, bg] as [string, string]),
       ),
       ['--color-chrome-accent', '--color-chrome'],
+      // A filled heat step must be visible against the panel it sits on.
+      ...['--color-heat-1', '--color-heat-2', '--color-heat-3', '--color-heat-4'].map((step) => [step, '--color-panel'] as [string, string]),
     ];
     const weak = [
       ...text.filter(([a, b]) => ratio(a, b) < 4.5).map(([a, b]) => `${a} on ${b}: ${ratio(a, b).toFixed(2)} (needs 4.5)`),

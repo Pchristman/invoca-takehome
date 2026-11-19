@@ -677,3 +677,50 @@ th .badge {
   margin: 0;
   font-weight: 600;
 }
+
+/* ---------- Locations and heatmap (Phase 8, task 5) ---------- */
+.flag-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flag-list li + li {
+  margin-top: var(--space-2);
+}
+
+.heat-0 { background: var(--color-heat-0); color: var(--color-heat-ink); }
+.heat-1 { background: var(--color-heat-1); color: var(--color-heat-ink); }
+.heat-2 { background: var(--color-heat-2); color: var(--color-heat-ink); }
+.heat-3 { background: var(--color-heat-3); color: var(--color-heat-ink-inverse); }
+.heat-4 { background: var(--color-heat-4); color: var(--color-heat-ink-inverse); }
+
+/* 24 hour columns plus a label and a total: wider than the page, scrolls inside its wrapper. */
+.heatmap {
+  min-width: 56rem;
+}
+
+.heatmap th,
+.heatmap td {
+  padding: var(--space-2);
+}
+
+.heatmap td.heat-cell {
+  text-align: center;
+  border-left: 1px solid var(--color-panel);
+}
+
+.heat-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.heat-swatch {
+  display: inline-block;
+  width: var(--space-4);
+  height: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-rule);
+}
