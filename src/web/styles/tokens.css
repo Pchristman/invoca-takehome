@@ -43,11 +43,11 @@
   --color-chrome-muted: #a9c0b8;
   --color-chrome-accent: #00b388;
   /* heat: one green hue, five steps. Step 0 is "no calls"; steps 1 to 4 are 3:1 against the panel.
-     Dark ink on steps 0 to 2, white ink on steps 3 and 4 (both 4.5:1, tested). */
+     Dark ink on steps 0 and 1, white ink on steps 2 to 4 (4.5:1, tested). Neighbours differ by 1.4:1 or more (tested). */
   --color-heat-0: #f3f6ee;
   --color-heat-1: #36a47c;
-  --color-heat-2: #1f8a68;
-  --color-heat-3: #0a6e52;
+  --color-heat-2: #1c7a5c;
+  --color-heat-3: #155d46;
   --color-heat-4: #0a3d2f;
   --color-heat-ink: #000000;
   --color-heat-ink-inverse: #ffffff;

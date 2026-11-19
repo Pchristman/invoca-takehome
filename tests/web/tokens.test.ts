@@ -142,8 +142,8 @@ describe('design tokens', () => {
       ['--color-accent-text', '--color-accent'], ['--color-accent', '--color-accent-soft'], ['--color-up', '--color-accent-soft'],
       ['--color-notice-text', '--color-notice-bg'],
       ['--color-chrome-text', '--color-chrome'], ['--color-chrome-muted', '--color-chrome'],
-      ...['--color-heat-0', '--color-heat-1', '--color-heat-2'].map((bg) => ['--color-heat-ink', bg] as [string, string]),
-      ...['--color-heat-3', '--color-heat-4'].map((bg) => ['--color-heat-ink-inverse', bg] as [string, string]),
+      ...['--color-heat-0', '--color-heat-1'].map((bg) => ['--color-heat-ink', bg] as [string, string]),
+      ...['--color-heat-2', '--color-heat-3', '--color-heat-4'].map((bg) => ['--color-heat-ink-inverse', bg] as [string, string]),
     ];
     const nonText: [string, string][] = [
       ...['--color-border', '--color-chart-bar', '--color-chart-bar-partial'].flatMap((part) =>
@@ -158,6 +158,23 @@ describe('design tokens', () => {
       ...nonText.filter(([a, b]) => ratio(a, b) < 3).map(([a, b]) => `${a} on ${b}: ${ratio(a, b).toFixed(2)} (needs 3)`),
     ];
     expect(weak).toEqual([]);
+  });
+
+  it('neighbouring heat steps are told apart (at least 1.4:1)', () => {
+    const lum = (hex: string): number => {
+      const [r = 0, g = 0, b = 0] = [1, 3, 5].map((i) => {
+        const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const steps = [0, 1, 2, 3, 4].map((n) => lum(new RegExp(`--color-heat-${n}:\\s*(#[0-9a-fA-F]{6})`).exec(tokens)?.[1] ?? '#000000'));
+    const tooClose = steps.slice(1).flatMap((l, i) => {
+      const [hi = 0, lo = 0] = [steps[i]!, l].sort((x, y) => y - x);
+      const r = (hi + 0.05) / (lo + 0.05);
+      return r < 1.4 ? [`${i}->${i + 1}: ${r.toFixed(2)}`] : [];
+    });
+    expect(tooClose).toEqual([]);
   });
 
   it('every var() used is defined', () => {
