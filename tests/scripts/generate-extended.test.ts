@@ -1,0 +1,99 @@
+import { readFileSync } from 'node:fs';
+import { parse } from 'csv-parse/sync';
+import { describe, expect, it } from 'vitest';
+import { GenerateError, generateExtendedCalls } from '../../scripts/generate-extended';
+import { callsText, FIXTURE, OFF } from './extendedFixture';
+
+type Row = Record<string, string>;
+const parseRows = (text: string): Row[] => parse(text, { columns: true, skip_empty_lines: true }) as Row[];
+
+const PLAIN5 = { ...OFF, plainCalls: 5 };
+const ISO = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/;
+const DAY = 86_400_000;
+const WEEK = 7 * DAY;
+
+const originalRows = parseRows(FIXTURE.calls);
+const syntheticOf = (out: string): Row[] => parseRows(out).slice(originalRows.length);
+const ms = (s: string | undefined) => Date.parse(s ?? '');
+
+describe('generateExtendedCalls: plain calls', () => {
+  it('same seed gives identical text; a different seed gives different text', () => {
+    const a = generateExtendedCalls(FIXTURE, PLAIN5);
+    expect(generateExtendedCalls(FIXTURE, PLAIN5)).toBe(a);
+    expect(generateExtendedCalls(FIXTURE, { ...PLAIN5, seed: PLAIN5.seed + 1 })).not.toBe(a);
+  });
+
+  it('the original calls text is kept byte for byte at the start', () => {
+    expect(generateExtendedCalls(FIXTURE, PLAIN5).startsWith(FIXTURE.calls)).toBe(true);
+  });
+
+  it('adds exactly plainCalls rows, with the original header columns', () => {
+    const out = generateExtendedCalls(FIXTURE, PLAIN5);
+    const header = Object.keys(originalRows[0] ?? {});
+    expect(header).toHaveLength(14);
+    expect(parseRows(out)).toHaveLength(originalRows.length + 5);
+    for (const row of syntheticOf(out)) expect(Object.keys(row)).toEqual(header);
+  });
+
+  it('every line ends CRLF, the file ends with CRLF, and no bare LF', () => {
+    const out = generateExtendedCalls(FIXTURE, PLAIN5);
+    expect(out).toMatch(/\r\n$/);
+    expect(out.replace(/\r\n/g, '').includes('\n')).toBe(false);
+  });
+
+  it('synthetic ids are x_ numbered from 1 and do not collide with the input', () => {
+    const ids = syntheticOf(generateExtendedCalls(FIXTURE, PLAIN5)).map((r) => r.call_id);
+    expect(ids).toEqual(['x_000001', 'x_000002', 'x_000003', 'x_000004', 'x_000005']);
+
+    const clash = { ...FIXTURE, calls: callsText([{ id: 'x_000001', start: '2026-10-01T10:00:00Z', outcome: 'qualified_lead' }, { id: 'c1', start: '2026-12-01T10:00:00Z', outcome: 'qualified_lead' }]) };
+    expect(() => generateExtendedCalls(clash, { ...PLAIN5, plainCalls: 1 })).toThrow(GenerateError);
+    expect(() => generateExtendedCalls(clash, { ...PLAIN5, plainCalls: 1 })).toThrow(/x_000001/);
+  });
+
+  it('synthetic starts stay at least a day inside the span', () => {
+    const starts = originalRows.map((r) => ms(r.started_at));
+    const lo = Math.min(...starts) + DAY;
+    const hi = Math.max(...starts) - DAY;
+    const out = generateExtendedCalls(FIXTURE, { ...PLAIN5, plainCalls: 200 });
+    for (const r of syntheticOf(out)) {
+      expect(ms(r.started_at)).toBeGreaterThanOrEqual(lo);
+      expect(ms(r.started_at)).toBeLessThanOrEqual(hi);
+      expect(ms(r.ended_at)).toBe(ms(r.started_at) + Number(r.duration_seconds) * 1000);
+      for (const col of ['started_at', 'ended_at', 'updated_at'] as const) expect(r[col]).toMatch(ISO);
+      const gap = ms(r.updated_at) - ms(r.ended_at);
+      expect(gap).toBeGreaterThanOrEqual(5000);
+      expect(gap).toBeLessThanOrEqual(30000);
+      expect(r.caller_number_hash).toMatch(/^h_x[0-9a-f]{7}$/);
+    }
+  });
+
+  it('weekday and time of day are copied from a real call', () => {
+    const real = originalRows.map((r) => ms(r.started_at));
+    for (const r of syntheticOf(generateExtendedCalls(FIXTURE, { ...PLAIN5, plainCalls: 50 }))) {
+      expect(real.some((t) => (ms(r.started_at) - t) % WEEK === 0)).toBe(true);
+    }
+  });
+
+  it('a span under a week throws GenerateError', () => {
+    const short = { ...FIXTURE, calls: callsText([{ id: 'c1', start: '2026-10-01T10:00:00Z' }, { id: 'c2', start: '2026-10-04T10:00:00Z' }]) };
+    expect(() => generateExtendedCalls(short, { ...PLAIN5, plainCalls: 1 })).toThrow(GenerateError);
+    expect(() => generateExtendedCalls(short, { ...PLAIN5, plainCalls: 1 })).toThrow(/span/i);
+  });
+
+  it('an empty template pool throws GenerateError', () => {
+    const noPlain = {
+      ...FIXTURE,
+      calls: callsText([
+        { id: 'c1', start: '2026-09-01T10:00:00Z', campaign: '' },
+        { id: 'c2', start: '2026-11-01T10:00:00Z', campaign: '' },
+      ]),
+    };
+    expect(() => generateExtendedCalls(noPlain, { ...PLAIN5, plainCalls: 1 })).toThrow(GenerateError);
+    expect(() => generateExtendedCalls(noPlain, { ...PLAIN5, plainCalls: 1 })).toThrow(/plain/i);
+  });
+
+  it('no clock or Math.random', () => {
+    const source = readFileSync('scripts/generate-extended.ts', 'utf8');
+    expect(source).not.toMatch(/Math\.random|Date\.now|new Date\(\)/);
+  });
+});
