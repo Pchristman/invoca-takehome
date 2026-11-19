@@ -147,21 +147,48 @@ describe('buildLocations', () => {
     expect(view.actions[0]!.text).toBe('Office A books 3.0% of calls versus 50.0% elsewhere. Its best campaign there is Alpha.');
   });
 
-  it('equal z is broken by the office id, whatever the input order', () => {
+  // The two tests below need exactly equal z on offices the row sort would not already order by id. Offices
+  // with equal calls are ordered by id anyway, so these shapes differ in size and were found by searching for
+  // inputs whose floating-point z values are identical.
+  it('equal z is broken by the office id, even when the row order puts the other office first', () => {
     const calls = [
-      ...officeCalls('loc_a', { calls: 100, answered: 30, booked: 30 }),
-      ...officeCalls('loc_c', { calls: 100, answered: 30, booked: 30 }),
-      ...officeCalls('loc_b', { calls: 1000, answered: 500, booked: 300 }),
+      ...officeCalls('loc_a', { calls: 50, answered: 10, booked: 10 }),
+      ...officeCalls('loc_c', { calls: 120, answered: 36, booked: 36 }),
+      ...officeCalls('loc_b', { calls: 1000, answered: 500, booked: 500 }),
     ];
     const store = storeOf(calls);
     const view = buildLocations(store, r);
+    expect(view.rows.map((row) => row.locationId)).toEqual(['loc_b', 'loc_c', 'loc_a']);
     const [a, c] = ['loc_a', 'loc_c'].map((id) => view.rows.find((row) => row.locationId === id)!);
-    expect(a!.answerFlag.z).toBe(c!.answerFlag.z);
     expect(a!.answerFlag.direction).toBe('worse');
+    expect(c!.answerFlag.direction).toBe('worse');
+    expect(a!.answerFlag.z).toBe(c!.answerFlag.z);
     expect(view.actions[0]!.text).toContain('Office A');
 
     const reversed = buildLocations({ ...store, calls: [...calls].reverse(), locations: [...locations].reverse() }, r);
     expect(reversed.actions[0]!.text).toContain('Office A');
+  });
+
+  it('equal z on answer and booking is broken by answer first, even when the booking office has the lower id', () => {
+    // Office A's booking z equals office C's answer z. Office id alone would pick A's booking.
+    const calls = [
+      ...officeCalls('loc_a', { calls: 100, answered: 50, booked: 0 }),
+      ...officeCalls('loc_c', { calls: 250, answered: 50, booked: 50 }),
+      ...officeCalls('loc_b', { calls: 1000, answered: 500, booked: 500 }),
+    ];
+    const store = storeOf(calls);
+    const check = (view: ReturnType<typeof buildLocations>) => {
+      const [a, c] = ['loc_a', 'loc_c'].map((id) => view.rows.find((row) => row.locationId === id)!);
+      expect(a!.bookingFlag.direction).toBe('worse');
+      expect(c!.answerFlag.direction).toBe('worse');
+      expect(a!.answerFlag.flagged).toBe(false);
+      expect(a!.bookingFlag.z).toBe(c!.answerFlag.z);
+      expect(Math.abs(c!.bookingFlag.z!)).toBeLessThan(Math.abs(c!.answerFlag.z!));
+      expect(view.actions[0]!.kind).toBe('review_office_answer');
+      expect(view.actions[0]!.text).toContain('Office C answers');
+    };
+    check(buildLocations(store, r));
+    check(buildLocations({ ...store, calls: [...calls].reverse(), locations: [...locations].reverse() }, r));
   });
 
   it('an office with too few calls is not flagged', () => {
