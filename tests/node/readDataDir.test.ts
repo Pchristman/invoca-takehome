@@ -58,9 +58,32 @@ describe('readExportFromDir', () => {
     expect(readExportFromDir().rowsRead).toBe(1);
   });
 
-  test('an empty DATA_DIR falls back to the current working directory', () => {
+  test.each(['', '   '])('DATA_DIR %j falls back to the current working directory', (value) => {
     writeExport(dir);
-    vi.stubEnv('DATA_DIR', '');
+    vi.stubEnv('DATA_DIR', value);
+    vi.spyOn(process, 'cwd').mockReturnValue(dir);
+    expect(readExportFromDir().rowsRead).toBe(1);
+  });
+
+  test('an explicit empty or blank dir is treated as unset', () => {
+    writeExport(dir);
+    vi.stubEnv('DATA_DIR', undefined);
+    vi.spyOn(process, 'cwd').mockReturnValue(dir);
+    expect(readExportFromDir('').rowsRead).toBe(1);
+    expect(readExportFromDir('  ').rowsRead).toBe(1);
+  });
+
+  test('DATA_DIR with surrounding spaces is trimmed', () => {
+    writeExport(dir);
+    vi.stubEnv('DATA_DIR', `  ${dir}  `);
+    expect(readExportFromDir().rowsRead).toBe(1);
+  });
+
+  test('DATA_DIR set in .env is used when the shell does not set it', () => {
+    const dataDir = join(dir, 'data');
+    writeExport(dataDir);
+    writeFileSync(join(dir, '.env'), `DATA_DIR=${dataDir}\n`);
+    vi.stubEnv('DATA_DIR', undefined);
     vi.spyOn(process, 'cwd').mockReturnValue(dir);
     expect(readExportFromDir().rowsRead).toBe(1);
   });
