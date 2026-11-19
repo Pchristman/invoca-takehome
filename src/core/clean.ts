@@ -1,5 +1,6 @@
 import { dedupeRows } from './dedupe';
 import { localParts } from './localTime';
+import { measureOutcomeLagDays } from './outcomeLag';
 import { BAD_REASONS, type BadReason, type CallStore, type CleanCall, type LoadedExport } from './types';
 
 /** Turn a loaded export into one localized call per call_id, plus the data notes. */
@@ -80,7 +81,7 @@ export function cleanExport(loaded: LoadedExport): CallStore {
       revenueOnNonBookedCalls,
       revenueOnNonBookedUsd,
       bookedWithoutRevenueCalls,
-      outcomeLagDays: 0, // measured in outcomeLag.ts
+      outcomeLagDays: measureOutcomeLagDays(dedupe.groups, dedupe.winners),
       unparseableUpdatedAt: loaded.unparseableUpdatedAt,
       notes: loaded.notes,
     },
