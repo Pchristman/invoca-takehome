@@ -1,5 +1,26 @@
 import { describe, expect, test } from 'vitest';
-import { localParts } from '../../src/core/localTime';
+import { localDateTime, localParts } from '../../src/core/localTime';
+
+describe('localDateTime', () => {
+  const when = (iso: string, zone: string) => localDateTime(new Date(iso), zone);
+
+  test('formats date and time in the zone', () => {
+    expect(when('2026-09-10T16:05:00Z', 'America/Phoenix')).toBe('2026-09-10 09:05');
+    expect(when('2026-09-10T16:05:00Z', 'America/Denver')).toBe('2026-09-10 10:05');
+  });
+
+  test('early UTC is the previous local day', () => {
+    expect(when('2026-09-10T06:30:00Z', 'America/Phoenix')).toBe('2026-09-09 23:30');
+  });
+
+  test('local midnight is 00:00, never 24:00', () => {
+    expect(when('2026-09-10T07:00:00Z', 'America/Phoenix')).toBe('2026-09-10 00:00');
+  });
+
+  test('a half-hour zone keeps its minutes', () => {
+    expect(when('2031-05-10T20:00:00Z', 'Asia/Kolkata')).toBe('2031-05-11 01:30');
+  });
+});
 
 const at = (iso: string, zone: string) => localParts(new Date(iso), zone);
 

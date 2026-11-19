@@ -30,6 +30,28 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   return formatter;
 }
 
+const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** "YYYY-MM-DD HH:mm" in the zone, hour 00-23. `timeZone` is a valid IANA name. */
+export function localDateTime(instant: Date, timeZone: string): string {
+  let formatter = dateTimeFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    dateTimeFormatters.set(timeZone, formatter);
+  }
+  const parts: Record<string, string> = {};
+  for (const part of formatter.formatToParts(instant)) parts[part.type] = part.value;
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
 /** The office's local date, hour and weekday for a UTC instant. `timeZone` is a valid IANA name. */
 export function localParts(instant: Date, timeZone: string): LocalParts {
   const parts: Record<string, string> = {};
