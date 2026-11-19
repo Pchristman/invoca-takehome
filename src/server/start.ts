@@ -17,6 +17,8 @@ export interface StartOptions {
 }
 
 export interface RunningServer {
+  /** The address the socket really bound to (not the requested one). */
+  host: string;
   port: number;
   url: string;
   store: CallStore;
@@ -42,8 +44,9 @@ export async function start(options: StartOptions = {}): Promise<RunningServer> 
     });
   });
 
-  const port = (server.address() as AddressInfo).port;
+  const { address: host, port } = server.address() as AddressInfo;
   return {
+    host,
     port,
     url: `http://127.0.0.1:${port}`,
     store,

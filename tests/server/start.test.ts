@@ -48,6 +48,7 @@ describe('start', () => {
 
   it('listens on loopback only', async () => {
     const server = await startServer(SHIPPED);
+    expect(server.host).toBe('127.0.0.1'); // the address the socket really bound, not just the URL text
     expect(server.url).toBe(`http://127.0.0.1:${server.port}`);
     // Not reachable through the IPv6 loopback, which a server on "::" or all interfaces would answer.
     await expect(fetch(`http://[::1]:${server.port}/api/meta`)).rejects.toThrow();
