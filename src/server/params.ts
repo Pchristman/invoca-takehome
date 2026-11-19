@@ -94,7 +94,9 @@ export function parseViewQuery(
   if (compareStart !== '') {
     const problem = checkDates(compareStart, compareEnd);
     if (problem) {
-      const field = problem.field === undefined ? undefined : problem.field === 'start' ? 'compareStart' : 'compareEnd';
+      let field: string | undefined;
+      if (problem.field === 'start') field = 'compareStart';
+      else if (problem.field === 'end') field = 'compareEnd';
       return fail({ ...problem, field, message: `Comparison range: ${problem.message}` });
     }
     previous = { start: compareStart, end: compareEnd };

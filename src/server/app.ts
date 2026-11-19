@@ -18,12 +18,13 @@ export interface AppOptions {
 }
 
 /** What each view needs from the URL and how to build it. The view routes (and the takeaway route) all read this one table. */
-export interface ViewSpec {
+interface ViewSpec {
   wants: ViewQueryWants;
   build: (store: CallStore, query: ViewQuery) => { view: ViewName; templateSentence: string };
 }
 
-export const VIEW_TABLE: Record<ViewName, ViewSpec> = {
+// `satisfies` keeps each entry's own result type, so the CSV route can build through this table and still see `callbacks`.
+const VIEW_TABLE = {
   overview: { wants: {}, build: (store, q) => buildOverview(store, q.range, q.previous) },
   campaigns: {
     wants: { campaign: true },
@@ -34,7 +35,7 @@ export const VIEW_TABLE: Record<ViewName, ViewSpec> = {
     wants: { location: true },
     build: (store, q) => buildMissedCalls(store, q.range, q.previous, { locationId: q.locationId }),
   },
-};
+} satisfies Record<ViewName, ViewSpec>;
 
 const AI_OFF: AiStatus = { status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 };
 
@@ -99,8 +100,7 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   app.get('/api/missed-calls/callbacks.csv', (c) => {
     const parsed = parseFor(c, 'missed-calls');
     if (!parsed.ok) return errorResponse(c, parsed.error);
-    const { range, previous, locationId } = parsed.value;
-    const view = buildMissedCalls(store, range, previous, { locationId });
+    const view = VIEW_TABLE['missed-calls'].build(store, parsed.value);
     // The file name holds dates only, so it can't carry text from the URL.
     return c.body(`﻿${callbacksToCsv(view.callbacks.rows)}`, 200, {
       'Content-Type': 'text/csv; charset=utf-8',
