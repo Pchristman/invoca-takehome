@@ -429,3 +429,29 @@ th .badge {
 .estimate-note summary {
   cursor: pointer;
 }
+
+/* ---------- data notes panel items ---------- */
+.notes-panel .row {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notes-items {
+  margin: 0;
+}
+
+.notes-item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-1) 0;
+}
+
+.notes-item dt {
+  color: var(--color-text-muted);
+}
+
+.notes-item dd {
+  margin: 0;
+  font-weight: 600;
+}

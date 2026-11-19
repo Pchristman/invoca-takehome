@@ -1,6 +1,9 @@
 import type { Meta } from '../../server/api';
 import { formatLongDate, formatSkippedRows } from '../format';
 
+/** The id App focuses when the data notes panel closes. */
+export const DATA_NOTES_BUTTON_ID = 'data-notes-button';
+
 export function Header({
   meta,
   dev,
@@ -20,7 +23,7 @@ export function Header({
         {meta.span && <span>{`Data as of ${formatLongDate(meta.span.end)}`}</span>}
         {skipped !== null && <span>{skipped}</span>}
         {dev && (
-          <button type="button" className="button" aria-pressed={dataNotesOpen} onClick={onToggleDataNotes}>
+          <button id={DATA_NOTES_BUTTON_ID} type="button" className="button" aria-pressed={dataNotesOpen} onClick={onToggleDataNotes}>
             Data notes
           </button>
         )}
