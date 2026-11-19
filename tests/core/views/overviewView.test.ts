@@ -1,0 +1,171 @@
+import { describe, expect, it } from 'vitest';
+import { formatFact } from '../../../src/core/views/facts';
+import { buildCampaigns } from '../../../src/core/views/campaignsView';
+import { buildLocations } from '../../../src/core/views/locationsView';
+import { buildMissedCalls } from '../../../src/core/views/missedCallsView';
+import { buildOverview } from '../../../src/core/views/overviewView';
+import { makeViewContext } from '../../../src/core/views/viewContext';
+import type { CleanCall } from '../../../src/core/types';
+import { makeCall } from '../helpers';
+import { campaign, expectAllFinite, makeStore, office, range } from './fixtures';
+
+/** n calls on one date: `booked` booked at $100, then answered-not-booked, then missed. Callers repeat after `distinct`. */
+function period(
+  localDate: string,
+  tag: string,
+  shape: { calls: number; answered: number; booked: number; distinct: number },
+): CleanCall[] {
+  return Array.from({ length: shape.calls }, (_, i) => {
+    const callerHash = `${tag}_${i % shape.distinct}`;
+    if (i < shape.booked) {
+      return makeCall({ localDate, callerHash, answered: true, outcome: 'booked', booked: true, revenueUsd: 100 });
+    }
+    if (i < shape.answered) {
+      return makeCall({ localDate, callerHash, answered: true, outcome: 'not_qualified', booked: false, revenueUsd: 0 });
+    }
+    return makeCall({ localDate, callerHash, answered: false, outcome: 'missed', booked: false, revenueUsd: 0 });
+  });
+}
+
+const options = { campaigns: [campaign('cmp_a', 'Alpha', 'social', 10)], locations: [office('loc_1', 'Office One')] };
+const previousCalls = () => period('2026-09-01', 'p', { calls: 10, answered: 8, booked: 4, distinct: 8 });
+const currentCalls = () => period('2026-09-14', 'c', { calls: 12, answered: 9, booked: 5, distinct: 12 });
+const store = () => makeStore([...previousCalls(), ...currentCalls()], options);
+const week = range('2026-09-08', '2026-09-14');
+
+describe('buildOverview tiles', () => {
+  it('tiles show current, previous and change', () => {
+    const { tiles } = buildOverview(store(), week);
+    expect(tiles.calls).toEqual({ current: 12, previous: 10, change: { kind: 'percent', value: expect.closeTo(20, 6) } });
+    expect(tiles.uniqueCallers.current).toBe(12);
+    expect(tiles.uniqueCallers.previous).toBe(8);
+    expect(tiles.uniqueCallers.change).toEqual({ kind: 'percent', value: expect.closeTo(50, 6) });
+    expect(tiles.answerRate.current).toBeCloseTo(0.75, 6);
+    expect(tiles.answerRate.previous).toBeCloseTo(0.8, 6);
+    expect(tiles.answerRate.change).toEqual({ kind: 'points', value: expect.closeTo(-5, 6) });
+    expect(tiles.bookings.current).toBe(5);
+    expect(tiles.bookings.previous).toBe(4);
+    expect(tiles.bookings.change).toEqual({ kind: 'percent', value: expect.closeTo(25, 6) });
+    expect(tiles.revenueUsd.current).toBe(500);
+    expect(tiles.revenueUsd.previous).toBe(400);
+    expect(tiles.revenueUsd.change).toEqual({ kind: 'percent', value: expect.closeTo(25, 6) });
+  });
+
+  it('no comparison on all data', () => {
+    const view = buildOverview(store(), range('2026-09-01', '2026-09-14'));
+    for (const tile of Object.values(view.tiles)) {
+      expect(tile.previous).toBeNull();
+      expect(tile.change).toEqual({ kind: 'none' });
+    }
+    expect(view.notes.comparison.reason).toMatch(/^No full previous period/);
+    expect(view.tiles.calls.current).toBe(22);
+  });
+
+  it('a previous value of zero reads new, both zero reads none', () => {
+    // Span is 09-01..09-14; the range 09-09..09-14 has a six-day previous window with no calls.
+    const s = makeStore([...period('2026-09-01', 'x', { calls: 1, answered: 1, booked: 1, distinct: 1 }), ...currentCalls()], options);
+    const view = buildOverview(s, range('2026-09-09', '2026-09-14'));
+    expect(view.notes.comparison.available).toBe(true);
+    expect(view.tiles.calls.change).toEqual({ kind: 'new' });
+    expect(view.tiles.answerRate.previous).toBeNull();
+    expect(view.tiles.answerRate.change).toEqual({ kind: 'none' });
+    expectAllFinite(view);
+
+    const empty = buildOverview(makeStore([], options), range('2026-09-01', '2026-09-07'));
+    for (const tile of Object.values(empty.tiles)) expect(tile.change).toEqual({ kind: 'none' });
+  });
+
+  it('revenue counts booked calls only and unique callers ignore blank hashes', () => {
+    const calls = [
+      makeCall({ localDate: '2026-09-14', callerHash: '', answered: true, outcome: 'not_qualified', booked: false, revenueUsd: 40 }),
+      makeCall({ localDate: '2026-09-14', callerHash: 'a' }),
+      makeCall({ localDate: '2026-09-01', callerHash: 'b' }),
+    ];
+    const { tiles } = buildOverview(makeStore(calls, options), week);
+    expect(tiles.calls.current).toBe(2);
+    expect(tiles.uniqueCallers.current).toBe(1);
+    expect(tiles.revenueUsd.current).toBe(100);
+  });
+});
+
+describe('buildOverview actions', () => {
+  it("top actions are the three views' headlines in fixed order", () => {
+    const s = store();
+    const view = buildOverview(s, week);
+    expect(view.topActions.map((t) => t.view)).toEqual(['campaigns', 'locations', 'missed-calls']);
+    expect(view.topActions[0]?.action).toEqual(buildCampaigns(s, week).actions[0]);
+    expect(view.topActions[1]?.action).toEqual(buildLocations(s, week).actions[0]);
+    expect(view.topActions[2]?.action).toEqual(buildMissedCalls(s, week).actions[0]);
+    expect(view.actions).toEqual(view.topActions.map((t) => t.action));
+  });
+
+  it('nothing to suggest still lists every view', () => {
+    const calls = period('2026-09-14', 'c', { calls: 3, answered: 3, booked: 1, distinct: 3 });
+    const view = buildOverview(makeStore(calls, options), range('2026-09-08', '2026-09-14'));
+    expect(view.topActions.map((t) => t.action.kind)).toEqual(['no_budget_shift', 'no_office_stands_out', 'no_missed_calls']);
+    expect(view.topActions.every((t) => !t.action.actionable)).toBe(true);
+    expect(view.templateSentence).toBe(view.actions[0]?.text);
+  });
+
+  it('the template sentence is the first actionable top action', () => {
+    const view = buildOverview(store(), week);
+    const callBack = view.topActions.find((t) => t.view === 'missed-calls')?.action;
+    expect(callBack?.kind).toBe('call_back');
+    expect(view.topActions[0]?.action.actionable).toBe(false);
+    expect(view.templateSentence).toBe(callBack?.text);
+  });
+
+  it('the fact sheet merges tiles and top-action facts without collisions', () => {
+    const view = buildOverview(store(), week);
+    const tileFactCount = 5 /* calls, callers, bookings, answer_rate, revenue */ + 4 /* changes */ + 1; // answer_rate points change
+    const actionFacts = view.topActions.reduce((n, t) => n + Object.keys(t.action.facts).length, 0);
+    expect(Object.keys(view.factSheet.facts)).toHaveLength(tileFactCount + actionFacts);
+    const f = view.factSheet.facts;
+    expect(formatFact(f['overview.calls']!)).toBe('12 calls');
+    expect(formatFact(f['overview.calls_change']!)).toBe('+20.0%');
+    expect(formatFact(f['overview.answer_rate_change']!)).toBe('-5.0 points');
+    const names = view.topActions.flatMap((t) => t.action.facts && Object.values(t.action.facts))
+      .flatMap((fact) => (fact.kind === 'name' ? [fact.value] : []));
+    expect(view.factSheet.entities).toEqual([...new Set(names)].sort());
+  });
+});
+
+describe('buildOverview edge cases', () => {
+  it('a bad or unequal second range builds with no comparison', () => {
+    for (const bad of [
+      { start: '2026-02-30', end: '2026-03-02' },
+      { start: '2026-09-01', end: '2026-09-03' },
+    ]) {
+      const view = buildOverview(store(), week, bad);
+      for (const tile of Object.values(view.tiles)) {
+        expect(tile.previous).toBeNull();
+        expect(tile.change).toEqual({ kind: 'none' });
+      }
+      expect(view.notes.comparison.available).toBe(false);
+      expect(view.notes.comparison.reason).toEqual(expect.any(String));
+      expectAllFinite(view);
+    }
+  });
+
+  it('an empty range and an empty store build', () => {
+    const view = buildOverview(makeStore([], options), range('2026-09-01', '2026-09-07'));
+    expect(view.tiles.calls.current).toBe(0);
+    expect(view.tiles.answerRate.current).toBeNull();
+    expect(view.topActions.map((t) => t.action.kind)).toEqual(['no_budget_shift', 'no_office_stands_out', 'no_missed_calls']);
+    expectAllFinite(view);
+
+    const emptyRange = buildOverview(store(), range('2026-09-05', '2026-09-06'));
+    expect(emptyRange.tiles.calls.current).toBe(0);
+    expectAllFinite(emptyRange);
+  });
+
+  it('notes pass through', () => {
+    const s = store();
+    const view = buildOverview(s, week);
+    const ctx = makeViewContext(s, week);
+    expect(view.notes).toEqual(ctx.notes);
+    expect(view.notes.skippedRows).toBe(ctx.notes.skippedRows);
+    expect(view.notes.outcomeLag).toEqual(ctx.notes.outcomeLag);
+    expect(view.notes.incompleteCurrent).toEqual(ctx.notes.incompleteCurrent);
+  });
+});
