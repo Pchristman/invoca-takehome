@@ -34,3 +34,8 @@ export function weekStart(date: LocalDate): LocalDate {
   const weekday = (new Date(toUtcMs(date)).getUTCDay() + 6) % 7;
   return addDays(date, -weekday);
 }
+
+/** How many days a range covers when both end dates count: the same date twice is 1. */
+export function inclusiveDays(start: LocalDate, end: LocalDate): number {
+  return daysBetween(start, end) + 1;
+}

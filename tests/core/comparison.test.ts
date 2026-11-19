@@ -20,6 +20,7 @@ describe('resolveComparison default previous period', () => {
       available: true,
       unavailableReason: null,
       sameLength: true,
+      overlaps: false,
     });
   });
 
@@ -69,11 +70,33 @@ describe('resolveComparison default previous period', () => {
 describe('resolveComparison with an explicit second range', () => {
   const current = range('2026-10-23', '2026-10-29');
 
-  test('an explicit second range of another length is allowed and flagged', () => {
-    const c = compare(current, range('2026-09-01', '2026-09-03'));
+  test('an explicit second range of the same length is available', () => {
+    const c = compare(current, range('2026-09-01', '2026-09-07'));
     expect(c.available).toBe(true);
+    expect(c.sameLength).toBe(true);
+    expect(c.unavailableReason).toBeNull();
+  });
+
+  test('an explicit second range of another length is unavailable until per-day comparison exists', () => {
+    const c = compare(current, range('2026-09-01', '2026-09-03'));
+    expect(c.available).toBe(false);
     expect(c.sameLength).toBe(false);
     expect(c.previous.days).toBe(3);
+    expect(c.unavailableReason).toMatch(/^No like-for-like comparison/);
+    expect(c.unavailableReason).toContain('7 days');
+    expect(c.unavailableReason).toContain('3 days');
+  });
+
+  test('a range the data does not cover is reported as that, before the length', () => {
+    const c = compare(current, range('2026-10-28', '2026-11-02')); // 6 days and past the data end
+    expect(c.unavailableReason).toMatch(/^No full previous period/);
+  });
+
+  test('overlaps is true when the two ranges share a day, false when they merely touch', () => {
+    expect(compare(current, range('2026-10-20', '2026-10-26')).overlaps).toBe(true);
+    expect(compare(current, range('2026-10-16', '2026-10-22')).overlaps).toBe(false); // ends the day before
+    expect(compare(current, current).overlaps).toBe(true);
+    expect(compare(current).overlaps).toBe(false); // the default previous period never overlaps
   });
 
   test('an explicit second range running past the data end is unavailable', () => {
@@ -87,6 +110,23 @@ describe('resolveComparison with an explicit second range', () => {
     expect(inverted.ok === false && inverted.error.code).toBe('start_after_end');
     const malformed = resolveComparison(span, current, range('2026-02-30', '2026-03-01'));
     expect(malformed.ok === false && malformed.error.code).toBe('bad_date');
+  });
+});
+
+describe('resolveComparison checks the current range too', () => {
+  test('a malformed current range is an error, not a thrown exception', () => {
+    const result = resolveComparison(span, range('', '2026-10-05'));
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.code).toBe('bad_date');
+  });
+
+  test('an inverted current range names its own dates, not the derived previous period', () => {
+    const result = resolveComparison(span, range('2026-10-05', '2026-10-01'));
+    expect(!result.ok && result.error.code).toBe('start_after_end');
+    const message = !result.ok ? result.error.message : '';
+    expect(message).toContain('2026-10-05');
+    expect(message).toContain('2026-10-01');
+    expect(message).not.toContain('2026-10-08');
   });
 });
 

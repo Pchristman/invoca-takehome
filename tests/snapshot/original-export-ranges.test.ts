@@ -50,10 +50,12 @@ describe('shipped export, ranges and metrics', () => {
 
   test('last 28 days has a full 28-day comparison; all data has none', () => {
     const last = resolveComparison(span, last28);
+    expect(last.ok).toBe(true);
     expect(last.ok && last.comparison.available).toBe(true);
     expect(last.ok && last.comparison.previous.days).toBe(28);
 
     const everything = resolveComparison(span, all);
+    expect(everything.ok).toBe(true); // an error result must not pass for "no comparison"
     expect(everything.ok && everything.comparison.available).toBe(false);
   });
 

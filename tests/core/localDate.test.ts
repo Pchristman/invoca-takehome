@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { addDays, daysBetween, isLocalDate, weekStart } from '../../src/core/localDate';
+import { addDays, daysBetween, inclusiveDays, isLocalDate, weekStart } from '../../src/core/localDate';
 import { THRESHOLDS } from '../../src/core/thresholds';
 
 describe('addDays', () => {
@@ -19,6 +19,14 @@ describe('daysBetween', () => {
     expect(daysBetween('2026-09-01', '2026-10-29')).toBe(58);
     expect(daysBetween('2026-10-29', '2026-09-01')).toBe(-58);
     expect(daysBetween('2026-09-01', '2026-09-01')).toBe(0);
+  });
+});
+
+describe('inclusiveDays', () => {
+  test('inclusiveDays counts both end dates', () => {
+    expect(inclusiveDays('2026-09-01', '2026-09-01')).toBe(1);
+    expect(inclusiveDays('2026-09-01', '2026-10-29')).toBe(59);
+    expect(inclusiveDays('2028-02-28', '2028-03-01')).toBe(3);
   });
 });
 

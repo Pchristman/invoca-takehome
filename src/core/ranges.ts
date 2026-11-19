@@ -1,4 +1,4 @@
-import { addDays, daysBetween, isLocalDate } from './localDate';
+import { addDays, inclusiveDays, isLocalDate } from './localDate';
 import type { LocalDate } from './localDate';
 import type { CleanCall } from './types';
 
@@ -24,6 +24,8 @@ export type RangeErrorCode = 'no_data' | 'bad_date' | 'start_after_end' | 'outsi
 export interface RangeError {
   code: RangeErrorCode;
   message: string;
+  /** For a bad date: which of the two it was, so a form can mark the right box. */
+  field?: 'start' | 'end';
 }
 
 export type RangeResult = { ok: true; range: ResolvedRange } | { ok: false; error: RangeError };
@@ -43,19 +45,21 @@ export function dataSpan(calls: readonly CleanCall[]): DateRange | null {
 
 /** The first problem with a pair of raw dates, or null: a bad date comes before start-after-end. */
 export function checkDates(start: string, end: string): RangeError | null {
-  for (const value of [start, end]) {
+  const fields = [
+    ['start', start],
+    ['end', end],
+  ] as const;
+  for (const [field, value] of fields) {
     if (!isLocalDate(value)) {
-      return { code: 'bad_date', message: `"${value}" is not a date. Use the form YYYY-MM-DD.` };
+      // The value came from a URL, so keep a very long one out of the message.
+      const shown = value.length > 40 ? `${value.slice(0, 40)}...` : value;
+      return { code: 'bad_date', field, message: `"${shown}" is not a date. Use the form YYYY-MM-DD.` };
     }
   }
   if (start > end) {
     return { code: 'start_after_end', message: `The start date ${start} is after the end date ${end}.` };
   }
   return null;
-}
-
-function lengthOf(range: DateRange): number {
-  return daysBetween(range.start, range.end) + 1;
 }
 
 /** Turn a preset or custom request into a range inside the data, or say why that can't be done. */
@@ -65,11 +69,11 @@ export function resolveRange(span: DateRange | null, spec: RangeSpec): RangeResu
   }
 
   if (spec.kind === 'preset') {
-    if (spec.preset === 'all') return { ok: true, range: { ...span, days: lengthOf(span), clamped: false } };
+    if (spec.preset === 'all') return { ok: true, range: { ...span, days: inclusiveDays(span.start, span.end), clamped: false } };
     const wanted = addDays(span.end, -(PRESET_DAYS[spec.preset] - 1));
     const start = wanted < span.start ? span.start : wanted;
     const range = { start, end: span.end };
-    return { ok: true, range: { ...range, days: lengthOf(range), clamped: start !== wanted } };
+    return { ok: true, range: { ...range, days: inclusiveDays(start, span.end), clamped: start !== wanted } };
   }
 
   const problem = checkDates(spec.start, spec.end);
@@ -88,5 +92,5 @@ export function resolveRange(span: DateRange | null, spec: RangeSpec): RangeResu
   const start = spec.start < span.start ? span.start : spec.start;
   const end = spec.end > span.end ? span.end : spec.end;
   const range = { start, end };
-  return { ok: true, range: { ...range, days: lengthOf(range), clamped: start !== spec.start || end !== spec.end } };
+  return { ok: true, range: { ...range, days: inclusiveDays(start, end), clamped: start !== spec.start || end !== spec.end } };
 }

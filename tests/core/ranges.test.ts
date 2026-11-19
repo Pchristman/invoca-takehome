@@ -112,8 +112,19 @@ describe('resolveRange custom', () => {
     for (const spec of [custom(bad, '2026-09-16'), custom('2026-09-10', bad)]) {
       const error = err(resolveRange(span, spec));
       expect(error.code).toBe('bad_date');
-      expect(error.message).toContain(bad);
+      expect(error.message.startsWith(`"${bad}" is not a date`)).toBe(true);
     }
+  });
+
+  test('a bad date says whether it is the start or the end', () => {
+    expect(err(resolveRange(span, custom('nope', '2026-09-16'))).field).toBe('start');
+    expect(err(resolveRange(span, custom('2026-09-10', 'nope'))).field).toBe('end');
+  });
+
+  test('a very long bad value is shortened in the message', () => {
+    const error = err(resolveRange(span, custom('9'.repeat(500), '2026-09-16')));
+    expect(error.code).toBe('bad_date');
+    expect(error.message.length).toBeLessThan(150);
   });
 });
 

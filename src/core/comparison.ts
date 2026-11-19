@@ -1,15 +1,20 @@
-import { addDays, daysBetween } from './localDate';
+import { addDays, daysBetween, inclusiveDays } from './localDate';
 import { checkDates } from './ranges';
 import type { DateRange, RangeError } from './ranges';
 
 export interface RangeComparison {
   previous: DateRange & { days: number };
-  /** True only when every day of `previous` lies inside the data. */
+  /**
+   * True only when a like-for-like change can be shown: every day of `previous` lies inside the data AND
+   * both ranges have the same number of days. Counts from periods of different lengths are never compared.
+   */
   available: boolean;
-  /** One line starting "No full previous period"; null when the comparison is available. */
+  /** One line starting "No full previous period" or "No like-for-like comparison"; null when available. */
   unavailableReason: string | null;
   /** False when the two ranges have different numbers of days. */
   sameLength: boolean;
+  /** True when the two ranges share at least one day. */
+  overlaps: boolean;
 }
 
 export type ComparisonResult = { ok: true; comparison: RangeComparison } | { ok: false; error: RangeError };
@@ -19,41 +24,47 @@ export interface IncompleteDays {
   includesLastDay: boolean;
 }
 
-function lengthOf(range: DateRange): number {
-  return daysBetween(range.start, range.end) + 1;
-}
-
 function coverageProblem(span: DateRange, previous: DateRange): string | null {
-  const period = `${previous.start} to ${previous.end}`;
   if (previous.start < span.start) {
     return `No full previous period: it would start ${previous.start}, but the data starts ${span.start}.`;
   }
   if (previous.end > span.end) {
-    return `No full previous period: ${period} runs past the end of the data, ${span.end}.`;
+    return `No full previous period: ${previous.start} to ${previous.end} runs past the end of the data, ${span.end}.`;
   }
   return null;
 }
 
 /**
  * The range to compare `current` with. Left out, it is the same number of days immediately before `current`.
- * A range the data doesn't fully cover is returned with `available: false` and the reason; it is never an error.
+ * A range the data doesn't fully cover, or one of a different length, comes back with `available: false` and
+ * the reason; that is not an error. Per-day comparison of unequal lengths is stretch S2.
  */
 export function resolveComparison(span: DateRange, current: DateRange, previous?: DateRange): ComparisonResult {
-  const currentDays = lengthOf(current);
+  // `current` normally comes from resolveRange, but this function must not throw or blame the wrong dates.
+  const currentProblem = checkDates(current.start, current.end);
+  if (currentProblem) return { ok: false, error: currentProblem };
+
+  const currentDays = inclusiveDays(current.start, current.end);
   const wanted = previous ?? { start: addDays(current.start, -currentDays), end: addDays(current.start, -1) };
 
   const problem = checkDates(wanted.start, wanted.end);
   if (problem) return { ok: false, error: problem };
 
-  const days = lengthOf(wanted);
-  const unavailableReason = coverageProblem(span, wanted);
+  const days = inclusiveDays(wanted.start, wanted.end);
+  const sameLength = days === currentDays;
+  const unavailableReason =
+    coverageProblem(span, wanted) ??
+    (sameLength
+      ? null
+      : `No like-for-like comparison: the selected range is ${currentDays} days and the other range is ${days} days.`);
   return {
     ok: true,
     comparison: {
       previous: { ...wanted, days },
       available: unavailableReason === null,
       unavailableReason,
-      sameLength: days === currentDays,
+      sameLength,
+      overlaps: wanted.start <= current.end && current.start <= wanted.end,
     },
   };
 }
