@@ -2,6 +2,12 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { cleanExport } from '../../src/core/clean';
+import { resolveComparison } from '../../src/core/comparison';
+import { tally } from '../../src/core/metrics';
+import { buildMissedValueRates, estimateMissedCallValue } from '../../src/core/missedValue';
+import { dataSpan, resolveRange } from '../../src/core/ranges';
+import type { RangeSpec } from '../../src/core/ranges';
+import { callsPerWeek } from '../../src/core/weeks';
 import { readExportFromDir } from '../../src/node/readDataDir';
 import { goodRow, loadFixture } from './helpers';
 
@@ -48,6 +54,56 @@ describe('cleaning a different export', () => {
     expect(byId.k1).toMatchObject({ localDate: '2031-05-11', localHour: 1 }); // 20:00 UTC + 5:30
     expect(byId.l1).toMatchObject({ localDate: '2031-05-11', localHour: 0 });
     expect(byId.a1).toMatchObject({ localDate: '2031-05-11', localHour: 8 }); // 20:00 UTC + 12:00
+  });
+});
+
+describe('ranges and metrics on a different export', () => {
+  // Calls in zones and on dates unlike the shipped export's: Mon 5th, Wed 7th, Mon 12th, Sun 18th.
+  const days = ['2031-05-05', '2031-05-07', '2031-05-12', '2031-05-18'];
+  const store = cleanExport(
+    loadFixture(
+      days.flatMap((day, i) => [
+        row({ call_id: `p${i}`, caller_number_hash: `hp${i}`, started_at: `${day}T12:00:00Z`, outcome: 'booked', revenue_usd: '100' }),
+        row({ call_id: `q${i}`, caller_number_hash: `hq${i}`, started_at: `${day}T13:00:00Z`, location_id: 'zz_lon', answered: 'false', outcome: 'missed', revenue_usd: '' }),
+      ]),
+      CAMPAIGNS,
+      LOCATIONS,
+    ),
+  );
+  const span = dataSpan(store.calls)!;
+
+  const resolve = (spec: RangeSpec) => {
+    const result = resolveRange(span, spec);
+    if (!result.ok) throw new Error(result.error.message);
+    return result.range;
+  };
+
+  test('the span and presets come from the data, not from constants', () => {
+    expect(span).toEqual({ start: '2031-05-05', end: '2031-05-18' });
+    expect(resolve({ kind: 'preset', preset: 'all' })).toEqual({ ...span, days: 14, clamped: false });
+    expect(resolve({ kind: 'preset', preset: 'last7' })).toEqual({ start: '2031-05-12', end: '2031-05-18', days: 7, clamped: false });
+  });
+
+  test('the comparison is the seven days before', () => {
+    const result = resolveComparison(span, resolve({ kind: 'preset', preset: 'last7' }));
+    expect(result.ok && result.comparison).toMatchObject({
+      previous: { start: '2031-05-05', end: '2031-05-11', days: 7 },
+      available: true,
+    });
+  });
+
+  test('totals, weeks and missed-call value work on other names', () => {
+    expect(tally(store.calls)).toEqual({ calls: 8, uniqueCallers: 8, answered: 4, bookings: 4, revenueUsd: 400 });
+
+    const weeks = callsPerWeek(store.calls, span, span);
+    expect(weeks.map((w) => [w.weekStart, w.calls, w.partial])).toEqual([
+      ['2031-05-05', 4, false],
+      ['2031-05-12', 4, false],
+    ]);
+
+    const value = estimateMissedCallValue(buildMissedValueRates(store.calls), { campaignId: 'zz_c1', channel: 'referral' });
+    expect(value.valueUsd).toBe(100);
+    expect(value.source).toBe('overall'); // only 4 answered calls, below the minimum for the campaign's own rate
   });
 });
 
