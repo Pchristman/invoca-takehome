@@ -2,13 +2,13 @@
 // so the models see what the browser sees (no Dates, no undefined).
 import { dataSpan } from '../../src/core/ranges';
 import type { CallStore, CleanCall } from '../../src/core/types';
-import { buildCampaigns, buildOverview } from '../../src/core/views';
-import type { CampaignsView, OverviewView } from '../../src/core/views';
+import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../../src/core/views';
+import type { CampaignsView, LocationsView, MissedCallsView, OverviewView } from '../../src/core/views';
 import { DEFAULT_PRESET, PRESETS } from '../../src/server/api';
 import type { Meta } from '../../src/server/api';
 import { parseViewQuery } from '../../src/server/params';
-import type { ViewQuery } from '../../src/server/params';
-import { callAt, campaign, makeStore, office } from '../core/views/fixtures';
+import type { ViewQuery, ViewQueryWants } from '../../src/server/params';
+import { callAt, campaign, makeStore, office, officeCalls } from '../core/views/fixtures';
 import { serverFixture } from '../server/helpers';
 
 /** JSON.parse(JSON.stringify(value)): the browser sees JSON, not objects. */
@@ -17,27 +17,37 @@ export function toJson<T>(value: T): T {
 }
 
 /** Parse a search string the way the server does; throws (a test bug) when the server would reject it. */
-function queryFor(store: CallStore, search: string, wantsCampaign: boolean): ViewQuery {
+function queryFor(store: CallStore, search: string, wants: ViewQueryWants): ViewQuery {
   const params = new URLSearchParams(search);
   const query: Record<string, string[]> = {};
   for (const key of new Set(params.keys())) query[key] = params.getAll(key);
-  const parsed = parseViewQuery(store, dataSpan(store.calls), query, {
-    campaign: wantsCampaign,
-  });
+  const parsed = parseViewQuery(store, dataSpan(store.calls), query, wants);
   if (!parsed.ok) throw new Error(`fixtures: "${search}" is not a valid query: ${parsed.error.message}`);
   return parsed.value;
 }
 
 /** The real buildOverview as JSON; `search` is an API query like 'range=last7'; `store` defaults to serverFixture(). */
 export function overviewFor(search: string, store: CallStore = serverFixture()): OverviewView {
-  const q = queryFor(store, search, false);
+  const q = queryFor(store, search, {});
   return toJson(buildOverview(store, q.range, q.previous));
 }
 
 /** The real buildCampaigns as JSON; `search` may carry `campaign=`; `store` defaults to serverFixture(). */
 export function campaignsFor(search: string, store: CallStore = serverFixture()): CampaignsView {
-  const q = queryFor(store, search, true);
+  const q = queryFor(store, search, { campaign: true });
   return toJson(buildCampaigns(store, q.range, q.previous, { campaignId: q.campaignId }));
+}
+
+/** The real buildLocations as JSON. */
+export function locationsFor(search: string, store: CallStore = serverFixture()): LocationsView {
+  const q = queryFor(store, search, {});
+  return toJson(buildLocations(store, q.range, q.previous));
+}
+
+/** The real buildMissedCalls as JSON; `search` may carry `location=`. */
+export function missedCallsFor(search: string, store: CallStore = serverFixture()): MissedCallsView {
+  const q = queryFor(store, search, { location: true });
+  return toJson(buildMissedCalls(store, q.range, q.previous, { locationId: q.locationId }));
 }
 
 /** 30 days (2026-09-01 to 2026-09-30) with calls only on the first and last date, so a middle range has none. */
@@ -170,4 +180,45 @@ export function storeOverDates(first: string, last: string): CallStore {
     campaigns: [campaign('cmp_a', 'Alpha', 'social', 10)],
     locations: [office('loc_a', 'Office A', 'America/Phoenix')],
   });
+}
+
+const THREE_OFFICES = [office('loc_a', 'Office A'), office('loc_b', 'Office B'), office('loc_c', 'Office C')];
+const TWO_CAMPAIGNS = [campaign('cmp_a', 'Alpha', 'social', 10), campaign('cmp_b', 'Beta', 'display', 10)];
+type Shape = { calls: number; answered: number; booked: number };
+const OTHER: Shape = { calls: 500, answered: 250, booked: 150 };
+
+/** loc_a has the given shape; loc_b and loc_c are the same ordinary office. All calls are on 2026-09-10. */
+function threeOffices(a: Shape): CleanCall[] {
+  return [...officeCalls('loc_a', a), ...officeCalls('loc_b', OTHER), ...officeCalls('loc_c', OTHER)];
+}
+
+/**
+ * Stores with a known Locations outcome, shaped like tests/core/views/locationsView.test.ts.
+ * answer-worse: loc_a answers 30% against 50%. booking-worse: loc_a books 30% against 50%.
+ * better-only: loc_a answers 70% against 50%. none: every office eligible, none flagged.
+ */
+export function plantedStore(kind: 'answer-worse' | 'booking-worse' | 'better-only' | 'none'): CallStore {
+  let calls: CleanCall[];
+  if (kind === 'answer-worse') calls = threeOffices({ calls: 100, answered: 30, booked: 30 });
+  else if (kind === 'better-only') calls = threeOffices({ calls: 100, answered: 70, booked: 30 });
+  else if (kind === 'none') calls = threeOffices({ calls: 100, answered: 50, booked: 30 });
+  else {
+    calls = [
+      ...officeCalls('loc_a', { calls: 60, answered: 60, booked: 25 }, { campaignId: 'cmp_a' }),
+      ...officeCalls('loc_a', { calls: 40, answered: 40, booked: 5 }, { campaignId: 'cmp_b' }),
+      ...officeCalls('loc_b', { calls: 1000, answered: 1000, booked: 500 }),
+    ];
+  }
+  return makeStore(calls, { campaigns: TWO_CAMPAIGNS, locations: THREE_OFFICES });
+}
+
+/** 14 days (2026-09-01 to 14). loc_a has calls daily, loc_b only on 2026-09-01, loc_c never; range 2026-09-08..14 leaves b and c idle. */
+export function idleOfficeStore(): CallStore {
+  const calls: CleanCall[] = [];
+  for (let day = 1; day <= 14; day++) {
+    const date = `2026-09-${String(day).padStart(2, '0')}T16:00:00Z`;
+    calls.push(callAt(date, { locationId: 'loc_a', campaignId: 'cmp_a', channel: 'social' }));
+    if (day === 1) calls.push(callAt(date, { locationId: 'loc_b', campaignId: 'cmp_a', channel: 'social' }));
+  }
+  return makeStore(calls, { campaigns: TWO_CAMPAIGNS, locations: THREE_OFFICES });
 }

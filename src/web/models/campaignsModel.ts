@@ -4,6 +4,8 @@ import type { ActionKind } from '../../core/views/facts';
 import type { CampaignRow, CampaignsView, UnattributedRow } from '../../core/views/campaignsView';
 import { formatCount, formatRate, formatUsd, formatUsdPerDollar } from '../../core/views/format';
 import { BLANK, humanize } from '../format';
+import { compareSortValues } from './sorting';
+import type { SortValue } from './sorting';
 
 export type SortKey =
   | 'name'
@@ -111,8 +113,6 @@ function unattributedModel(row: UnattributedRow): NonNullable<CampaignsModel['un
   };
 }
 
-type SortValue = string | number | null;
-
 function sortValue(row: CampaignRow, key: SortKey): SortValue {
   if (key === 'name') return row.name.toLowerCase();
   return row[key];
@@ -120,22 +120,9 @@ function sortValue(row: CampaignRow, key: SortKey): SortValue {
 
 /** Nulls last in both directions; ties by campaign id ascending. Returns a copy. */
 export function sortCampaignRows(rows: CampaignRow[], sort: CampaignSort): CampaignRow[] {
-  const direction = sort.dir === 'asc' ? 1 : -1;
-  const byId = (a: CampaignRow, b: CampaignRow): number => {
-    const x = a.campaignId ?? '';
-    const y = b.campaignId ?? '';
-    return x < y ? -1 : x > y ? 1 : 0;
-  };
-  return [...rows].sort((a, b) => {
-    const x = sortValue(a, sort.key);
-    const y = sortValue(b, sort.key);
-    if (x === null && y === null) return byId(a, b);
-    if (x === null) return 1;
-    if (y === null) return -1;
-    if (x < y) return -direction;
-    if (x > y) return direction;
-    return byId(a, b);
-  });
+  return [...rows].sort((a, b) =>
+    compareSortValues(sortValue(a, sort.key), sortValue(b, sort.key), sort.dir, a.campaignId ?? '', b.campaignId ?? ''),
+  );
 }
 
 export function campaignsModel(view: CampaignsView, sort: CampaignSort): CampaignsModel {
