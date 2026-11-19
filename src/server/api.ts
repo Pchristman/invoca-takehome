@@ -1,8 +1,25 @@
-import type { RangeErrorCode } from '../core/ranges';
+import type { DateRange, RangeErrorCode } from '../core/ranges';
 
 /** The range presets a URL may name, and the one used when none is given. */
 export const PRESETS = ['last7', 'last28', 'all'] as const;
 export const DEFAULT_PRESET = 'last28';
+
+/** The body of GET /api/meta: what the date control and the pickers need before any range is chosen. */
+export interface Meta {
+  hasData: boolean;
+  callCount: number;
+  span: DateRange | null;
+  /** Store order. */
+  campaigns: { id: string; name: string }[];
+  /** Store order. */
+  locations: { id: string; name: string }[];
+  presets: typeof PRESETS;
+  defaultPreset: typeof DEFAULT_PRESET;
+  /** store.dataNotes.badRows */
+  skippedRows: number;
+  /** store.dataNotes.notes, e.g. "calls.csv is empty: ..." */
+  notes: string[];
+}
 
 export type ApiErrorCode =
   | RangeErrorCode
