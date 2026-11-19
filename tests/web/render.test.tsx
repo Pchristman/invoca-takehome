@@ -13,7 +13,6 @@ import { EmptyScreen } from '../../src/web/App';
 import { CampaignTable } from '../../src/web/components/CampaignTable';
 import { CampaignsView as CampaignsScreen } from '../../src/web/components/CampaignsView';
 import { Caveats } from '../../src/web/components/Caveats';
-import { ComingSoon } from '../../src/web/components/ComingSoon';
 import { DataNotesPanel } from '../../src/web/components/DataNotesPanel';
 import { EstimateNote } from '../../src/web/components/EstimateNote';
 import { Header } from '../../src/web/components/Header';
@@ -473,14 +472,6 @@ describe('DataNotesPanel', () => {
       }
     }
     expect(html).toContain('a list entry');
-  });
-});
-
-describe('ComingSoon', () => {
-  it('says Not built yet and names the view', () => {
-    const html = renderToStaticMarkup(<ComingSoon view="Locations" />);
-    expect(html).toContain('Not built yet');
-    expect(html).toContain('Locations');
   });
 });
 

@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DataNotesResponse, Meta } from '../server/api';
 import type { DateRange } from '../core/ranges';
-import type { CampaignsView as CampaignsData, OverviewView as OverviewData } from '../core/views';
+import type {
+  CampaignsView as CampaignsData,
+  LocationsView as LocationsData,
+  MissedCallsView as MissedCallsData,
+  OverviewView as OverviewData,
+} from '../core/views';
 import { CampaignsView } from './components/CampaignsView';
-import { ComingSoon } from './components/ComingSoon';
+import { LocationsView } from './components/LocationsView';
+import { MissedCallsView } from './components/MissedCallsView';
 import { DataNotesPanel } from './components/DataNotesPanel';
 import { OverviewView } from './components/OverviewView';
 import { DATA_NOTES_BUTTON_ID, Header } from './components/Header';
@@ -14,10 +20,9 @@ import { dataNotesModel } from './models/dataNotesModel';
 import { shouldCloseDataNotes } from './models/escapeKey';
 import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
-import { VIEW_LABELS } from './models/viewLabels';
 import { useApi } from './useApi';
 import { useUrlState } from './useUrlState';
-import { apiParams, defaultsHref, withCampaign, withRange } from './urlState';
+import { apiParams, defaultsHref, withCampaign, withLocation, withRange } from './urlState';
 import type { UrlState } from './urlState';
 
 const NO_PARAMS = new URLSearchParams();
@@ -59,8 +64,7 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   const { navigate } = useUrlState();
   const [dataNotesToggled, setDataNotesToggled] = useState(false);
   const dataNotesOpen = state.dev && dataNotesToggled; // without ?dev there is no panel, whatever the state says
-  const hasView = state.view === 'overview' || state.view === 'campaigns';
-  const view = useApi<unknown>(hasView ? `/api/${state.view}` : null, apiParams(state, state.view));
+  const view = useApi<unknown>(`/api/${state.view}`, apiParams(state, state.view));
   // The last reply that was ready, kept so a change of the chart's campaign does not unmount the screen.
   const lastReady = useRef<{ key: string; data: unknown } | null>(null);
   if (view.state?.status === 'ready') lastReady.current = { key: view.state.key, data: view.state.data };
@@ -93,22 +97,31 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
       {dataNotesOpen && <DataNotes resetHref={resetHref} onClose={closeDataNotes} />}
       <Nav state={state} />
       <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} />
-      {!hasView ? (
-        <ComingSoon view={VIEW_LABELS[state.view]} />
-      ) : !hasSpan ? (
+      {!hasSpan ? (
         <EmptyScreen notes={meta.notes} />
       ) : (
         <RequestFrame state={shown.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
           {(data) =>
             state.view === 'overview' ? (
               <OverviewView view={data as OverviewData} state={state} span={meta.span as DateRange} />
-            ) : (
+            ) : state.view === 'campaigns' ? (
               <CampaignsView
                 view={data as CampaignsData}
                 state={state}
                 span={meta.span as DateRange}
                 chartBusy={shown.busy}
                 onSelectCampaign={(id) => navigate(withCampaign(state, id))}
+              />
+            ) : state.view === 'locations' ? (
+              <LocationsView view={data as LocationsData} state={state} span={meta.span as DateRange} />
+            ) : (
+              <MissedCallsView
+                view={data as MissedCallsData}
+                state={state}
+                span={meta.span as DateRange}
+                offices={meta.locations}
+                busy={shown.busy}
+                onSelectOffice={(id) => navigate(withLocation(state, id))}
               />
             )
           }
