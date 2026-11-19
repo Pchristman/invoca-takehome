@@ -2,24 +2,35 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { writeExtended } from '../../scripts/generate-extended';
+import { DEFAULT_CONFIG, generateExtendedCalls, writeExtended } from '../../scripts/generate-extended';
 import { cleanExport } from '../../src/core/clean';
 import { resolveComparison } from '../../src/core/comparison';
 import { callsInRange, changeInCount, estimatedSpend, revenuePerBudgetDollar, tally } from '../../src/core/metrics';
 import { dataSpan, resolveRange } from '../../src/core/ranges';
 import type { CleanCall } from '../../src/core/types';
-import { inclusiveDays } from '../../src/core/localDate';
-import { officeOutlier } from '../../src/core/ranking';
-import { generateExtendedCalls } from '../../scripts/generate-extended';
+import { addDays, inclusiveDays } from '../../src/core/localDate';
+import { loadExport } from '../../src/core/loadExport';
+import { officeOutlier, pickBestWorst } from '../../src/core/ranking';
+import type { CampaignPerformance } from '../../src/core/ranking';
 import { readExportFromDir } from '../../src/node/readDataDir';
+import { OFF } from '../scripts/extendedFixture';
 
 const ORIGINAL_DIR = join(__dirname, '..', 'fixtures', 'original-export');
 const EXTENDED_DIR = join(__dirname, '..', '..', 'data', 'extended');
 const text = (dir: string, file: string) => readFileSync(join(dir, file), 'utf8');
 
-// Observed on the committed seed, recorded not derived. Best and worst campaign by revenue per budget dollar
-// over all data are the same as in the original export (the planted patterns don't move them).
-const OBSERVED = { bookings: 1470, revenueUsd: 531431, bestWorst: { best: 'cmp_11', worst: 'cmp_07' } };
+// Observed on the committed seed, recorded not derived. If a generator change moves one of these, look at why.
+const OBSERVED = {
+  bookings: 1470,
+  revenueUsd: 531431,
+  // The shipped export has 2,040 distinct callers in 5,000 calls; copies reuse real callers at that same share.
+  uniqueCallers: 2605,
+  // Best and worst campaign by revenue per budget dollar over all data: the same as in the original export.
+  bestWorst: { best: 'cmp_11', worst: 'cmp_07' },
+  // cmp_04 / cmp_06 calls in the last 28 days against the 28 before.
+  surge: { current: 342, previous: 218 },
+  fade: { current: 113, previous: 261 },
+};
 
 const original = cleanExport(readExportFromDir(ORIGINAL_DIR));
 const loadedExtended = readExportFromDir(EXTENDED_DIR);
@@ -107,6 +118,7 @@ describe('extended export: loads clean', () => {
 
     // Observed values, recorded not derived: this is what the committed seed produces.
     const total = tally(callsInRange(extended.calls, allOf(extended.calls)));
+    expect(total.uniqueCallers).toBe(OBSERVED.uniqueCallers);
     expect(total.bookings).toBe(OBSERVED.bookings);
     expect(total.revenueUsd).toBe(OBSERVED.revenueUsd);
     expect(total.bookings).toBeGreaterThanOrEqual(1204 + 72);
@@ -144,6 +156,16 @@ describe('extended export: Locations', () => {
     }
   });
 
+  // The full flag list, so a new or vanished "better" flag is noticed. The two "better" ones are by-products
+  // (see above); the README says so.
+  it('exactly these four flags appear, and no others', () => {
+    const found = ids.flatMap((id) => [
+      ...(flags[id]?.answer.flagged ? [`${id} answer ${flags[id]?.answer.direction}`] : []),
+      ...(flags[id]?.booking.flagged ? [`${id} booking ${flags[id]?.booking.direction}`] : []),
+    ]);
+    expect(found.sort()).toEqual(['loc_02 booking worse', 'loc_04 booking better', 'loc_06 answer worse', 'loc_08 answer better']);
+  });
+
   it("Canyon's busiest missed slot is on a weekday morning", () => {
     const slots = new Map<string, number>();
     for (const c of extended.calls.filter((c) => c.locationId === 'loc_06' && !c.answered)) {
@@ -177,38 +199,44 @@ describe('extended export: Campaigns', () => {
     const change = changeInCount(callsFor('cmp_04', last28.range), callsFor('cmp_04', comparison.comparison.previous));
     expect(change.kind).toBe('percent');
     expect(change.kind === 'percent' && change.value).toBeGreaterThanOrEqual(50);
+    expect({ current: callsFor('cmp_04', last28.range), previous: callsFor('cmp_04', comparison.comparison.previous) }).toEqual(OBSERVED.surge);
   });
 
   it('cmp_06 calls are at least 30% below the previous 28 days', () => {
     const change = changeInCount(callsFor('cmp_06', last28.range), callsFor('cmp_06', comparison.comparison.previous));
     expect(change.kind).toBe('percent');
     expect(change.kind === 'percent' && change.value).toBeLessThanOrEqual(-30);
+    expect({ current: callsFor('cmp_06', last28.range), previous: callsFor('cmp_06', comparison.comparison.previous) }).toEqual(OBSERVED.fade);
   });
 
-  // Plain clones and patterns A and B copy from every campaign, so cmp_06's bookings can grow; what pattern D
-  // guarantees is a lower booking rate in the 28 days before the last 28.
-  it('cmp_06 booking rate in the earlier 28 days is lower than in the original', () => {
-    const range = comparison.comparison.previous;
-    const bookingRate = (store: typeof extended) => {
-      const mine = tally(callsInRange(store.calls, range).filter((c) => c.campaignId === 'cmp_06'));
-      return mine.bookings / mine.calls;
-    };
-    expect(bookingRate(extended)).toBeLessThan(bookingRate(original));
+  // Plain clones and patterns A and B copy from every campaign, so cmp_06's all-data bookings can grow (27 to 33).
+  // What pattern D itself adds is pinned here: run alone on the shipped export, it adds 150 cmp_06 calls with no
+  // bookings, 30 of them unanswered, all in the 28 local days before the last 28.
+  it('pattern D alone adds 150 cmp_06 calls, none booked, in the earlier window', () => {
+    const texts = { calls: text(ORIGINAL_DIR, 'calls.csv'), campaigns: text(ORIGINAL_DIR, 'campaigns.csv'), locations: text(ORIGINAL_DIR, 'locations.csv') };
+    const out = generateExtendedCalls(texts, { ...OFF, windowDays: 28, campaignFade: DEFAULT_CONFIG.campaignFade });
+    const added = cleanExport(loadExport({ ...texts, calls: out })).calls.filter((c) => c.callId.startsWith('x_'));
+    expect(added).toHaveLength(150);
+    expect(added.every((c) => c.campaignId === 'cmp_06')).toBe(true);
+    expect(added.filter((c) => c.booked)).toHaveLength(0);
+    expect(added.filter((c) => !c.answered)).toHaveLength(30);
+    const lastDate = spanOf(original.calls).end;
+    for (const c of added) expect([c.callId, c.localDate >= addDays(lastDate, -55) && c.localDate <= addDays(lastDate, -28)]).toEqual([c.callId, true]);
   });
 
-  it('best and worst campaign by revenue per budget dollar, over all data (recorded)', () => {
-    const rank = (store: typeof extended) => {
+  it('best and worst campaign by revenue per budget dollar are the same as in the original export', () => {
+    const pick = (store: typeof extended) => {
       const range = allOf(store.calls);
       const days = inclusiveDays(range.start, range.end);
-      return store.campaigns
-        .map((camp) => {
-          const mine = tally(callsInRange(store.calls, range).filter((c) => c.campaignId === camp.id));
-          return { id: camp.id, value: revenuePerBudgetDollar(mine.revenueUsd, estimatedSpend(camp.dailyBudgetUsd, days)) };
-        })
-        .filter((row): row is { id: string; value: number } => row.value !== null)
-        .sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
+      const rows: CampaignPerformance[] = store.campaigns.map((camp) => {
+        const mine = tally(callsInRange(store.calls, range).filter((c) => c.campaignId === camp.id));
+        const spend = estimatedSpend(camp.dailyBudgetUsd, days);
+        return { campaignId: camp.id, bookings: mine.bookings, estimatedSpendUsd: spend, revenuePerBudgetDollar: revenuePerBudgetDollar(mine.revenueUsd, spend) };
+      });
+      const { best, worst } = pickBestWorst(rows);
+      return { best: best?.campaignId, worst: worst?.campaignId };
     };
-    const ranked = rank(extended);
-    expect({ best: ranked[0]?.id, worst: ranked.at(-1)?.id }).toEqual(OBSERVED.bestWorst);
+    expect(pick(original)).toEqual(OBSERVED.bestWorst);
+    expect(pick(extended)).toEqual(OBSERVED.bestWorst);
   });
 });

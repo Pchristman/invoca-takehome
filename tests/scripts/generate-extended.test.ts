@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { parse } from 'csv-parse/sync';
 import { describe, expect, it } from 'vitest';
 import { GenerateError, generateExtendedCalls } from '../../scripts/generate-extended';
@@ -95,7 +96,7 @@ describe('generateExtendedCalls: plain calls', () => {
   });
 
   it('no clock or Math.random', () => {
-    const source = readFileSync('scripts/generate-extended.ts', 'utf8');
+    const source = readFileSync(join(__dirname, '..', '..', 'scripts', 'generate-extended.ts'), 'utf8');
     expect(source).not.toMatch(/Math\.random|Date\.now|new Date\(\)/);
   });
 });

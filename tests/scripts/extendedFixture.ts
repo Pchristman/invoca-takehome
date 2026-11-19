@@ -16,6 +16,7 @@ export interface RawCall {
   outcome?: string; // '' = none
   revenue?: string;
   agent?: string;
+  hash?: string; // caller_number_hash; default is unique per call
   /** Seconds after the call ends that the row was last updated. */
   lagSeconds?: number;
 }
@@ -35,7 +36,7 @@ export const callLine = (c: RawCall): string => {
     c.start,
     iso(end),
     dur,
-    `h_${c.id}`,
+    c.hash ?? `h_${c.id}`,
     c.tracking ?? (campaign === 'camp_b' ? '+1-555-0002' : '+1-555-0001'),
     campaign,
     channel,

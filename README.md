@@ -32,4 +32,10 @@ The loader returns every `calls.csv` row as either a typed call or a bad row, wi
 
 It also carries the same mess as the original: duplicate rows, unattributed calls and pending calls. It has no bad rows.
 
+Things to know when reading it:
+
+- Locations flags four offices on this data, not two: the two planted ones (worse) and two ordinary offices (loc_04 on booking rate, loc_08 on answer rate, both "better"). Each office is compared with all the others pooled, and the planted offices pull that pool down, so those two appear as a side effect.
+- 1,400 invented calls add about 565 distinct callers (2,040 to 2,605); copies reuse real callers at the same share the shipped data shows, so repeat callers are still present.
+- Its cmp_06 has 33 bookings against 27 in the shipped export: the fade plants calls with no bookings, but the other synthetic calls copy from every campaign.
+
 The default stays the shipped export. To use the extended one, set `DATA_DIR=data/extended`. To regenerate it (same seed, same bytes), run `npm run generate:extended`; the script and its settings are in `scripts/generate-extended.ts`.

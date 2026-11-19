@@ -46,9 +46,9 @@ export class GenerateError extends Error {}
 type Row = Record<string, string>;
 
 const SECOND = 1000;
-const DAY = 24 * 60 * 60 * SECOND;
-const WEEK = 7 * DAY;
 const HOUR = 60 * 60 * SECOND;
+const DAY = 24 * HOUR;
+const WEEK = 7 * DAY;
 
 /** mulberry32: a small seeded generator. Returns numbers in [0, 1). */
 function makeRng(seed: number): () => number {
@@ -67,25 +67,82 @@ const randInt = (rng: () => number, lo: number, hi: number): number => lo + Math
 
 const toIso = (ms: number): string => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
+/** 'YYYY-MM-DD' plus a number of days (negative for before). */
+const addDays = (date: string, days: number): string => toIso(Date.parse(`${date}T00:00:00Z`) + days * DAY).slice(0, 10);
+
 /**
- * Shift a start time by a random whole number of weeks so it lands in [lo, hi] (milliseconds).
- * Weekday and time of DAY are kept. Returns null when no whole-week shift fits.
+ * Every whole-week shift of a start time that lands in [lo, hi] (milliseconds) and passes `accept`, as new
+ * start times. The weekday and the UTC time of day are kept (across a DST change the office's local hour
+ * can move by an hour). Empty when none fits.
  */
-function shiftByWeeksInto(startMs: number, lo: number, hi: number, rng: () => number): number | null {
-  const fewest = Math.ceil((lo - startMs) / WEEK);
-  const most = Math.floor((hi - startMs) / WEEK);
-  if (fewest > most) return null;
-  return startMs + randInt(rng, fewest, most) * WEEK;
+function weekShifts(startMs: number, lo: number, hi: number, accept: (ms: number) => boolean): number[] {
+  const shifts: number[] = [];
+  for (let k = Math.ceil((lo - startMs) / WEEK); k <= Math.floor((hi - startMs) / WEEK); k++) {
+    if (accept(startMs + k * WEEK)) shifts.push(startMs + k * WEEK);
+  }
+  return shifts;
 }
 
-interface Source {
-  header: string[];
-  rows: Row[];
+const whole = (n: number): boolean => Number.isInteger(n) && n >= 0;
+
+/** Stop on a config the generator cannot honour, naming the setting. */
+function checkConfig(c: ExtendedConfig): void {
+  const counts: [string, number][] = [
+    ['plainCalls', c.plainCalls],
+    ['unattributedCalls', c.unattributedCalls],
+    ['pendingCalls', c.pendingCalls],
+    ['duplicatedCalls', c.duplicatedCalls],
+    ['threeRowCalls', c.threeRowCalls],
+    ['officeAnswerDrop.calls', c.officeAnswerDrop.calls],
+    ['officeAnswerDrop.answered', c.officeAnswerDrop.answered],
+    ['officeLowConversion.calls', c.officeLowConversion.calls],
+    ['officeLowConversion.unanswered', c.officeLowConversion.unanswered],
+    ['officeLowConversion.booked', c.officeLowConversion.booked],
+    ['campaignSurge.calls', c.campaignSurge.calls],
+    ['campaignSurge.unanswered', c.campaignSurge.unanswered],
+    ['campaignSurge.booked', c.campaignSurge.booked],
+    ['campaignFade.calls', c.campaignFade.calls],
+    ['campaignFade.unanswered', c.campaignFade.unanswered],
+    ['campaignFade.booked', c.campaignFade.booked],
+  ];
+  for (const [name, value] of counts) if (!whole(value)) throw new GenerateError(`${name} must be a whole number, 0 or more (got ${value})`);
+  if (!Number.isInteger(c.windowDays) || c.windowDays < 7) throw new GenerateError(`windowDays must be a whole number, 7 or more (got ${c.windowDays})`);
+  const { weekdays, hours } = c.officeAnswerDrop;
+  if (!(Number.isInteger(weekdays.from) && Number.isInteger(weekdays.to) && weekdays.from >= 0 && weekdays.to <= 6 && weekdays.from <= weekdays.to)) {
+    throw new GenerateError(`Pattern A: the weekday window ${weekdays.from} to ${weekdays.to} is empty or outside 0 (Monday) to 6 (Sunday)`);
+  }
+  if (!(Number.isInteger(hours.from) && Number.isInteger(hours.to) && hours.from >= 0 && hours.to <= 23 && hours.from <= hours.to)) {
+    throw new GenerateError(`Pattern A: the hour window ${hours.from} to ${hours.to} is empty or outside 0 to 23`);
+  }
 }
 
-function readCalls(text: string): Source {
+/** One Intl formatter per zone, built once. A zone name Node does not know stops the run with its name. */
+function zoneFormats(timeZone: string) {
+  try {
+    const clock = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: 'numeric', hourCycle: 'h23' });
+    const date = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+    return { clock, date };
+  } catch {
+    throw new GenerateError(`Unknown time zone "${timeZone}" in locations.csv`);
+  }
+}
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const MAX_ATTEMPTS = 100_000;
+
+/** How a text file ends its lines: all CRLF or all LF. A mix would make the output differ by machine. */
+function lineEnding(text: string): '\r\n' | '\n' {
+  const lf = (text.match(/\n/g) ?? []).length;
+  const crlf = (text.match(/\r\n/g) ?? []).length;
+  if (lf === crlf) return '\r\n'; // all CRLF, or no line breaks at all
+  if (crlf === 0) return '\n';
+  throw new GenerateError('calls.csv mixes CRLF and LF line endings; make them all one or the other');
+}
+
+function readCalls(text: string): { header: string[]; rows: Row[] } {
   let header: string[] = [];
   const rows = parse(text, {
+    bom: true,
     columns: (h: string[]) => {
       header = h;
       return h;
@@ -95,15 +152,47 @@ function readCalls(text: string): Source {
   return { header, rows };
 }
 
-/** The final state of each real call: the row with the latest updated_at per call_id. */
+/**
+ * The final state of each real call: the row with the latest updated_at per call_id. On a tie the later row
+ * in the file wins, and a row whose updated_at cannot be read loses, as in data rule 2.
+ */
 function finalStates(rows: Row[]): Row[] {
+  const rank = (r: Row): number => {
+    const t = Date.parse(r.updated_at ?? '');
+    return Number.isNaN(t) ? -Infinity : t;
+  };
   const latest = new Map<string, Row>();
   for (const row of rows) {
     const id = row.call_id ?? '';
     const have = latest.get(id);
-    if (!have || Date.parse(row.updated_at ?? '') > Date.parse(have.updated_at ?? '')) latest.set(id, row);
+    if (!have || rank(row) >= rank(have)) latest.set(id, row);
   }
   return [...latest.values()];
+}
+
+/**
+ * The longest gap, in whole days (rounded up), between a call starting and the last row that changed its
+ * outcome or revenue. The same idea as the app's outcome lag; the generator keeps its own copies short of it.
+ */
+function outcomeLagDays(rows: Row[], finals: Row[]): number {
+  const startOf = new Map(finals.map((r) => [r.call_id ?? '', Date.parse(r.started_at ?? '')]));
+  const byCall = new Map<string, Row[]>();
+  for (const row of rows) {
+    if (Number.isNaN(Date.parse(row.updated_at ?? ''))) continue;
+    byCall.set(row.call_id ?? '', [...(byCall.get(row.call_id ?? '') ?? []), row]);
+  }
+  let longest = 0;
+  for (const [id, group] of byCall) {
+    const sorted = [...group].sort((x, y) => Date.parse(x.updated_at ?? '') - Date.parse(y.updated_at ?? ''));
+    for (let i = 1; i < sorted.length; i++) {
+      const row = sorted[i] as Row;
+      const before = sorted[i - 1] as Row;
+      if (row.outcome !== before.outcome || row.revenue_usd !== before.revenue_usd) {
+        longest = Math.max(longest, Date.parse(row.updated_at ?? '') - (startOf.get(id) ?? NaN));
+      }
+    }
+  }
+  return Math.ceil(longest / DAY);
 }
 
 const isPending = (r: Row): boolean => r.answered === 'true' && (r.outcome ?? '') === '';
@@ -119,24 +208,14 @@ function serialise(header: string[], row: Row): string {
     .join(',');
 }
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-/** Local weekday (0 = Monday) and hour (0-23) of an instant in an IANA zone. Build once per zone. */
-function localClock(timeZone: string): (ms: number) => { weekday: number; hour: number } {
-  const format = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: 'numeric', hourCycle: 'h23' });
-  return (ms) => {
-    const parts = format.formatToParts(new Date(ms));
-    const weekday = WEEKDAYS.indexOf(parts.find((p) => p.type === 'weekday')?.value ?? '');
-    const hour = Number(parts.find((p) => p.type === 'hour')?.value);
-    return { weekday, hour };
-  };
-}
-
-const MAX_ATTEMPTS = 100_000;
-
 export function generateExtendedCalls(input: ExportTexts, partial: Partial<ExtendedConfig> = {}): string {
   const config: ExtendedConfig = { ...DEFAULT_CONFIG, ...partial };
+  checkConfig(config);
+  const eol = lineEnding(input.calls);
   const rng = makeRng(config.seed);
+  // A second generator for details that do not decide which rows exist (caller reuse, agents), so changing
+  // them never moves the main stream and with it every other row.
+  const decor = makeRng((config.seed ^ 0x9e3779b9) >>> 0);
   const { header, rows } = readCalls(input.calls);
 
   const starts = rows.map((r) => Date.parse(r.started_at ?? '')).filter((t) => !Number.isNaN(t));
@@ -155,30 +234,68 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
     return id;
   };
 
-  const templates = finalStates(rows).filter((r) => !Number.isNaN(Date.parse(r.started_at ?? '')));
+  const locations = parse(input.locations, { bom: true, columns: true, skip_empty_lines: true }) as Row[];
+  const campaigns = parse(input.campaigns, { bom: true, columns: true, skip_empty_lines: true }) as Row[];
+  const formats = new Map(locations.map((l) => [l.location_id ?? '', zoneFormats(l.timezone ?? '')]));
+  const knownCampaigns = new Set(campaigns.map((c) => c.campaign_id));
+
+  // Templates: final-state real calls with a readable start at a known office and a known (or no) campaign,
+  // so a copy is never itself a bad row.
+  const finals = finalStates(rows);
+  const templates = finals.filter(
+    (r) =>
+      !Number.isNaN(Date.parse(r.started_at ?? '')) &&
+      formats.has(r.location_id ?? '') &&
+      ((r.campaign_id ?? '') === '' || knownCampaigns.has(r.campaign_id)),
+  );
   const synthetic: Row[] = [];
-  const locations = parse(input.locations, { columns: true, skip_empty_lines: true }) as Row[];
-  const campaigns = parse(input.campaigns, { columns: true, skip_empty_lines: true }) as Row[];
+
+  /** The office-local date ('YYYY-MM-DD') of an instant at an office. */
+  const localDateAt = (locationId: string, ms: number): string => {
+    const parts = (formats.get(locationId) as ReturnType<typeof zoneFormats>).date.formatToParts(new Date(ms));
+    const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+    return `${part('year')}-${part('month')}-${part('day')}`;
+  };
+
+  // Callers: a clone reuses its template's caller at the share the data's own calls show (calls per distinct
+  // caller), so the extended data keeps repeat callers instead of making every synthetic caller new.
+  const hashes = templates.map((r) => r.caller_number_hash ?? '').filter((h) => h !== '');
+  const repeatShare = hashes.length === 0 ? 0 : 1 - new Set(hashes).size / hashes.length;
+
+  // Agents work at one office, so a call moved to another office gets one of that office's agents.
+  const agentsByOffice = new Map<string, string[]>();
+  for (const r of templates) {
+    const agent = r.agent_id ?? '';
+    const list = agentsByOffice.get(r.location_id ?? '') ?? [];
+    if (agent !== '' && !list.includes(agent)) agentsByOffice.set(r.location_id ?? '', [...list, agent]);
+  }
+  const atOffice = (row: Row, locationId: string): Row => {
+    const agents = agentsByOffice.get(locationId) ?? [];
+    const agent = (row.agent_id ?? '') !== '' && agents.length > 0 ? (agents[randInt(decor, 0, agents.length - 1)] as string) : row.agent_id ?? '';
+    return { ...row, location_id: locationId, agent_id: agent };
+  };
 
   /** A copy of `template` starting at `startMs`, with new id, caller hash and timestamps. */
   const clone = (template: Row, startMs: number): Row => {
     const duration = Number(template.duration_seconds);
     const endMs = startMs + duration * SECOND;
+    const newHash = `h_x${randInt(rng, 0, 0xfffffff).toString(16).padStart(7, '0')}`; // always drawn: keeps the stream steady
+    const reuse = decor() < repeatShare && (template.caller_number_hash ?? '') !== '';
     return {
       ...template,
       call_id: newId(),
       started_at: toIso(startMs),
       ended_at: toIso(endMs),
-      caller_number_hash: `h_x${randInt(rng, 0, 0xfffffff).toString(16).padStart(7, '0')}`,
+      caller_number_hash: reuse ? (template.caller_number_hash as string) : newHash,
       updated_at: toIso(endMs + randInt(rng, 5, 30) * SECOND),
     };
   };
 
-  /** A start for a copy of `template`, whole weeks away, inside the span margin. */
-  const shiftedStart = (template: Row, from = lo, to = hi): number => {
-    const startMs = shiftByWeeksInto(Date.parse(template.started_at ?? ''), from, to, rng);
-    if (startMs === null) throw new GenerateError(`The data span is too short to place a copy of call ${template.call_id}`);
-    return startMs;
+  /** A start for a copy of `template`, whole weeks away, inside the span margin (and `accept`, if given). */
+  const shiftedStart = (template: Row, from = lo, to = hi, accept: (ms: number) => boolean = () => true): number => {
+    const options = weekShifts(Date.parse(template.started_at ?? ''), from, to, accept);
+    if (options.length === 0) throw new GenerateError(`The data span is too short to place a copy of call ${template.call_id}`);
+    return options[randInt(rng, 0, options.length - 1)] as number;
   };
 
   // Plain calls: week-shifted clones of attributed, non-pending real calls.
@@ -200,14 +317,15 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
   // Pattern A: an office whose calls in one local-time window mostly go unanswered.
   const a = config.officeAnswerDrop;
   if (a.calls > 0) {
-    const office = locations.find((l) => l.location_id === a.locationId);
-    if (!office) throw new GenerateError(`Pattern A: office ${a.locationId} is not in locations.csv`);
-    if (a.answered < 0 || a.answered > a.calls) throw new GenerateError(`Pattern A: answered (${a.answered}) must be between 0 and calls (${a.calls})`);
+    if (!formats.has(a.locationId)) throw new GenerateError(`Pattern A: office ${a.locationId} is not in locations.csv`);
+    if (a.answered > a.calls) throw new GenerateError(`Pattern A: answered (${a.answered}) must be between 0 and calls (${a.calls})`);
     if (a.calls - a.answered > 0 && unansweredPool.length === 0) throw new GenerateError('Pattern A: no unanswered calls to copy');
     if (a.answered > 0 && bookedPool.length === 0) throw new GenerateError('Pattern A: no booked calls with revenue to copy');
-    const clockAt = localClock(office.timezone ?? '');
+    const clockFormat = (formats.get(a.locationId) as ReturnType<typeof zoneFormats>).clock;
     const inWindow = (ms: number): boolean => {
-      const { weekday, hour } = clockAt(ms);
+      const parts = clockFormat.formatToParts(new Date(ms));
+      const weekday = WEEKDAYS.indexOf(parts.find((p) => p.type === 'weekday')?.value ?? '');
+      const hour = Number(parts.find((p) => p.type === 'hour')?.value);
       return weekday >= a.weekdays.from && weekday <= a.weekdays.to && hour >= a.hours.from && hour <= a.hours.to;
     };
     const loSecond = Math.ceil(lo / SECOND);
@@ -222,7 +340,7 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
         if (inWindow(candidate)) startMs = candidate;
       }
       if (startMs < 0) throw new GenerateError(`Pattern A: no time in the data span falls in the window for ${a.locationId}`);
-      synthetic.push({ ...clone(template, startMs), location_id: a.locationId });
+      synthetic.push(atOffice(clone(template, startMs), a.locationId));
     }
   }
 
@@ -230,8 +348,8 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
   const b = config.officeLowConversion;
   if (b.calls > 0) {
     const notBooked = b.calls - b.unanswered - b.booked;
-    if (!locations.some((l) => l.location_id === b.locationId)) throw new GenerateError(`Pattern B: office ${b.locationId} is not in locations.csv`);
-    if (b.unanswered < 0 || b.booked < 0 || notBooked < 0) throw new GenerateError(`Pattern B: unanswered (${b.unanswered}) plus booked (${b.booked}) must fit within calls (${b.calls})`);
+    if (!formats.has(b.locationId)) throw new GenerateError(`Pattern B: office ${b.locationId} is not in locations.csv`);
+    if (notBooked < 0) throw new GenerateError(`Pattern B: unanswered (${b.unanswered}) plus booked (${b.booked}) must fit within calls (${b.calls})`);
     if (b.unanswered > 0 && unansweredPool.length === 0) throw new GenerateError('Pattern B: no unanswered calls to copy');
     if (b.booked > 0 && bookedPool.length === 0) throw new GenerateError('Pattern B: no booked calls with revenue to copy');
     if (notBooked > 0 && notBookedPool.length === 0) throw new GenerateError('Pattern B: no answered, not booked calls to copy');
@@ -243,21 +361,23 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
     for (const pool of plan) {
       const template = pick(pool);
       const startMs = shiftedStart(template);
-      synthetic.push({ ...clone(template, startMs), location_id: b.locationId });
+      synthetic.push(atOffice(clone(template, startMs), b.locationId));
     }
   }
 
   // Patterns C and D: one campaign's calls added to one window, using that campaign's own calls as templates.
-  // Windows are offsets from the last call: "recent" is the last windowDays days (not counting the margin day
-  // at the end), "earlier" is the windowDays days before it.
-  const recent = { from: last - (config.windowDays - 1) * DAY, to: last - DAY };
-  const earlier = { from: last - (2 * config.windowDays - 1) * DAY, to: last - config.windowDays * DAY };
-  const plantInWindow = (name: string, block: ExtendedConfig['campaignSurge'], window: { from: number; to: number }): void => {
+  // The app filters by each office's local date, so the windows are local dates counted back from the data's
+  // last local date: "recent" is the last windowDays days (not counting that last day itself), "earlier" is the
+  // windowDays days before it. A copy is kept only if its local date, at its own office, is inside the window.
+  const lastLocalDate = templates.map((r) => localDateAt(r.location_id ?? '', Date.parse(r.started_at ?? ''))).sort().at(-1) ?? '';
+  const recent = { from: addDays(lastLocalDate, -(config.windowDays - 1)), to: addDays(lastLocalDate, -1) };
+  const earlier = { from: addDays(lastLocalDate, -(2 * config.windowDays - 1)), to: addDays(lastLocalDate, -config.windowDays) };
+  const plantInWindow = (name: string, block: ExtendedConfig['campaignSurge'], window: { from: string; to: string }): void => {
     if (block.calls <= 0) return;
-    if (!campaigns.some((c) => c.campaign_id === block.campaignId)) throw new GenerateError(`${name}: campaign ${block.campaignId} is not in campaigns.csv`);
+    if (!knownCampaigns.has(block.campaignId)) throw new GenerateError(`${name}: campaign ${block.campaignId} is not in campaigns.csv`);
     const notBooked = block.calls - block.unanswered - block.booked;
-    if (block.unanswered < 0 || block.booked < 0 || notBooked < 0) throw new GenerateError(`${name}: unanswered (${block.unanswered}) plus booked (${block.booked}) must fit within calls (${block.calls})`);
-    if (last - first < 2 * config.windowDays * DAY) throw new GenerateError(`${name}: the data span is under ${2 * config.windowDays} days, so two ${config.windowDays}-DAY windows do not fit`);
+    if (notBooked < 0) throw new GenerateError(`${name}: unanswered (${block.unanswered}) plus booked (${block.booked}) must fit within calls (${block.calls})`);
+    if (last - first < 2 * config.windowDays * DAY) throw new GenerateError(`${name}: the data span is under ${2 * config.windowDays} days, so two ${config.windowDays}-day windows do not fit`);
     const own = attributed.filter((r) => r.campaign_id === block.campaignId);
     const ownUnanswered = own.filter((r) => r.answered === 'false');
     const ownBooked = own.filter((r) => r.outcome === 'booked' && Number(r.revenue_usd) > 0);
@@ -272,7 +392,14 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
     ];
     for (const pool of plan) {
       const template = pick(pool);
-      synthetic.push(clone(template, shiftedStart(template, window.from, window.to)));
+      const inWindow = (ms: number): boolean => {
+        const date = localDateAt(template.location_id ?? '', ms);
+        return date >= window.from && date <= window.to;
+      };
+      // UTC bounds first (the same days as the local window, give or take a day), then the local-date check.
+      const from = Date.parse(`${window.from}T00:00:00Z`) - DAY;
+      const to = Date.parse(`${window.to}T00:00:00Z`) + 2 * DAY;
+      synthetic.push(clone(template, shiftedStart(template, Math.max(lo, from), Math.min(hi, to), inWindow)));
     }
   };
   plantInWindow('Pattern C', config.campaignSurge, recent);
@@ -295,33 +422,45 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
     synthetic.push(clone(template, shiftedStart(template)));
   }
 
-  // Duplicated: the first row has no outcome yet; a later row (1 to 47 hours on) fills it in; threeRowCalls of
-  // them get a third identical row (1 to 24 hours on). The last update is so within 71 hours (+30 s) of the call's end.
-  if (config.threeRowCalls < 0 || config.threeRowCalls > config.duplicatedCalls) {
+  // Duplicated: the first row has no outcome yet; a later row (1 to 47 hours on, never later than the data's own
+  // outcome lag allows) fills it in; threeRowCalls of them get a third identical row (1 to 24 hours on). The third
+  // row changes nothing, so the outcome lag the app measures comes from the second row alone.
+  if (config.threeRowCalls > config.duplicatedCalls) {
     throw new GenerateError(`threeRowCalls (${config.threeRowCalls}) must be between 0 and duplicatedCalls (${config.duplicatedCalls})`);
   }
   const duplicablePool = attributed.filter((r) => r.answered === 'true' && (r.outcome ?? '') !== '');
   if (config.duplicatedCalls > 0 && duplicablePool.length === 0) throw new GenerateError('No duplicate templates: no real attributed call is answered with an outcome');
+  const lagMs = config.duplicatedCalls > 0 ? outcomeLagDays(rows, finals) * DAY : 0;
   for (let i = 0; i < config.duplicatedCalls; i++) {
     const template = pick(duplicablePool);
     const finished = clone(template, shiftedStart(template));
+    // The second row's lag from the call start is its duration + up to 30 s + the delay; keep that within the data's lag.
+    const room = Math.floor((lagMs - Number(template.duration_seconds) * SECOND - 30 * SECOND) / HOUR);
+    if (room < 1) throw new GenerateError(`The data's outcome lag (${lagMs / DAY} days) leaves no room to add a later row to call ${template.call_id}`);
     const firstRow = { ...finished, outcome: '', revenue_usd: '' };
-    const secondRow = { ...finished, updated_at: toIso(Date.parse(finished.updated_at ?? '') + randInt(rng, 1, 47) * HOUR) };
+    const secondRow = { ...finished, updated_at: toIso(Date.parse(finished.updated_at ?? '') + randInt(rng, 1, Math.min(47, room)) * HOUR) };
     synthetic.push(firstRow, secondRow);
     if (i < config.threeRowCalls) {
       synthetic.push({ ...secondRow, updated_at: toIso(Date.parse(secondRow.updated_at ?? '') + randInt(rng, 1, 24) * HOUR) });
     }
   }
 
-  // All synthetic rows go after the original text, oldest update first.
+  // All synthetic rows go after the original text, oldest update first, with the input's own line ending.
   synthetic.sort((x, y) => (x.updated_at ?? '').localeCompare(y.updated_at ?? '') || (x.call_id ?? '').localeCompare(y.call_id ?? ''));
-  return input.calls + synthetic.map((row) => serialise(header, row) + '\r\n').join('');
+  const base = input.calls.endsWith(eol) ? input.calls : input.calls + eol;
+  return base + synthetic.map((row) => serialise(header, row) + eol).join('');
 }
 
 /** Read fromDir/{calls,campaigns,locations}.csv; write toDir/calls.csv (generated) and byte copies of the other two. */
 export function writeExtended(fromDir: string, toDir: string, config: Partial<ExtendedConfig> = {}): void {
   if (resolve(fromDir) === resolve(toDir)) throw new GenerateError('The output folder must not be the input folder: the original export stays untouched');
-  const read = (file: string): string => readFileSync(join(fromDir, file), 'utf8');
+  const read = (file: string): string => {
+    try {
+      return readFileSync(join(fromDir, file), 'utf8');
+    } catch {
+      throw new GenerateError(`Cannot read ${join(fromDir, file)}`);
+    }
+  };
   const generated = generateExtendedCalls({ calls: read('calls.csv'), campaigns: read('campaigns.csv'), locations: read('locations.csv') }, config);
   mkdirSync(toDir, { recursive: true });
   writeFileSync(join(toDir, 'calls.csv'), generated);
