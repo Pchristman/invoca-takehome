@@ -10,7 +10,8 @@ import {
   sortLocationRows,
 } from '../../src/web/models/locationsModel';
 import type { LocationRowModel } from '../../src/web/models/locationsModel';
-import { idleOfficeStore, locationsFor, plantedStore } from './fixtures';
+import { THRESHOLDS } from '../../src/core/thresholds';
+import { busyOfficeOnlyStore, idleOfficeStore, locationsFor, plantedStore } from './fixtures';
 import { serverFixture } from '../server/helpers';
 
 const KINDS = ['answer-worse', 'booking-worse', 'better-only', 'none'] as const;
@@ -85,6 +86,19 @@ describe('sorting', () => {
         sorted.map((r) => r.bestCampaign === null).sort((a, b) => Number(a) - Number(b)),
       );
     }
+  });
+
+  it('orders real best campaigns by name, case-insensitively, both ways', () => {
+    const row = locationsFor(RANGE, plantedStore('booking-worse')).rows[0]!; // loc_a names a best campaign
+    const best = (name: string) => ({ ...row.bestCampaign!, name });
+    const rows = [
+      { ...row, locationId: 'x1', bestCampaign: best('banana') },
+      { ...row, locationId: 'x2', bestCampaign: best('Cherry') },
+      { ...row, locationId: 'x3', bestCampaign: best('Apple') },
+      { ...row, locationId: 'x4', bestCampaign: null },
+    ];
+    expect(ids(sortLocationRows(rows, { key: 'bestCampaign', dir: 'asc' }))).toEqual(['x3', 'x1', 'x2', 'x4']);
+    expect(ids(sortLocationRows(rows, { key: 'bestCampaign', dir: 'desc' }))).toEqual(['x2', 'x1', 'x3', 'x4']);
   });
 
   it('breaks ties by office id', () => {
@@ -191,6 +205,22 @@ describe('flags', () => {
     const model = locationsModel(locationsFor('range=last28', serverFixture()), DEFAULT_LOCATION_SORT);
     expect(model.rows.length).toBeGreaterThan(0);
     for (const row of model.rows) expect(row.flagNote).toBe('Too few calls to compare.');
+  });
+
+  it('a busy office with nobody to compare with says so, not "too few calls"', () => {
+    const busy = THRESHOLDS.MIN_CALLS_OUTLIER;
+    for (const offices of [1, 3]) {
+      const view = locationsFor('range=all', busyOfficeOnlyStore(busy, offices));
+      const rows = locationsModel(view, DEFAULT_LOCATION_SORT).rows;
+      expect(rows).toHaveLength(offices);
+      expect(rows.find((r) => r.id === 'loc_a')!.flagNote).toBe('No other office has calls to compare with.');
+      for (const r of rows.filter((x) => x.id !== 'loc_a')) expect(r.flagNote).toBe('No calls in this range.');
+    }
+  });
+
+  it('too few calls still reads that way when the office is small', () => {
+    const view = locationsFor('range=all', busyOfficeOnlyStore(THRESHOLDS.MIN_CALLS_OUTLIER - 1, 1));
+    expect(modelRow(view, 'loc_a').flagNote).toBe('Too few calls to compare.');
   });
 
   it('flagNote is set exactly when there are no flags', () => {

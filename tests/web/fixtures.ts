@@ -222,3 +222,12 @@ export function idleOfficeStore(): CallStore {
   }
   return makeStore(calls, { campaigns: TWO_CAMPAIGNS, locations: THREE_OFFICES });
 }
+
+/** Only loc_a has calls (`calls` of them, all on 2026-09-10); `offices` says how many offices exist (loc_a, loc_b, ...). */
+export function busyOfficeOnlyStore(calls: number, offices: number): CallStore {
+  const ids = ['loc_a', 'loc_b', 'loc_c'].slice(0, offices);
+  return makeStore(officeCalls('loc_a', { calls, answered: Math.floor(calls / 2), booked: Math.floor(calls / 4) }), {
+    campaigns: TWO_CAMPAIGNS,
+    locations: ids.map((id) => office(id, `Office ${id.slice(-1).toUpperCase()}`)),
+  });
+}

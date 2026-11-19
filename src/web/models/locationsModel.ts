@@ -4,6 +4,7 @@ import type { ActionKind, ActionLink } from '../../core/views/facts';
 import { formatCount, formatRate, formatUsd } from '../../core/views/format';
 import type { LocationRow, LocationsView } from '../../core/views/locationsView';
 import type { OutlierResult } from '../../core/ranking';
+import { THRESHOLDS } from '../../core/thresholds';
 import { BLANK } from '../format';
 import type { Cell } from './campaignsModel';
 import { compareSortValues } from './sorting';
@@ -61,6 +62,7 @@ const COLUMNS: LocationsModel['columns'] = [
 ];
 
 const NO_CALLS = 'No calls in this range.';
+const NO_OTHERS = 'No other office has calls to compare with.';
 const NO_BEST = 'No campaign has enough calls at this office to name a best one.';
 
 const FLAGS_NOTE =
@@ -85,13 +87,19 @@ function flagModel(metric: 'answer' | 'booking', flag: OutlierResult): LocationF
   return [{ metric, direction: flag.direction, text }];
 }
 
-function flagNoteFor(row: LocationRow): string {
+function flagNoteFor(row: LocationRow, rows: LocationRow[]): string {
   if (row.calls === 0) return NO_CALLS;
-  if (!row.answerFlag.eligible) return 'Too few calls to compare.';
+  if (!row.answerFlag.eligible) {
+    // Core also calls an office ineligible when the other offices have no calls at all; say which case this is.
+    const othersIdle = rows.every((r) => r.locationId === row.locationId || r.calls === 0);
+    return othersIdle && row.calls >= THRESHOLDS.MIN_CALLS_OUTLIER
+      ? NO_OTHERS
+      : 'Too few calls to compare.';
+  }
   return 'In line with other offices.';
 }
 
-function rowModel(row: LocationRow): LocationRowModel {
+function rowModel(row: LocationRow, rows: LocationRow[]): LocationRowModel {
   const flags = [...flagModel('answer', row.answerFlag), ...flagModel('booking', row.bookingFlag)];
   return {
     id: row.locationId,
@@ -106,7 +114,7 @@ function rowModel(row: LocationRow): LocationRowModel {
       bestCampaign: bestCampaignCell(row),
     },
     flags,
-    flagNote: flags.length === 0 ? flagNoteFor(row) : null,
+    flagNote: flags.length === 0 ? flagNoteFor(row, rows) : null,
   };
 }
 
@@ -131,7 +139,7 @@ export function locationsModel(view: LocationsView, sort: LocationSort): Locatio
   return {
     empty: view.rows.every((r) => r.calls === 0),
     columns: COLUMNS,
-    rows: sortLocationRows(view.rows, sort).map(rowModel),
+    rows: sortLocationRows(view.rows, sort).map((r) => rowModel(r, view.rows)),
     action: { kind: action.kind, text: action.text, actionable: action.actionable, link: action.link, linkLabel },
     flagsNote: FLAGS_NOTE,
   };

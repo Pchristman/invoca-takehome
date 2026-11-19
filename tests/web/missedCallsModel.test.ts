@@ -4,7 +4,7 @@ import { formatCount, formatUsd } from '../../src/core/views/format';
 import type { MissedCallsView } from '../../src/core/views/missedCallsView';
 import { CALLBACK_PAGE_SIZE, missedCallsModel } from '../../src/web/models/missedCallsModel';
 import { callAt, campaign, makeStore, office } from '../core/views/fixtures';
-import { missedCallsFor, toJson } from './fixtures';
+import { metaFor, missedCallsFor, toJson } from './fixtures';
 
 const SPAN = { start: '2026-09-01', end: '2026-10-29' };
 const RANGE = 'range=all';
@@ -194,7 +194,13 @@ describe('missedCallsModel', () => {
     expect(model().reachNote).toBe(
       'Callers are checked against calls up to Oct 29, 2026, the last day in the data. Anyone who got through after that is still listed.',
     );
-    expect(model(missedCallsFor(RANGE, gotThroughStore())).reachNote).toContain('Oct 29, 2026');
+    // the span comes from the data, as meta does: this store ends on Sep 14, not Oct 29
+    const store = gotThroughStore();
+    const span = metaFor(store).span!;
+    expect(span.end).toBe('2026-09-14');
+    const note = missedCallsModel(missedCallsFor(RANGE, store), span).reachNote;
+    expect(note).toContain('Sep 14, 2026');
+    expect(note).not.toContain('Oct 29');
   });
 
   test('limit note', () => {
