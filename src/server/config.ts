@@ -20,3 +20,14 @@ export function parsePort(value: string | undefined): number {
   }
   return port;
 }
+
+/** Turn a listen() failure into a ConfigError the user can act on; anything else is returned unchanged. */
+export function explainListenError(error: NodeJS.ErrnoException, port: number): Error {
+  if (error.code === 'EADDRINUSE') {
+    return new ConfigError(`Port ${port} is already in use. Set PORT to a free port.`);
+  }
+  if (error.code === 'EACCES' || error.code === 'EADDRNOTAVAIL') {
+    return new ConfigError(`Port ${port} cannot be used (reserved or not permitted). Set PORT to another port.`);
+  }
+  return error;
+}

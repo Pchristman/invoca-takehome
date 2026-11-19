@@ -2,7 +2,7 @@ import { copyFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LoadError } from '../../src/core/errors';
-import { ConfigError, parsePort } from '../../src/server/config';
+import { ConfigError, explainListenError, parsePort } from '../../src/server/config';
 import { start } from '../../src/server/start';
 import type { RunningServer } from '../../src/server/start';
 import { loadDotEnv } from '../../src/node/env';
@@ -157,5 +157,21 @@ describe('start and .env', () => {
   it('does not read a .env file (the npm start entry does that)', async () => {
     await startServer(SHIPPED);
     expect(loadDotEnv).not.toHaveBeenCalled();
+  });
+});
+
+describe('explainListenError', () => {
+  const failure = (code: string) => Object.assign(new Error(`listen ${code}`), { code });
+
+  it.each(['EADDRINUSE', 'EACCES', 'EADDRNOTAVAIL'])('%s becomes a ConfigError naming PORT and the port', (code) => {
+    const result = explainListenError(failure(code), 80);
+    expect(result).toBeInstanceOf(ConfigError);
+    expect(result.message).toContain('Port 80');
+    expect(result.message).toContain('PORT');
+  });
+
+  it('any other error is returned unchanged', () => {
+    const other = failure('EMFILE');
+    expect(explainListenError(other, 80)).toBe(other);
   });
 });

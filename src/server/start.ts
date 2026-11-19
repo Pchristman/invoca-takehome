@@ -4,7 +4,7 @@ import { cleanExport } from '../core/clean';
 import type { CallStore } from '../core/types';
 import { readExportFromDir } from '../node/readDataDir';
 import { createApp } from './app';
-import { ConfigError, parsePort } from './config';
+import { explainListenError, parsePort } from './config';
 
 export interface StartOptions {
   /** The export folder. Omitted: DATA_DIR, else the current directory (see readExportFromDir). */
@@ -33,13 +33,7 @@ export async function start(options: StartOptions = {}): Promise<RunningServer> 
   const server = serve({ fetch: app.fetch, port: requested, hostname: '127.0.0.1' });
   await new Promise<void>((resolve, reject) => {
     server.once('listening', resolve);
-    server.once('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE') {
-        reject(new ConfigError(`Port ${requested} is already in use. Set PORT to a free port.`));
-      } else {
-        reject(error);
-      }
-    });
+    server.once('error', (error: NodeJS.ErrnoException) => reject(explainListenError(error, requested)));
   });
 
   const { address: host, port } = server.address() as AddressInfo;
