@@ -1,4 +1,6 @@
 import type { DateRange, RangeErrorCode } from '../core/ranges';
+import type { DataNotes } from '../core/types';
+import type { ViewName } from '../core/views';
 
 /** The range presets a URL may name, and the one used when none is given. */
 export const PRESETS = ['last7', 'last28', 'all'] as const;
@@ -19,6 +21,27 @@ export interface Meta {
   skippedRows: number;
   /** store.dataNotes.notes, e.g. "calls.csv is empty: ..." */
   notes: string[];
+}
+
+/** The body of GET /api/data-notes. `ai` has its final shape now; Phase 9 fills it in. */
+export interface AiStatus {
+  status: 'on' | 'off' | 'budget_reached';
+  spendUsd: number;
+  cacheHits: number;
+  checkerFailures: number;
+}
+
+export interface DataNotesResponse {
+  dataNotes: DataNotes;
+  ai: AiStatus;
+}
+
+/** The body of GET /api/takeaway/:view. Template text only until AI is added. */
+export interface TakeawayResponse {
+  view: ViewName;
+  text: string;
+  source: 'template';
+  reason: 'ai_off';
 }
 
 export type ApiErrorCode =

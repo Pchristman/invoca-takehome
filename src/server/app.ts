@@ -6,7 +6,8 @@ import type { CallStore } from '../core/types';
 import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../core/views';
 import type { ViewName } from '../core/views';
 import { DEFAULT_PRESET, PRESETS, statusFor } from './api';
-import type { ApiError, Meta } from './api';
+import type { AiStatus, ApiError, DataNotesResponse, Meta, TakeawayResponse } from './api';
+import { callbacksToCsv } from './csv';
 import { parseViewQuery } from './params';
 import type { Parsed, ViewQuery, ViewQueryWants } from './params';
 
@@ -18,7 +19,7 @@ export interface AppOptions {
 /** What each view needs from the URL and how to build it. The view routes (and the takeaway route) all read this one table. */
 export interface ViewSpec {
   wants: ViewQueryWants;
-  build: (store: CallStore, query: ViewQuery) => { view: ViewName };
+  build: (store: CallStore, query: ViewQuery) => { view: ViewName; templateSentence: string };
 }
 
 export const VIEW_TABLE: Record<ViewName, ViewSpec> = {
@@ -33,6 +34,8 @@ export const VIEW_TABLE: Record<ViewName, ViewSpec> = {
     build: (store, q) => buildMissedCalls(store, q.range, q.previous, { locationId: q.locationId }),
   },
 };
+
+const AI_OFF: AiStatus = { status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 };
 
 const INTERNAL_MESSAGE = 'Something went wrong on the server.';
 
@@ -68,7 +71,41 @@ export function createApp(store: CallStore, _options: AppOptions = {}): Hono {
       if (!parsed.ok) return errorResponse(c, parsed.error);
       return c.json(VIEW_TABLE[name].build(store, parsed.value));
     });
-  for (const name of Object.keys(VIEW_TABLE) as ViewName[]) route(name);
+  const viewNames = Object.keys(VIEW_TABLE) as ViewName[];
+  for (const name of viewNames) route(name);
+
+  app.get('/api/data-notes', (c) => {
+    const response: DataNotesResponse = { dataNotes: store.dataNotes, ai: AI_OFF };
+    return c.json(response);
+  });
+
+  app.get('/api/takeaway/:view', (c) => {
+    const name = viewNames.find((n) => n === c.req.param('view'));
+    if (!name) {
+      return errorResponse(c, {
+        code: 'unknown_view',
+        message: `Unknown view. Use one of: ${viewNames.join(', ')}.`,
+        field: 'view',
+      });
+    }
+    const parsed = parseFor(c, name);
+    if (!parsed.ok) return errorResponse(c, parsed.error);
+    const view = VIEW_TABLE[name].build(store, parsed.value);
+    const response: TakeawayResponse = { view: name, text: view.templateSentence, source: 'template', reason: 'ai_off' };
+    return c.json(response);
+  });
+
+  app.get('/api/missed-calls/callbacks.csv', (c) => {
+    const parsed = parseFor(c, 'missed-calls');
+    if (!parsed.ok) return errorResponse(c, parsed.error);
+    const { range, previous, locationId } = parsed.value;
+    const view = buildMissedCalls(store, range, previous, { locationId });
+    // The file name holds dates only, so it can't carry text from the URL.
+    return c.body(`﻿${callbacksToCsv(view.callbacks.rows)}`, 200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="callbacks-${view.range.start}-to-${view.range.end}.csv"`,
+    });
+  });
 
   app.notFound((c) => {
     if (c.req.path.startsWith('/api/')) {
