@@ -263,6 +263,24 @@ th .sort-button {
   text-decoration: underline;
 }
 
+/* The calls with no campaign: last row, set apart. */
+tr.row-unattributed th,
+tr.row-unattributed td {
+  background: var(--color-surface);
+  border-top: 2px solid var(--color-border);
+  font-style: italic;
+}
+
+tr.row-unattributed ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+  font-style: normal;
+}
+
+th .badge {
+  margin-left: var(--space-2);
+}
+
 /* ---------- notices ---------- */
 .notice {
   margin: var(--space-3) 0;

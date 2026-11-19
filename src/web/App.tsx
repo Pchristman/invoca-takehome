@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import type { Meta } from '../server/api';
+import type { DateRange } from '../core/ranges';
+import type { CampaignsView as CampaignsData, OverviewView as OverviewData } from '../core/views';
+import { CampaignsView } from './components/CampaignsView';
 import { ComingSoon } from './components/ComingSoon';
+import { OverviewView } from './components/OverviewView';
 import { Header } from './components/Header';
 import { Nav, VIEW_LABELS } from './components/Nav';
 import { RangeControl } from './components/RangeControl';
@@ -8,7 +12,7 @@ import { RequestFrame } from './components/RequestFrame';
 import { screenFor } from './models/screen';
 import { useApi } from './useApi';
 import { useUrlState } from './useUrlState';
-import { apiParams, defaultsHref, withRange } from './urlState';
+import { apiParams, defaultsHref, withCampaign, withRange } from './urlState';
 import type { UrlState } from './urlState';
 
 const NO_PARAMS = new URLSearchParams();
@@ -57,9 +61,20 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
       <Header meta={meta} dev={state.dev} dataNotesOpen={dataNotesOpen} onToggleDataNotes={() => setDataNotesOpen((open) => !open)} />
       <Nav state={state} />
       <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} />
-      {hasView ? (
+      {hasView && meta.span !== null ? (
         <RequestFrame state={view.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
-          {() => <p className="muted section">View arrives in Task 9.</p>}
+          {(data) =>
+            state.view === 'overview' ? (
+              <OverviewView view={data as OverviewData} state={state} span={meta.span as DateRange} />
+            ) : (
+              <CampaignsView
+                view={data as CampaignsData}
+                state={state}
+                span={meta.span as DateRange}
+                onSelectCampaign={(id) => navigate(withCampaign(state, id))}
+              />
+            )
+          }
         </RequestFrame>
       ) : (
         <ComingSoon view={VIEW_LABELS[state.view]} />
