@@ -1,0 +1,233 @@
+import { describe, expect, it } from 'vitest';
+import type { CampaignRow, CampaignsView } from '../../src/core/views';
+import { BLANK } from '../../src/web/format';
+import { campaignsModel, DEFAULT_SORT, nextSort, sortCampaignRows } from '../../src/web/models/campaignsModel';
+import type { CampaignRowModel, CampaignSort } from '../../src/web/models/campaignsModel';
+import { campaignsFor, emptyRangeStore, storeWithNames, storeWithZeroBudget } from './fixtures';
+
+const server = campaignsFor('range=all');
+const rowOf = (view: CampaignsView, id: string): CampaignRow => view.rows.find((r) => r.campaignId === id)!;
+const modelRow = (rows: CampaignRowModel[], id: string): CampaignRowModel => rows.find((r) => r.id === id)!;
+
+/** A bare row; only the fields a test names matter. */
+function row(id: string, over: Partial<CampaignRow> = {}): CampaignRow {
+  return {
+    campaignId: id,
+    name: id,
+    channel: 'social',
+    calls: 1,
+    bookings: 0,
+    bookingRate: 0,
+    revenueUsd: 0,
+    estimatedSpendUsd: 10,
+    estimatedCostPerBookingUsd: null,
+    revenuePerBudgetDollar: null,
+    isBest: false,
+    isWorst: false,
+    ...over,
+  };
+}
+
+describe('sorting', () => {
+  it('DEFAULT_SORT keeps the API order', () => {
+    expect(DEFAULT_SORT).toEqual({ key: 'calls', dir: 'desc' });
+    expect(sortCampaignRows(server.rows, DEFAULT_SORT).map((r) => r.campaignId)).toEqual(
+      server.rows.map((r) => r.campaignId),
+    );
+  });
+
+  it('sorts names case-insensitively', () => {
+    const rows = [row('c', { name: 'banana' }), row('a', { name: 'Cherry' }), row('b', { name: 'apple' })];
+    expect(sortCampaignRows(rows, { key: 'name', dir: 'asc' }).map((r) => r.name)).toEqual(['apple', 'banana', 'Cherry']);
+    expect(sortCampaignRows(rows, { key: 'name', dir: 'desc' }).map((r) => r.name)).toEqual(['Cherry', 'banana', 'apple']);
+  });
+
+  it('leaves null rows last in both directions', () => {
+    const rows = [
+      row('a', { estimatedCostPerBookingUsd: null }),
+      row('b', { estimatedCostPerBookingUsd: 5 }),
+      row('c', { estimatedCostPerBookingUsd: 9 }),
+    ];
+    const ids = (dir: 'asc' | 'desc') =>
+      sortCampaignRows(rows, { key: 'estimatedCostPerBookingUsd', dir }).map((r) => r.campaignId);
+    expect(ids('desc')).toEqual(['c', 'b', 'a']);
+    expect(ids('asc')).toEqual(['b', 'c', 'a']);
+  });
+
+  it('breaks ties by campaign id ascending, in either direction', () => {
+    const rows = [row('b', { calls: 3 }), row('c', { calls: 3 }), row('a', { calls: 3 })];
+    expect(sortCampaignRows(rows, { key: 'calls', dir: 'desc' }).map((r) => r.campaignId)).toEqual(['a', 'b', 'c']);
+    expect(sortCampaignRows(rows, { key: 'calls', dir: 'asc' }).map((r) => r.campaignId)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('does not mutate its input', () => {
+    const rows = [row('b', { calls: 1 }), row('a', { calls: 2 })];
+    const before = rows.map((r) => r.campaignId);
+    sortCampaignRows(rows, { key: 'calls', dir: 'asc' });
+    expect(rows.map((r) => r.campaignId)).toEqual(before);
+  });
+
+  it('nextSort flips the same key and picks a start direction for a new one', () => {
+    expect(nextSort(DEFAULT_SORT, 'calls')).toEqual({ key: 'calls', dir: 'asc' });
+    expect(nextSort(DEFAULT_SORT, 'name')).toEqual({ key: 'name', dir: 'asc' });
+    expect(nextSort(DEFAULT_SORT, 'channel')).toEqual({ key: 'channel', dir: 'asc' });
+    expect(nextSort(DEFAULT_SORT, 'revenueUsd')).toEqual({ key: 'revenueUsd', dir: 'desc' });
+  });
+
+  it('never moves the unattributed row', () => {
+    const view = campaignsFor('range=all', storeWithZeroBudget());
+    const sorts: CampaignSort[] = [DEFAULT_SORT, { key: 'name', dir: 'asc' }, { key: 'revenueUsd', dir: 'asc' }];
+    for (const sort of sorts) {
+      const model = campaignsModel(view, sort);
+      expect(model.rows.every((r) => r.id !== null)).toBe(true);
+      expect(model.unattributed?.name).toBe('Unattributed');
+    }
+  });
+});
+
+describe('blank cells explain themselves', () => {
+  const view = campaignsFor('range=all', storeWithZeroBudget());
+  const model = campaignsModel(view, DEFAULT_SORT);
+
+  it('a $0 budget campaign', () => {
+    const free = modelRow(model.rows, 'cmp_free').cells;
+    expect(free.estimatedSpendUsd.text).toBe('$0');
+    expect(free.estimatedCostPerBookingUsd.text).toBe(BLANK);
+    expect(free.estimatedCostPerBookingUsd.note).toContain('$0 budget');
+    expect(free.revenuePerBudgetDollar.text).toBe(BLANK);
+    expect(free.revenuePerBudgetDollar.note).toContain('$0 budget');
+  });
+
+  it('a budget with no bookings', () => {
+    const idle = modelRow(model.rows, 'cmp_idle').cells;
+    expect(idle.estimatedCostPerBookingUsd.text).toBe(BLANK);
+    expect(idle.estimatedCostPerBookingUsd.note).toContain('no bookings');
+  });
+
+  it('the Unattributed row', () => {
+    const cells = model.unattributed!.cells;
+    for (const key of ['estimatedSpendUsd', 'estimatedCostPerBookingUsd', 'revenuePerBudgetDollar'] as const) {
+      expect(cells[key].text).toBe(BLANK);
+      expect(cells[key].note).toContain('Not applicable');
+    }
+  });
+
+  it('a campaign with no calls says so in the booking rate', () => {
+    const idle = campaignsModel({ ...view, rows: [row('x', { calls: 0, bookingRate: null })] }, DEFAULT_SORT);
+    expect(idle.rows[0]!.cells.bookingRate).toEqual({ text: BLANK, note: 'No calls in this range.' });
+  });
+
+  it('never prints infinity, NaN or undefined', () => {
+    const cells = [...model.rows, model.unattributed!].flatMap((r) => Object.values(r.cells));
+    expect(cells.length).toBeGreaterThan(0);
+    for (const cell of cells) expect(cell.text).not.toMatch(/Infinity|NaN|undefined/);
+  });
+});
+
+describe('best and worst', () => {
+  it('marks the API rows and has no note', () => {
+    const base = campaignsFor('range=all', storeWithNames(['A', 'B', 'C']));
+    const view: CampaignsView = {
+      ...base,
+      rows: base.rows.map((r, i) => ({ ...r, isBest: i === 0, isWorst: i === 2 })),
+    };
+    const model = campaignsModel(view, DEFAULT_SORT);
+    expect(modelRow(model.rows, view.rows[0]!.campaignId!).marks).toEqual(['best']);
+    expect(modelRow(model.rows, view.rows[2]!.campaignId!).marks).toEqual(['worst']);
+    expect(modelRow(model.rows, view.rows[1]!.campaignId!).marks).toEqual([]);
+    expect(model.bestWorstNote).toBeNull();
+  });
+
+  it('with fewer than two eligible, marks nothing and passes the reason', () => {
+    const view = campaignsFor('range=all', storeWithZeroBudget());
+    expect(view.bestWorst.reason).not.toBeNull();
+    const model = campaignsModel(view, DEFAULT_SORT);
+    expect(model.rows.every((r) => r.marks.length === 0)).toBe(true);
+    expect(model.bestWorstNote).toBe(view.bestWorst.reason);
+  });
+});
+
+describe('unattributed', () => {
+  it('is pinned out of rows, with tracking numbers in API order', () => {
+    const view = campaignsFor('range=all', storeWithZeroBudget());
+    const model = campaignsModel(view, DEFAULT_SORT);
+    expect(model.rows.map((r) => r.id)).not.toContain(null);
+    expect(model.unattributed!.id).toBeNull();
+    expect(model.unattributed!.trackingNumbers.map((t) => t.text)).toEqual(
+      view.unattributed!.trackingNumbers.map(
+        (t) => `${t.trackingNumber} · ${t.calls} ${t.calls === 1 ? 'call' : 'calls'}`,
+      ),
+    );
+  });
+
+  it('is null when the API has none', () => {
+    const view = campaignsFor('range=all', storeWithNames(['A', 'B']));
+    expect(view.unattributed).toBeNull();
+    expect(campaignsModel(view, DEFAULT_SORT).unattributed).toBeNull();
+  });
+});
+
+describe('actions', () => {
+  it('passes the API actions through in order', () => {
+    const view = campaignsFor('range=all', storeWithZeroBudget());
+    const model = campaignsModel(view, DEFAULT_SORT);
+    expect(model.actions.map((a) => a.kind)).toEqual(view.actions.map((a) => a.kind));
+    expect(model.actions.map((a) => a.text)).toEqual(view.actions.map((a) => a.text));
+    expect(model.actions.map((a) => a.kind)).toEqual(['fix_attribution']);
+  });
+
+  it('shift_budget comes before fix_attribution', () => {
+    const base = campaignsFor('range=all', storeWithZeroBudget());
+    const shift = { ...base.actions[0]!, kind: 'shift_budget' as const, text: 'Shift it.', actionable: true };
+    const model = campaignsModel({ ...base, actions: [shift, ...base.actions] }, DEFAULT_SORT);
+    expect(model.actions.map((a) => a.kind)).toEqual(['shift_budget', 'fix_attribution']);
+    expect(model.actions[0]!.text).toBe('Shift it.');
+  });
+
+  it('a no_budget_shift action is not actionable', () => {
+    const view = campaignsFor('range=all', storeWithNames(['A', 'B']));
+    const model = campaignsModel(view, DEFAULT_SORT);
+    expect(view.actions.map((a) => a.kind)).toEqual(['no_budget_shift']);
+    expect(model.actions).toEqual([{ kind: 'no_budget_shift', text: view.actions[0]!.text, actionable: false }]);
+  });
+});
+
+describe('chart choices', () => {
+  it('lists every campaign in rows order, zero-call ones included', () => {
+    const view = campaignsFor('start=2026-09-10&end=2026-09-20', emptyRangeStore());
+    const model = campaignsModel(view, DEFAULT_SORT);
+    expect(model.chartChoices).toEqual(view.rows.map((r) => ({ id: r.campaignId, name: r.name })));
+    expect(model.chartChoices.length).toBeGreaterThan(0);
+  });
+
+  it('selectedCampaignId follows weekly, and is null without it', () => {
+    expect(campaignsModel(server, DEFAULT_SORT).selectedCampaignId).toBe(server.weekly!.campaignId);
+    expect(campaignsModel({ ...server, weekly: null }, DEFAULT_SORT).selectedCampaignId).toBeNull();
+  });
+});
+
+describe('very long names stay whole', () => {
+  it('returns markup and 300-character names unchanged', () => {
+    const long = 'x'.repeat(300);
+    const markup = '<img src=x onerror=alert(1)>';
+    const view = campaignsFor('range=all', storeWithNames([long, markup]));
+    const model = campaignsModel(view, DEFAULT_SORT);
+    const names = model.rows.map((r) => r.name);
+    expect(names).toContain(long);
+    expect(names).toContain(markup);
+    expect(model.chartChoices.map((c) => c.name).sort()).toEqual([long, markup].sort());
+    expect(model.rows.map((r) => r.cells.name.text)).toEqual(names);
+  });
+});
+
+describe('empty campaigns range', () => {
+  it('is empty when no row and no unattributed call has calls', () => {
+    const view = campaignsFor('start=2026-09-10&end=2026-09-20', emptyRangeStore());
+    expect(campaignsModel(view, DEFAULT_SORT).empty).toBe(true);
+  });
+
+  it('is not empty with calls', () => {
+    expect(campaignsModel(server, DEFAULT_SORT).empty).toBe(false);
+    expect(rowOf(server, server.rows[0]!.campaignId!).calls).toBeGreaterThan(0);
+  });
+});
