@@ -10,6 +10,7 @@ import type { RangeSpec } from '../../src/core/ranges';
 import { callsPerWeek } from '../../src/core/weeks';
 import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../../src/core/views';
 import { readExportFromDir } from '../../src/node/readDataDir';
+import { createApp } from '../../src/server/app';
 import { goodRow, loadFixture } from './helpers';
 import { expectAllFinite } from './views/fixtures';
 
@@ -152,6 +153,51 @@ describe('views on a different export', () => {
 
     const london = buildMissedCalls(store, range, previous, { locationId: 'zz_lon' });
     expect(london.officeFilter).toEqual({ locationId: 'zz_lon', name: 'London Desk' });
+  });
+});
+
+describe('the server on a different export', () => {
+  const days = ['2031-05-05', '2031-05-07', '2031-05-12', '2031-05-18'];
+  const store = cleanExport(
+    loadFixture(
+      [
+        ...days.flatMap((day, i) => [
+          row({ call_id: `p${i}`, caller_number_hash: `hp${i}`, started_at: `${day}T12:00:00Z`, outcome: 'booked', revenue_usd: '100' }),
+          row({ call_id: `w${i}`, caller_number_hash: `hw${i}`, campaign_id: 'zz_c2', marketing_channel: 'paid_search', location_id: 'zz_akl', started_at: `${day}T08:00:00Z`, outcome: 'not_qualified', revenue_usd: '' }),
+          row({ call_id: `q${i}`, caller_number_hash: `hq${i}`, started_at: `${day}T13:00:00Z`, location_id: 'zz_lon', answered: 'false', outcome: 'missed', revenue_usd: '' }),
+        ]),
+      ],
+      CAMPAIGNS,
+      LOCATIONS,
+    ),
+  );
+  const app = createApp(store);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getJson = async (path: string): Promise<{ status: number; body: any }> => {
+    const response = await app.request(path);
+    return { status: response.status, body: await response.json() };
+  };
+
+  test.each(['all', 'last7'])('every route answers for %s', async (range) => {
+    for (const path of ['/api/overview', '/api/campaigns', '/api/locations', '/api/missed-calls']) {
+      expect([path, (await app.request(`${path}?range=${range}`)).status]).toEqual([path, 200]);
+    }
+    expect((await app.request(`/api/missed-calls/callbacks.csv?range=${range}`)).status).toBe(200);
+
+    const campaigns = (await getJson(`/api/campaigns?range=${range}`)).body;
+    expect(campaigns.rows.map((r: { name: string }) => r.name)).toEqual(expect.arrayContaining(['Quokka Promo', 'Wombat Weekend']));
+  });
+
+  test('the pickers work on other names', async () => {
+    const london = await getJson('/api/missed-calls?range=all&location=zz_lon');
+    expect(london.status).toBe(200);
+    expect(london.body.officeFilter.name).toBe('London Desk');
+    expect((await getJson('/api/campaigns?range=all&campaign=zz_c1')).status).toBe(200);
+  });
+
+  test('meta lists the three offices', async () => {
+    const { body } = await getJson('/api/meta');
+    expect(body.locations.map((l: { name: string }) => l.name).sort()).toEqual(['Auckland Annex', 'Kolkata Hub', 'London Desk']);
   });
 });
 
