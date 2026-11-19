@@ -89,3 +89,67 @@ export interface LoadedExport {
   /** Human-readable, e.g. "calls.csv is empty: starting with zero calls". */
   notes: string[];
 }
+
+/** One call after cleaning: the winning row, localized to its office. */
+export interface CleanCall {
+  callId: string;
+  startedAt: Date;
+  durationSeconds: number;
+  callerHash: string;
+  trackingNumber: string;
+  /** null = "Unattributed" (empty campaign_id in the file). */
+  campaignId: string | null;
+  unattributed: boolean;
+  channel: Channel;
+  locationId: string;
+  answered: boolean;
+  outcome: Outcome | null;
+  /** outcome === 'booked' */
+  booked: boolean;
+  /** answered with no outcome yet */
+  pending: boolean;
+  /** Counted revenue: the file value on a booked call (0 if empty), otherwise 0. */
+  revenueUsd: number;
+  agentId: string | null;
+  /** "YYYY-MM-DD" in the office time zone. */
+  localDate: string;
+  /** 0-23 in the office time zone. */
+  localHour: number;
+  /** 0 = Monday ... 6 = Sunday, in the office time zone. */
+  localWeekday: number;
+}
+
+/** What the cleaning did, for the dev-mode data notes panel and the inline caveats. */
+export interface DataNotes {
+  rowsRead: number;
+  /** Distinct calls, good or bad. */
+  callsAfterDedup: number;
+  duplicateRowsCollapsed: number;
+  /** Calls whose latest updated_at was shared by two or more rows. */
+  tiedCalls: number;
+  unattributedCalls: number;
+  /** Tracking numbers on unattributed calls, most calls first, ties by number. */
+  unattributedTrackingNumbers: { trackingNumber: string; calls: number }[];
+  pendingCalls: number;
+  /** Per CALL after dedupe. Every reason is present. */
+  badCallsByReason: Record<BadReason, number>;
+  badCalls: number;
+  /** Calls with revenue on a non-booked current row (ignored), and the dollars ignored. */
+  revenueOnNonBookedCalls: number;
+  revenueOnNonBookedUsd: number;
+  /** Booked calls whose revenue field is empty (counted as $0). */
+  bookedWithoutRevenueCalls: number;
+  /** Whole days; 0 when no later row ever updated an outcome. */
+  outcomeLagDays: number;
+  /** Carried over from LoadedExport. */
+  unparseableUpdatedAt: number;
+  notes: string[];
+}
+
+export interface CallStore {
+  /** File order of each call's first row. */
+  calls: CleanCall[];
+  campaigns: Campaign[];
+  locations: Location[];
+  dataNotes: DataNotes;
+}
