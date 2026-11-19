@@ -64,7 +64,12 @@ The default stays the shipped export. To use the extended one, set `DATA_DIR=dat
 
 ## Web app
 
-Open `http://127.0.0.1:3000/` after `npm start`. The nav has four views: Overview, Campaigns, Locations and Missed calls. Locations and Missed calls show "Not built yet" for now (Phase 8).
+Open `http://127.0.0.1:3000/` after `npm start`. The nav has four views: Overview, Campaigns, Locations and Missed calls.
+
+- **Locations** lists every office with its calls, answer rate, bookings, booking rate, revenue and best campaign there. Each office is compared with all other offices pooled, on answer rate and booking rate; a difference that chance does not explain is flagged, "better" or "worse", with both rates. An office with too few calls reads "Too few calls to compare". If an office is flagged worse, the action links to Missed calls filtered to that office; if none is, the page says no office stands out.
+- **Missed calls** shows a heatmap of missed calls by hour, by office or by weekday (office local time), the estimated lost value (marked "est.", with its formula one click away), a call-back list of callers who never got through (25 rows a page, highest value first) and a CSV download of the whole list. It can be filtered to one office.
+
+The CSV starts tracking numbers with an apostrophe, so a spreadsheet keeps them as text.
 
 The URL holds the screen, so a link, a refresh or the back button reproduces it:
 
@@ -74,6 +79,7 @@ The URL holds the screen, so a link, a refresh or the back button reproduces it:
 | `range` | `last7`, `last28` or `all` |
 | `start`, `end` | a custom range, `YYYY-MM-DD` |
 | `campaign` | the campaign shown in the Campaigns weekly chart |
+| `location` | the office Missed calls is filtered to |
 | `dev` | add `?dev` to the URL to open the Data notes panel |
 
-To open the extended export: `DATA_DIR=data/extended npm start`.
+To open the extended export: `DATA_DIR=data/extended npm start`. There, Locations flags four offices, two of them "better" than the rest, because each office is tested against all others pooled and the two planted weak offices pull that pool down.
