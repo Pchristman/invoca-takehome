@@ -1,0 +1,26 @@
+# Decisions
+
+One line per real decision. Newest at the bottom.
+
+| Date | Decision | Why | Rejected |
+| --- | --- | --- | --- |
+| 2026-11-18 | Keep four views (Overview, Campaigns, Locations, Missed calls) and extend the data so Locations has a real pattern to find | Reviewers allow extending the data; the original shows flat office answer rates | Merging Locations into Missed calls |
+| 2026-11-18 | Date range: presets (7 days, 28 days, all) plus custom; "as of" = latest call; days counted in office local time | Fast start for the marketer, flexible when needed; calls near midnight UTC land on the correct local day | Presets only; custom only; UTC days |
+| 2026-11-18 | Comparison engine takes any two ranges; "previous period" is the default | Makes stretch S2 nearly free; partial comparison periods are hidden with a reason | Hard-wiring previous-period only |
+| 2026-11-18 | Missed-call value uses per-campaign booking rate x average booking value from the whole export, falling back to channel, then overall | More accurate than one overall rate, still explainable; whole-export rates are stable | One overall rate |
+| 2026-11-18 | Callback list = callers with an unanswered call in range and no answered call after it, through end of export | Leaves out people who already got through | All unanswered in range; never answered ever |
+| 2026-11-18 | One AI takeaway per view, not per chart | Fewer claims to check, reads as advice; charts get code-written captions | Per-chart takeaways; Overview only |
+| 2026-11-18 | AI writes placeholders that code fills; the checker rejects digits, number words, unknown keys and off-sheet names | The model cannot produce a number at all; sturdier than parsing numbers out of free text | Free text checked by number extraction |
+| 2026-11-18 | Claude Haiku 5.5, low effort, cached, $5 default in-app spend guard, JSONL call log | Cheapest current model for short structured writing; repeats cost nothing | Sonnet / Opus for takeaways |
+| 2026-11-18 | Vite + React front end, Hono API server, pure TypeScript data core, vitest; one `npm start` | Familiar to reviewers, interactive, keeps the API key server-side | Server-rendered HTML; Next.js |
+| 2026-11-18 | AI is on exactly when ANTHROPIC_API_KEY is set (no separate AI_ENABLED switch) | One less setting; removing the key demos the fallback | AI_ENABLED flag |
+| 2026-11-18 | Stretch goals S1-S5 are planned phases after the slice, and S5 adds a distinctive visual design with motion | I intend to ship them, so they need real designs; the slice stays first so it's never at risk | Leaving stretch goals as an undesigned wish list |
+| 2026-11-18 | Data notes panel is dev mode only (`?dev` in the URL); estimate labels, incomplete-period notes, outcome lag and a skipped-rows count stay inline | The cleaning detail is for checking the app, not for the marketer, but caveats on numbers must be visible where the number is | Panel visible to everyone; hiding all caveats behind dev mode |
+| 2026-11-18 | S5 motion uses Framer Motion | One consistent system for view transitions, number tweens and layout animation, with built-in reduced-motion support | CSS transitions plus the View Transitions API |
+| 2026-11-18 | Phase 1 validates every raw calls row and returns all of them (typed or bad, file order, duplicates kept); dedupe stays in Phase 2. Bad-row counts are per raw row here, per call after Phase 2 | Rule 2 needs dedupe to see bad rows so a bad latest row can't resurrect an older good one | Deduping inside the loader; dropping bad rows at load time |
+| 2026-11-18 | Timestamps are strict ISO 8601 UTC (`Z` only, real calendar date); offsets and impossible dates are bad rows. Unparseable `ended_at`/`updated_at` are not bad rows | `Date.parse` accepts many formats and shifts impossible dates; the data contract says UTC | Lenient `Date.parse`; accepting offsets |
+| 2026-11-18 | A row with several problems is counted under the first failing check, in the order PLAN.md rule 3 lists them | Reason counts then add up to the bad-row total | Counting a row under every reason it fails |
+| 2026-11-18 | PROPOSED, awaiting review: three reasons beyond rule 3: `missing_call_id`, `bad_duration` (negative, empty or non-integer), `bad_revenue` (non-numeric or negative) | Without them an empty id merges unrelated calls and a bad number becomes NaN in a total | Letting these through; crashing |
+| 2026-11-18 | PROPOSED, awaiting review: bad campaigns/locations rows (empty or duplicate id, bad budget) are skipped and reported; a location with an invalid IANA zone is kept so its calls report `invalid_timezone` | Keeps "bad rows never crash" true for the reference files; matches rule 3 on invalid zones | Failing startup on any bad reference row |
+| 2026-11-18 | Add `@types/node` as a dev dependency (not on PLAN.md's list) | `fs`, `process` and `Intl` types are needed under strict TypeScript | Hand-written type shims |
+| 2026-11-18 | Keep a byte copy of the shipped export in `tests/fixtures/original-export/` for snapshot tests; repo-root CSVs stay untouched | BRIEF.md asks for a regression fixture; the root files are also the default `DATA_DIR` | Testing against the root files only |

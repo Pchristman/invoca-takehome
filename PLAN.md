@@ -1,0 +1,587 @@
+# PLAN.md: Inbound Call Performance
+
+This is the design spec. It is written as instructions to the engineer building the product. Read `docs/BRIEF.md` first for the problem, the constraints and the data profile, and `CLAUDE.md` for how to work and the rules that never bend.
+
+Each phase in the build order gets its own implementation plan before any code is written. This document says _what_ and _why_; it does not say which files to create.
+
+---
+
+## 1. The user and their job
+
+**Who:** the marketing manager at a business that takes inbound calls across several offices and marketing campaigns. They are not an analyst. They own the campaign budget and they answer to someone above them for results.
+
+**Their job, roughly weekly:** open the app, look at a recent period, and answer three questions:
+
+1. Which campaigns are earning their budget, and which are not?
+2. Where are calls, and therefore bookings, being lost?
+3. What should I change this week?
+
+**What the product must do for them:** every view ends in a suggested **action** backed by a number computed in code. A chart that only reports is not finished. If the data shows nothing actionable for a view, the view says so plainly and points to where the action is, rather than inventing a story.
+
+---
+
+## 2. Scope and non-goals
+
+### In scope: the slice (must be finished and tested before anything else)
+
+- A date range control (presets and custom) with a comparison to the previous period of equal length.
+- Four views, each ending in an action: **Overview**, **Campaigns**, **Locations**, **Missed calls**.
+- Inline caveats on each view wherever a number is estimated or may be incomplete.
+- A **data notes** panel in **dev mode** only, for checking the cleaning.
+- A downloadable CSV of callers to call back.
+- Optional AI: one short takeaway per view, checked before display, with template fallback.
+- The submission docs: README, TECHNICAL.md, architecture diagram, decision summary draft.
+
+### In scope: stretch phases, planned and intended, after the slice
+
+In order: S1 alerts, S2 compare any two date ranges, S3 print-friendly one-page summary, S4 ask a question in plain English, S5 polished visual design with motion. They are designed here so the slice's architecture doesn't block them. The slice is never cut to make room for them.
+
+### Non-goals
+
+- Login, authorization, multiple tenants or customers in one instance.
+- Cloud deployment, Docker requirement, scaling beyond one export in memory.
+- Uploading data through the UI. The data folder is set by config; a new export means a restart.
+- Editing campaigns, budgets or offices.
+- Live data, streaming updates, or polling for new exports.
+- Any number produced by a model.
+
+---
+
+## 3. Global behavior
+
+### 3.1 Date range
+
+- **"As of" date:** the latest local date of any call in the export. Never the real clock. Shown in the header ("Data as of Oct 29, 2026").
+- **Local date:** every call's date is its **office's** local date (office IANA time zone). A range filters on local date, inclusive at both ends.
+- **Presets:** Last 7 days, Last 28 days, All data. Each ends on the as-of date.
+- **Custom:** a start and end date, both inclusive, clamped to the data's date span. Start after end is rejected with a message, never a crash.
+- **State lives in the URL** (range, comparison range, view, selected campaign), so a link, refresh or print reproduces the screen.
+
+### 3.2 Comparison
+
+- Default comparison range: the same number of days immediately before the selected range.
+- If any day of the comparison range falls before the first date in the data, **no change is shown**; the tile shows "No full previous period" with a one-line reason. "All data" therefore never shows a change.
+- If the selected range or the comparison range includes the first or last date in the data, a note says that day may be incomplete.
+- Counts and money show % change. Rates (answer rate, booking rate) show change in percentage points.
+- If the previous value is 0 and the current isn't, the change reads "new", never infinity or NaN. If both are 0, no change is shown.
+- The comparison engine takes **any two ranges** from the start. "Previous period" is only the default second range. Stretch S2 then only adds UI.
+
+### 3.3 Caveats the marketer always sees
+
+These sit inline on the view they affect, not behind a panel, because the rules in `CLAUDE.md` require them to be visible wherever the number appears:
+
+- **Estimates:** estimated spend, cost per booking, revenue per budget dollar and missed-call value are labeled "est.", with the formula one click away.
+- **Incomplete periods:** the notes from section 3.2 (no full previous period; first or last data day may be incomplete).
+- **Outcome lag:** the longest gap seen in this export between a call starting and a later row updating its outcome. If the selected range ends within that many days of the as-of date, a note says recent bookings and revenue may still rise. The gap is measured from the data, never hard-coded.
+- **Skipped rows:** if any rows were bad, one line in the header ("12 rows skipped"). The breakdown lives in the data notes panel.
+- **Takeaway source:** the small "AI" or "template" marker on each takeaway.
+
+### 3.4 Data notes panel (dev mode)
+
+A panel for checking the cleaning and the AI, shown only in **dev mode**. Dev mode is switched on by adding `?dev` to the URL, so it can be shown in the review without a restart. Without the flag the panel and its entry point do not render. The server endpoint stays available, since the app is local only. The panel shows, for the loaded export:
+
+- Rows read, calls after removing duplicates, and how many duplicate rows were collapsed.
+- Duplicate rows that tied on `updated_at`.
+- Unattributed calls (no campaign) and the tracking numbers they came in on.
+- Answered calls with no outcome yet ("pending").
+- Bad rows, counted by reason.
+- Revenue found on non-booked rows (ignored), and booked calls with no revenue.
+- The measured outcome lag.
+- AI status: on, off (no key), or budget reached; spend so far; cache hits and checker failures.
+
+---
+
+## 4. The views and the action each leads to
+
+Every view returns a **fact sheet**: a flat set of named values and entity names behind its headline action. The template sentence, the AI prompt and the AI checker all read from that same fact sheet. The UI only formats; it does no arithmetic.
+
+### 4.1 Overview
+
+**Shows:** tiles for calls, unique callers, answer rate, bookings and revenue, each with change against the comparison range. Below that, **Top actions**: the headline action from each of the other three views, in fixed order (Campaigns, Locations, Missed calls), each linking to its view.
+
+**Action:** the top actions list itself. Each item carries its number.
+
+**Definitions:**
+
+- Unique callers: distinct `caller_number_hash` in the range.
+- Answer rate: answered calls / calls.
+- Bookings: calls whose current outcome is `booked`.
+- Revenue: sum of `revenue_usd` on booked calls only.
+
+### 4.2 Campaigns
+
+**Shows:**
+
+- A table ranked by calls (sortable by any column): campaign, channel, calls, bookings, booking rate, revenue, estimated spend, estimated cost per booking, revenue per budget dollar.
+- "Unattributed" appears as its own row with calls, bookings and revenue; its spend columns are blank.
+- **Best** and **worst** campaign marked by revenue per budget dollar. Only campaigns with a budget above $0 and at least `MIN_BOOKINGS_TO_RANK` bookings in the range are eligible. If fewer than two are eligible, no best/worst is marked and the view says why.
+- A calls-per-week chart for one selected campaign (default: the top campaign by calls). Weeks run Monday to Sunday by local date. A week only partly inside the range or the data is visibly marked partial.
+
+**Actions:**
+
+1. **Shift budget:** "Shift budget from {worst} (est. ${x} per booking) toward {best} (est. ${y} per booking)." Do not project extra bookings from the shift; the data can't support that claim.
+2. **Fix attribution** (only when unattributed calls exist in range): "{n} calls ({b} bookings, ${r}) came in on {m} tracking numbers not tied to any campaign. Assign them." The tracking numbers are listed with their call counts.
+
+**Definitions:**
+
+- Booking rate: bookings / calls.
+- Estimated spend: `daily_budget_usd` x number of days in the range. Always labeled "est.".
+- Estimated cost per booking: estimated spend / bookings. **Blank** when the budget is $0 or there are no bookings. Never infinity.
+- Revenue per budget dollar: revenue / estimated spend. Blank when spend is $0.
+
+### 4.3 Locations
+
+**Shows:**
+
+- A table by office: calls, answer rate, bookings, booking rate, revenue, and the **best campaign at that office** (highest booking rate among campaigns with at least `MIN_CALLS_BEST_CAMPAIGN` calls at that office in the range; blank if none qualifies).
+- An **outlier flag** on an office whose answer rate or booking rate differs from all other offices pooled by more than chance explains. Use a two-proportion z-test of the office against the rest; flag when |z| >= `OUTLIER_Z` and the office has at least `MIN_CALLS_OUTLIER` calls. The flag shows direction (better or worse) and both rates.
+
+**Action:**
+
+- If an office is flagged worse on answer rate: "{office} answers {a}% of calls versus {b}% at other offices. Its most-missed hour is {weekday} {hour} local." Links to Missed calls filtered to that office.
+- If flagged worse on booking rate: "{office} books {a}% of calls versus {b}% elsewhere. Its best campaign there is {campaign}."
+- If no office is flagged: "No office stands out on answer or booking rate. Missed calls are a company-wide issue." Links to Missed calls. This is a valid, useful result, not a failure.
+
+### 4.4 Missed calls
+
+**Shows:**
+
+- A heatmap of unanswered calls by office x local hour, with a toggle to weekday x local hour.
+- **Estimated lost value** for unanswered calls in the range, labeled as an estimate with its formula visible.
+- A **callback list**, downloadable as CSV.
+
+**Definitions:**
+
+- Unanswered: `answered` is false (outcome `missed` or `voicemail`, or empty).
+- **Estimated value of one missed call** = its campaign's booking rate among answered calls with an outcome x that campaign's average booking value. Rates come from the **whole export**, not the selected range, so they are stable. If a campaign has fewer than `MIN_ANSWERED_FOR_RATE` answered calls with outcomes, use its channel's rates; if the channel is also too thin, use the overall rates. Unattributed calls use their `marketing_channel`'s rates.
+- **Callback list:** callers (by `caller_number_hash`) who had at least one unanswered call in the range **and** no answered call after their latest unanswered call in the range, looking through to the end of the export. Each row: caller hash, unanswered attempts in range, last attempt (office local time), office, campaign, tracking number dialed, estimated value. The estimate is for their latest missed call only, because one callback recovers at most one booking. Sorted by estimated value, highest first.
+
+**Action:** "Call back these {n} callers who never got through (est. ${x} in bookings). Busiest missed slot: {office} {weekday} {hour}."
+
+**Stated limit:** the export carries only a hashed caller number. The list identifies callers by hash, tracking number and time, which the marketer matches in their call platform. Say this on the view.
+
+### 4.5 Configurable thresholds
+
+All live in one config module with these defaults and are never derived from this dataset's names or dates:
+
+| Name                      | Default | Used for                                                                               |
+| ------------------------- | ------- | -------------------------------------------------------------------------------------- |
+| `MIN_BOOKINGS_TO_RANK`    | 5       | Best/worst campaign eligibility                                                        |
+| `MIN_CALLS_BEST_CAMPAIGN` | 20      | Best campaign at an office                                                             |
+| `MIN_CALLS_OUTLIER`       | 50      | Office outlier eligibility                                                             |
+| `OUTLIER_Z`               | 2.5     | Office outlier flag. With ~8 offices tested, 2.5 rather than 2 keeps false flags rare. |
+| `MIN_ANSWERED_FOR_RATE`   | 30      | Missed-call value fallback to channel, then overall                                    |
+
+---
+
+## 5. Data rules
+
+All rules live in the pure data core. **Each rule gets its own test** against a small hand-written fixture built to exercise it.
+
+1. **Loading.** Read `calls.csv`, `campaigns.csv`, `locations.csv` from `DATA_DIR` (default: repo root). Match columns by header name, not position. A missing required column stops startup with a message naming the file and column. Extra columns are ignored. Empty file: start with zero calls and say so.
+2. **Deduplication first.** Group rows by `call_id`; keep the row with the latest `updated_at`. Dedup happens **before** validation chooses rows, so a bad latest row never resurrects an older good one; that call is reported bad. If two rows tie on `updated_at`, keep the later one in the file and count the tie in data notes. A row whose `updated_at` can't be parsed loses to any parseable row of the same call.
+3. **Validation.** A call is bad, counted by reason and excluded from metrics, if: `started_at` can't be parsed; `location_id` is not in locations; `campaign_id` is non-empty but not in campaigns; `answered` is not a boolean; `outcome` or `marketing_channel` is outside its enum; or duration is negative. An unknown location time zone (not a valid IANA zone) makes that location's calls bad. Bad rows never crash the app.
+4. **Unattributed.** Empty `campaign_id` becomes the "Unattributed" bucket. These calls are never dropped. An unknown non-empty `campaign_id` is **not** unattributed; it's a bad row (a data error, not a missing campaign).
+5. **Time.** Store UTC. Derive local date, local hour and local weekday from the call's office time zone via the built-in `Intl` API. Every date filter, time-of-day and day-of-week view uses local values.
+6. **Revenue.** Counts only when the current outcome is `booked`. Revenue on any other outcome is ignored and counted in data notes. A booked call with empty revenue counts as a booking with $0 revenue and is counted in data notes.
+7. **Pending outcomes.** An answered call with an empty outcome is "pending": it counts in calls and answer rate, not in bookings, and is excluded from booking-rate denominators used for missed-call value.
+8. **Spend.** Not in the data. Estimated spend = daily budget x days in range; always labeled as an estimate. Cost per booking is blank when budget is $0 or bookings are 0.
+9. **Comparisons.** Equal-length periods only. A comparison period not fully covered by the data shows no change and says why. Partial first or last data days are noted (section 3.2).
+10. **Weeks.** Monday to Sunday by local date; partial weeks marked.
+11. **Nothing hard-coded.** No campaign names, office names, IDs, channels-to-campaign maps or dates in code. Enums (`outcome`, `marketing_channel`) are the documented column contract and may live in code.
+
+---
+
+## 6. Architecture
+
+```
+CSV files ─▶ load + validate ─▶ clean (dedupe, attribute, localize) ─▶ CallStore (in memory)
+                                                                          │
+ Browser (React) ◀── JSON ── Node API server ──▶ view builders(range A, range B) ──▶ fact sheets
+                                   │                                                    │
+                                   └──▶ AI takeaway service ◀── fact sheet ────────────┘
+                                          (placeholders, checker, cache, spend guard, log)
+```
+
+**Stack:** TypeScript end to end. Node 24. Vite + React front end, Hono server, vitest. One package, one `npm start`.
+
+### Units, each with one job
+
+1. **Data core** (pure TypeScript, no I/O, no framework). Holds the parse/validate, clean, metrics and views functions:
+   - _Parse/validate:_ raw CSV records into typed calls plus a bad-row report.
+   - _Clean:_ dedupe, attribute, localize; produces the CallStore and the data notes.
+   - _Metrics:_ small pure functions (rates, changes, estimated spend, cost per booking, z-test, missed-call value, week bucketing).
+   - _Views:_ `(store, rangeA, rangeB?) → view data + fact sheet + template action`.
+
+   This is where nearly all tests live.
+
+2. **Server** (Hono). Loads the data once at startup, then serves:
+   - One JSON endpoint per view, taking range A and optional range B.
+   - Data notes.
+   - The callback list as CSV.
+   - Takeaways, on their own endpoint so views never wait on AI.
+   - The built front end, in production mode.
+
+   Bad query parameters return 400 with a message.
+
+3. **AI service** (server-side only). Turns a fact sheet into a checked takeaway or returns the template (section 7). The API key never reaches the browser.
+4. **Web app** (Vite + React). It has the view shell, the date range control, the inline caveats and the dev-mode data notes panel, and draws charts with one small library (Recharts). It formats numbers and draws; it never computes metrics. Colors, type, spacing and motion timings are design tokens from the first UI phase so S5 is a restyle, not a rewrite.
+
+### Config (`.env`, documented in `.env.example`)
+
+| Variable             | Meaning                                      |
+| -------------------- | -------------------------------------------- |
+| `ANTHROPIC_API_KEY`  | Optional. AI is on exactly when this is set. |
+| `AI_SPEND_LIMIT_USD` | Spend guard for the running app. Default 5.  |
+| `DATA_DIR`           | Folder holding the three CSVs.               |
+| `PORT`               | Default 3000.                                |
+
+### Commands
+
+- `npm start`: build the web app and serve everything on one port.
+- `npm run dev`: server and Vite with hot reload.
+- `npm test`: vitest.
+
+### Freshness
+
+The data is a snapshot at startup; the header shows the as-of date. A new export means a restart. Live reload is out of scope.
+
+### Dependencies
+
+Expected list. **Ask before adding each one, at the start of the phase that needs it:** typescript, tsx, vitest, csv-parse, hono, @hono/node-server, react, react-dom, vite, @vitejs/plugin-react, recharts, @anthropic-ai/sdk, and Framer Motion for S5. Anything beyond this list needs a reason in `docs/DECISIONS.md`.
+
+---
+
+## 7. How AI is used, checked and budgeted
+
+### Use
+
+One call per view turns that view's fact sheet into a 2–3 sentence takeaway: what it means and what to do. AI is an add-on; every view is complete without it.
+
+- **Model:** `claude-haiku-5-5`, the cheapest current model; the task is short, structured writing. Low effort. Structured JSON output.
+- **Input:** the fact sheet only (named values plus entity names), never raw calls.
+
+### The model never writes numbers
+
+The model writes text with **placeholders** that name fact-sheet keys, e.g. `{worst.name} costs {worst.cost_per_booking} per booking, versus {best.cost_per_booking} for {best.name}.` Code substitutes the formatted values. The model therefore cannot produce or alter a metric.
+
+### Checker
+
+Runs on every output before display. If any check fails, show the template text and log why. The checker rejects text that:
+
+- uses a placeholder not in the fact sheet;
+- contains any digit outside placeholders;
+- contains number words or quantity words (a fixed list: "one" through "twenty", "hundred", "thousand", "million", "percent", "half", "twice", "double", "triple", "dozen", and similar);
+- names any campaign, office or channel from the loaded data that is not in this fact sheet's entities;
+- is empty or longer than the length limit.
+
+Known limit, stated in TECHNICAL.md: the checker can't catch an invented name that appears nowhere in the data. The prompt forbids it, and entities must be written as placeholders.
+
+### Cache
+
+- **Key:** hash of (data snapshot id, fact sheet, prompt version, model).
+- **Storage:** in memory, also persisted to a gitignored `.cache/` JSON file, so repeats and restarts cost nothing.
+- **Prompt changes:** bump the prompt version.
+
+### Spend guard
+
+- Each call is costed from `usage` input and output tokens via a price table in config.
+- Before calling, if logged spend plus a worst-case estimate for this call exceeds `AI_SPEND_LIMIT_USD`, skip the call and return the template with reason "AI budget reached".
+- Spend is summed from the call log, so it survives restarts.
+
+### Call log
+
+One JSON line per call in gitignored `logs/ai-calls.jsonl`. Each line holds:
+
+- time, model, purpose (view name)
+- input and output tokens, cost
+- whether it was served from the cache
+- whether the check passed, and the failure reason if not
+
+Cache hits are logged with zero cost. The dev-mode data notes panel shows total spend. (`docs/AI_COST_LOG.md` is maintained by me, not the app.)
+
+### Failure handling
+
+Fall back to the template and log the reason on:
+
+- no key
+- timeout (about 8 s)
+- API error
+- refusal
+- malformed JSON
+- checker failure
+
+The UI shows which it is with a small "template" vs "AI" marker.
+
+### Expected cost
+
+About 1.5K input and 300 output tokens per call, which comes to well under $0.001. The running app should cost cents; nearly all of the $250 goes to the build.
+
+### Stretch S4 uses the same pattern
+
+The model fills a fixed filter schema (view, offices, campaigns, weekdays, hours, date range) via structured output. Code validates every value against the loaded data, then runs the filter. The model never sees calls or produces numbers. An invalid or empty filter shows "Couldn't turn that into a filter" with examples.
+
+---
+
+## 8. Testing
+
+- **Data rules:** one test per rule in section 5, each against a tiny hand-written fixture (5–20 rows) built to exercise that rule. Fixtures live with the tests and are readable by a reviewer.
+- **Metrics:** table-driven tests covering:
+  - zero budget, zero bookings
+  - previous value 0, both values 0
+  - a partial comparison period
+  - a call near midnight UTC landing on a different local date
+  - America/Phoenix (no DST) next to a DST zone
+  - week boundaries
+  - the z-test at and around the threshold
+  - missed-value fallback from campaign to channel to overall
+- **Snapshot totals:** on the shipped export (calls, bookings, revenue, unattributed, bad rows) and separately on the extended export. These catch regressions, not rules.
+- **Views:** each view builder on a fixture where the expected action is known, plus the "nothing stands out" case for Locations and the "fewer than two eligible campaigns" case for Campaigns.
+- **Server:** in-process requests to every endpoint. Covers valid ranges, bad or missing params (400), an inverted range, a range outside the data, and the CSV download's headers and rows.
+- **AI:** checker tests with crafted good and bad outputs, one per rejection reason. Client, cache and guard are tested with a fake model: a cache hit makes no call; the guard blocks at the limit; every failure mode falls back. **No automated test calls the real API.** A manual script makes one real call when I choose to run it.
+- **Hard-coding guard:** a test runs the core on a fixture export with entirely different campaign names, office names, time zones and dates, and checks every view builds.
+- **Web:** no component tests. Each UI phase ends with a written click-through checklist, run in the browser and shown to me.
+
+---
+
+## 9. Build order
+
+Work one phase at a time. Each phase gets its own implementation plan first, ends with `npm test` green and the results shown to me, then stops.
+
+### Phase 0: Scaffold
+
+- **Delivers:** git repo, TypeScript + vitest set up, `.env.example`, `.gitignore` (`.env`, `.cache/`, `logs/`, build output), `npm test` running an empty suite, README stub with the commands.
+- **Done when:** `npm install && npm test` passes on a clean clone; no secrets tracked.
+- **Edge cases:** none beyond confirming `.env` is ignored.
+
+### Phase 1: Load and validate
+
+- **Delivers:** reading the three CSVs from `DATA_DIR` into typed records plus a bad-row report by reason.
+- **Done when:** loading the shipped export reports 5,411 rows; each validation rule has a passing fixture test.
+- **Edge cases to handle and test:**
+  - missing required column (clear error)
+  - extra and reordered columns
+  - empty file
+  - quoted fields with commas
+  - CRLF line endings
+  - unparseable timestamps
+  - unknown location
+  - unknown non-empty campaign
+  - bad boolean or enum
+  - negative duration
+  - invalid IANA zone in locations
+
+### Phase 2: Clean
+
+- **Delivers:** dedupe, attribution, localization, pending outcomes, revenue rule, outcome lag measurement and the data notes summary.
+- **Done when:** the shipped export cleans to 5,000 calls, 1,204 bookings, $432,894 revenue and 144 unattributed, and every rule in section 5 has its own passing test.
+- **Edge cases to handle and test:**
+  - three rows for one call arriving out of order
+  - `updated_at` tie
+  - bad latest row with good older row (call reported bad)
+  - empty campaign_id
+  - revenue on a non-booked row
+  - booked with empty revenue
+  - answered with no outcome
+  - a call at 02:00 UTC that is the previous local day
+  - Phoenix vs Denver in the same week
+
+### Phase 3: Ranges and metrics
+
+- **Delivers:** presets, custom ranges, comparison ranges and coverage checks, plus every metric function in section 4, as pure functions.
+- **Done when:** the table-driven metric tests pass.
+- **Edge cases to handle and test:**
+  - range outside data
+  - start after end
+  - one-day range
+  - "all data" has no comparison
+  - comparison partly before data start
+  - first and last data day flagged as possibly incomplete
+  - previous 0 → "new"
+  - both 0
+  - zero budget (blank cost per booking)
+  - zero bookings
+  - z-test with tiny samples (not eligible)
+  - partial weeks
+
+### Phase 4: Extended dataset
+
+- **Delivers:** an extended export in its own data folder, produced by a seeded, committed script so it is reproducible. It adds patterns the original data lacks, so the Locations view (and others) have something real to find. The original export stays untouched.
+- **Starts with a decision, agreed with me:**
+  - which pattern(s) to add (for example, one office with a markedly lower answer rate at certain hours)
+  - which dataset `npm start` uses by default
+
+  Record both in `docs/DECISIONS.md`. The README says the extended export contains synthetic rows.
+
+- **Done when:** the script regenerates an identical file from its seed; the extended export loads with zero unexpected bad rows; its snapshot totals are recorded in a test.
+- **Edge cases:**
+  - new rows use the same columns and rules: some duplicates, some unattributed, some pending
+  - the extended data must not break any existing rule test
+
+### Phase 5: View builders
+
+- **Delivers:** all four views as pure functions of (store, range A, range B?). Each returns view data, a fact sheet and a template action sentence.
+- **Done when:** each view's fixture test produces the expected action, and the different-names fixture builds every view.
+- **Edge cases to handle and test:**
+  - fewer than two campaigns eligible for best/worst
+  - no unattributed calls in range (no attribution action)
+  - no office flagged ("nothing stands out" action)
+  - office flagged better rather than worse
+  - no missed calls in range
+  - caller who missed then got through (excluded from callback list)
+  - caller who got through, then missed (included)
+  - campaign too thin for its own rate (channel fallback)
+  - empty range
+
+### Phase 6: Server
+
+- **Delivers:** Hono server loading data at startup, view, data notes, takeaway (template only for now) and callback CSV endpoints, plus serving the built front end.
+- **Done when:** in-process endpoint tests pass, and `npm start` serves JSON for every view on the shipped data.
+- **Edge cases to handle and test:**
+  - missing or malformed date params (400 with message)
+  - inverted range
+  - range outside data
+  - unknown campaign in the weekly-chart param
+  - CSV escaping of fields
+  - startup with a missing data folder (clear error, non-zero exit)
+
+### Phase 7: UI part 1 (shell, range, data notes, Overview, Campaigns)
+
+- **Delivers:**
+  - the app shell with navigation
+  - date range control with presets and custom, state in the URL
+  - the inline caveats (section 3.3)
+  - the dev-mode data notes panel
+  - the Overview and Campaigns views with actions
+  - design tokens (color, type, spacing, motion durations) in one place
+- **Done when:** the click-through checklist passes in the browser:
+  - presets
+  - custom range
+  - refresh keeps state
+  - change hidden on "All data" with a reason
+  - best/worst marked
+  - weekly chart switches campaign
+  - partial weeks marked
+  - with `?dev`, the data notes panel opens from every view; without it, the panel and its entry point are absent
+  - estimates labeled, outcome-lag and incomplete-day notes visible without dev mode
+- **Edge cases:**
+  - loading and error states for each request
+  - empty range
+  - blank cost-per-booking cells
+  - very long campaign names
+
+### Phase 8: UI part 2 (Locations, Missed calls)
+
+- **Delivers:** the Locations view with outlier flag and best-campaign column, and the Missed calls view with heatmap toggle, estimated lost value with formula, callback list and CSV download.
+- **Done when:** the click-through checklist passes on both the shipped and the extended data:
+  - the flag appears where the extended data plants it, and "nothing stands out" appears on the original
+  - the Locations action links to Missed calls filtered to that office
+  - the CSV downloads and opens correctly
+- **Edge cases:**
+  - an office with no calls in range
+  - a heatmap cell with zero calls
+  - an empty callback list
+
+### Phase 9: AI takeaways
+
+- **Delivers:**
+  - the AI service: prompt per view, placeholders, checker, cache, spend guard and call log
+  - the takeaway shown on each view with an AI/template marker
+  - a manual script for one real call
+- **Done when:**
+  - all AI tests pass with the fake model
+  - with no key, every view shows template text and the app is otherwise unchanged
+  - with a key, one manual run per view shows a checked takeaway, a repeat is a cache hit with zero cost, and the log has one line per call
+  - I record the spend in `docs/AI_COST_LOG.md`
+- **Edge cases to handle and test:**
+  - unknown placeholder
+  - stray digit
+  - number word
+  - off-sheet entity name
+  - too long
+  - malformed JSON
+  - timeout
+  - refusal
+  - guard at the limit
+  - cache survives restart
+
+### Phase 10: Submission docs
+
+- **Delivers:**
+  - README with setup and the one command
+  - TECHNICAL.md (1–2 pages, covering the brief's list)
+  - architecture diagram
+  - decision summary draft for me to finish
+  - `docs/DECISIONS.md` up to date
+- **Done when:** a clean clone following only the README runs the app, with and without a key, and `npm test` passes.
+
+### Stretch phases (in order, only after Phase 10)
+
+#### S1: Alerts
+
+- **Delivers:** a flag on campaigns whose calls jumped or dropped against the comparison range by more than chance explains. Use a Poisson-style test on counts, with a threshold in config and a minimum count. Alerts appear on Overview's top actions and in the Campaigns table.
+- **Done when:** fixture tests cover jump, drop, no change, and too-small counts.
+- **Edge cases:**
+  - comparison not available (no alerts, say why)
+  - campaign with zero calls in one period
+
+#### S2: Compare any two date ranges
+
+- **Delivers:** UI to pick a second range freely. The engine already supports it.
+- **Done when:** the URL holds both ranges and every view's changes use the chosen range.
+- **Edge cases:**
+  - overlapping ranges (allowed, with a note)
+  - unequal lengths (counts are compared per day, and the view says so)
+  - second range outside the data
+
+#### S3: Print-friendly one-page summary
+
+- **Delivers:** a print view for the current range with the Overview tiles, each view's action and its takeaway, plus the estimate labels and caveats from section 3.3. No dev-mode content. It fits on one page.
+- **Done when:** browser print preview fits one A4/Letter page on both datasets.
+- **Edge cases:**
+  - AI off (template text)
+  - long names wrapping
+
+#### S4: Ask a question in plain English
+
+- **Delivers:** a question box; the model maps the question to the fixed filter schema; code validates and applies it, then shows the matching view filtered. Same logging, cache and guard as section 7.
+- **Done when:**
+  - fake-model tests pass for a valid filter, invalid values and an unanswerable question
+  - three manual example questions produce correct filters
+- **Edge cases:**
+  - names that don't exist in the data
+  - ambiguous weekday or hour phrasing
+  - AI off (box hidden, with a note)
+
+#### S5: Polished visual design with motion
+
+- **Delivers:** a sleek, modern, distinctive look that does **not** read as generic AI-generated UI, with smooth motion.
+- **Look criteria:**
+  - a deliberate type pairing (not default system or Inter-only)
+  - a restrained palette with one accent used for actions
+  - data-first layouts with generous spacing
+  - no purple gradients, glassmorphism cards, emoji icons, or uniform rounded-card grids
+- **Motion criteria:**
+  - view transitions between tabs
+  - numbers tweening on range change
+  - charts animating between datasets rather than redrawing
+  - panels and takeaways entering and leaving smoothly
+  - all of it short (about 150–300 ms), eased, and fully disabled under `prefers-reduced-motion`
+- **Approach:** Framer Motion for all motion, so transitions, number tweens and layout changes share one consistent system (ask before adding the package at the start of S5). Its built-in reduced-motion support is used to switch motion off.
+- **Done when:** I sign off on the look in the browser; reduced-motion mode shows no animation; no view's numbers or actions change.
+
+---
+
+## 10. What "done" means
+
+The product is done for submission when **Phase 10 is complete**:
+
+- A fresh clone runs with `npm install` and `npm start`, documented in the README.
+- All four views work on the shipped export and the extended export, and each ends in an action backed by a code-computed number.
+- The app works fully with the API key missing.
+- Every data rule in section 5 has a passing test, and `npm test` is green.
+- With a key, takeaways are checked, cached, logged with cost, and stop at the spend limit.
+- No secrets in git history. `.env.example` documents config.
+- README, TECHNICAL.md, architecture diagram and the decision summary draft exist, and `docs/DECISIONS.md` is current.
+
+Stretch phases S1–S5 are done individually by their own "done when" lines, and none may break the above.

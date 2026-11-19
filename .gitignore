@@ -1,0 +1,6 @@
+.env
+NOTES.local.md
+.cache/
+logs/
+dist/
+node_modules/
