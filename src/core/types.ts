@@ -6,7 +6,7 @@ export type Channel = (typeof CHANNELS)[number];
 export interface Campaign {
   id: string;
   name: string;
-  channel: string;
+  channel: Channel;
   dailyBudgetUsd: number;
 }
 
@@ -18,17 +18,21 @@ export interface Location {
   timezoneValid: boolean;
 }
 
-export type BadReason =
-  | 'missing_call_id'
-  | 'bad_timestamp'
-  | 'unknown_location'
-  | 'invalid_timezone'
-  | 'unknown_campaign'
-  | 'bad_boolean'
-  | 'bad_outcome'
-  | 'bad_channel'
-  | 'bad_duration'
-  | 'bad_revenue';
+/** In the order the checks run; the first failing check names the reason. */
+export const BAD_REASONS = [
+  'missing_call_id',
+  'bad_timestamp',
+  'unknown_location',
+  'invalid_timezone',
+  'unknown_campaign',
+  'bad_boolean',
+  'bad_outcome',
+  'inconsistent_outcome',
+  'bad_channel',
+  'bad_duration',
+  'bad_revenue',
+] as const;
+export type BadReason = (typeof BAD_REASONS)[number];
 
 export interface Call {
   /** 1-based data row in calls.csv, header excluded. */
@@ -77,6 +81,10 @@ export interface LoadedExport {
   rowsRead: number;
   /** Counted per RAW row. Every reason is present (0 if none). */
   badByReason: Record<BadReason, number>;
+  /** Raw rows (valid or bad) whose updated_at could not be parsed; they lose any dedupe (Phase 2 data notes). */
+  unparseableUpdatedAt: number;
+  /** Valid rows whose ended_at could not be parsed (bad rows don't parse it). */
+  unparseableEndedAt: number;
   referenceIssues: ReferenceIssue[];
   /** Human-readable, e.g. "calls.csv is empty: starting with zero calls". */
   notes: string[];

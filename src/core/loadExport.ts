@@ -1,20 +1,7 @@
 import { readTable, type Table } from './csv';
 import { CAMPAIGN_COLUMNS, LOCATION_COLUMNS, parseCampaigns, parseLocations } from './reference';
-import type { BadReason, LoadedExport } from './types';
+import { BAD_REASONS, type BadReason, type LoadedExport } from './types';
 import { buildReferences, CALL_COLUMNS, validateCall } from './validate';
-
-const ALL_REASONS: readonly BadReason[] = [
-  'missing_call_id',
-  'bad_timestamp',
-  'unknown_location',
-  'invalid_timezone',
-  'unknown_campaign',
-  'bad_boolean',
-  'bad_outcome',
-  'bad_channel',
-  'bad_duration',
-  'bad_revenue',
-];
 
 /**
  * Turn the text of the three CSVs into typed records and a bad-row report.
@@ -39,9 +26,17 @@ export function loadExport(texts: { calls: string; campaigns: string; locations:
 
   const rows = callTable.rows.map((raw, index) => validateCall(raw, index + 1, refs));
 
-  const badByReason = Object.fromEntries(ALL_REASONS.map((reason) => [reason, 0])) as Record<BadReason, number>;
+  const badByReason = Object.fromEntries(BAD_REASONS.map((reason) => [reason, 0])) as Record<BadReason, number>;
+  let unparseableUpdatedAt = 0;
+  let unparseableEndedAt = 0;
   for (const row of rows) {
-    if (!row.ok) badByReason[row.bad.reason] += 1;
+    if (row.ok) {
+      if (row.call.updatedAt === null) unparseableUpdatedAt += 1;
+      if (row.call.endedAt === null) unparseableEndedAt += 1;
+    } else {
+      badByReason[row.bad.reason] += 1;
+      if (row.bad.updatedAt === null) unparseableUpdatedAt += 1;
+    }
   }
 
   return {
@@ -50,6 +45,8 @@ export function loadExport(texts: { calls: string; campaigns: string; locations:
     rows,
     rowsRead: rows.length,
     badByReason,
+    unparseableUpdatedAt,
+    unparseableEndedAt,
     referenceIssues: [...campaignIssues, ...locationIssues],
     notes,
   };

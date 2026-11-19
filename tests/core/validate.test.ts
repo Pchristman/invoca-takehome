@@ -50,6 +50,11 @@ describe('validateCall: bad rows', () => {
     ['bad answered', { answered: 'maybe' }, 'bad_boolean'],
     ['empty answered', { answered: '' }, 'bad_boolean'],
     ['bad outcome enum', { outcome: 'won' }, 'bad_outcome'],
+    ['unanswered but booked', { answered: 'false' }, 'inconsistent_outcome'],
+    ['unanswered but qualified_lead', { answered: 'false', outcome: 'qualified_lead' }, 'inconsistent_outcome'],
+    ['unanswered but not_qualified', { answered: 'false', outcome: 'not_qualified' }, 'inconsistent_outcome'],
+    ['answered but missed', { outcome: 'missed' }, 'inconsistent_outcome'],
+    ['answered but voicemail', { outcome: 'voicemail' }, 'inconsistent_outcome'],
     ['bad marketing_channel', { marketing_channel: 'tv' }, 'bad_channel'],
     ['empty marketing_channel', { marketing_channel: '' }, 'bad_channel'],
     ['negative duration', { duration_seconds: '-3' }, 'bad_duration'],
@@ -77,6 +82,11 @@ describe('validateCall: bad rows', () => {
   test('multiple problems report the first failing check in order', () => {
     const result = validateCall(goodRow({ started_at: 'garbage', location_id: 'loc_zzz' }), 1, refs);
     expect(result.ok === false && result.bad.reason).toBe('bad_timestamp');
+  });
+
+  test('a bad outcome is reported before an answered/outcome mismatch', () => {
+    const result = validateCall(goodRow({ answered: 'false', outcome: 'won' }), 1, refs);
+    expect(result.ok === false && result.bad.reason).toBe('bad_outcome');
   });
 
   test('a bad row with an unparseable updated_at carries null', () => {
@@ -128,6 +138,12 @@ describe('validateCall: good rows', () => {
     const c = call({ answered: 'false', outcome: 'missed', revenue_usd: '', agent_id: '' });
     expect(c.agentId).toBeNull();
     expect(c.answered).toBe(false);
+  });
+
+  test.each(['', 'missed', 'voicemail'])('an unanswered call with outcome %j is consistent', (outcome) => {
+    const c = call({ answered: 'false', outcome, revenue_usd: '', agent_id: '' });
+    expect(c.answered).toBe(false);
+    expect(c.outcome).toBe(outcome === '' ? null : outcome);
   });
 
   test('padded values are trimmed', () => {

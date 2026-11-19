@@ -26,6 +26,8 @@ export const CALL_COLUMNS = [
   'updated_at',
 ] as const;
 
+const UNANSWERED_OUTCOMES: readonly string[] = ['missed', 'voicemail'];
+
 export interface References {
   campaignIds: ReadonlySet<string>;
   locations: ReadonlyMap<string, Location>;
@@ -73,6 +75,12 @@ export function validateCall(raw: Record<string, string>, rowNumber: number, ref
   const outcomeText = field('outcome');
   const outcome = parseEnum(outcomeText, OUTCOMES);
   if (outcomeText !== '' && outcome === null) return bad('bad_outcome', `outcome "${outcomeText}" is not a known outcome`);
+
+  // A call can't have been answered with an outcome of missed/voicemail, nor unanswered with a real outcome.
+  // An unanswered call may have an empty outcome.
+  if (outcome !== null && answered === UNANSWERED_OUTCOMES.includes(outcome)) {
+    return bad('inconsistent_outcome', `answered is ${answered} but outcome is "${outcome}"`);
+  }
 
   const channel = parseEnum(field('marketing_channel'), CHANNELS);
   if (channel === null) return bad('bad_channel', `marketing_channel "${field('marketing_channel')}" is not a known channel`);

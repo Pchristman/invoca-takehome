@@ -1,11 +1,11 @@
 import type { Table } from './csv';
-import { isValidTimeZone, parseMoney } from './fields';
-import type { Campaign, Location, ReferenceIssue } from './types';
+import { normalizeTimeZone, parseEnum, parseMoney } from './fields';
+import { CHANNELS, type Campaign, type Location, type ReferenceIssue } from './types';
 
 export const CAMPAIGN_COLUMNS = ['campaign_id', 'name', 'channel', 'daily_budget_usd'] as const;
 export const LOCATION_COLUMNS = ['location_id', 'name', 'timezone'] as const;
 
-/** Skips (and reports) rows with an empty or repeated id or a bad budget. Row numbers are 1-based data rows. */
+/** Skips (and reports) rows with an empty or repeated id, a bad budget or an unknown channel. Row numbers are 1-based data rows. */
 export function parseCampaigns(table: Table): { campaigns: Campaign[]; issues: ReferenceIssue[] } {
   const campaigns: Campaign[] = [];
   const issues: ReferenceIssue[] = [];
@@ -20,18 +20,18 @@ export function parseCampaigns(table: Table): { campaigns: Campaign[]; issues: R
     if (id === '') return skip('empty_id', 'campaign_id is empty');
     if (seen.has(id)) return skip('duplicate_id', `campaign_id "${id}" already appeared; kept the first`);
 
+    // Mark the id as seen even if the rest of the row is bad, so a later row with the same id is a duplicate.
+    seen.add(id);
+
     const budget = parseMoney(row.daily_budget_usd ?? '');
     if (budget === null || budget < 0) {
       return skip('bad_budget', `daily_budget_usd "${row.daily_budget_usd}" is not a non-negative number`);
     }
 
-    seen.add(id);
-    campaigns.push({
-      id,
-      name: (row.name ?? '').trim(),
-      channel: (row.channel ?? '').trim(),
-      dailyBudgetUsd: budget,
-    });
+    const channel = parseEnum(row.channel ?? '', CHANNELS);
+    if (channel === null) return skip('bad_channel', `channel "${row.channel}" is not a known marketing channel`);
+
+    campaigns.push({ id, name: (row.name ?? '').trim(), channel, dailyBudgetUsd: budget });
   });
 
   return { campaigns, issues };
@@ -55,8 +55,9 @@ export function parseLocations(table: Table): { locations: Location[]; issues: R
     if (id === '') return report('empty_id', 'location_id is empty');
     if (seen.has(id)) return report('duplicate_id', `location_id "${id}" already appeared; kept the first`);
 
-    const timezone = (row.timezone ?? '').trim();
-    const timezoneValid = isValidTimeZone(timezone);
+    const canonicalZone = normalizeTimeZone(row.timezone ?? '');
+    const timezone = canonicalZone ?? (row.timezone ?? '').trim();
+    const timezoneValid = canonicalZone !== null;
     if (!timezoneValid) {
       report('invalid_timezone', `timezone "${timezone}" is not a valid IANA zone; calls here will be bad`);
     }

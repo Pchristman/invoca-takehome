@@ -66,6 +66,7 @@ describe('loadExport', () => {
       goodRow({ call_id: 'c8', marketing_channel: 'tv' }),
       goodRow({ call_id: 'c9', duration_seconds: '-3' }),
       goodRow({ call_id: 'c10', revenue_usd: 'abc' }),
+      goodRow({ call_id: 'c11', answered: 'false' }),
     ]);
     const reasons: BadReason[] = [
       'missing_call_id',
@@ -75,6 +76,7 @@ describe('loadExport', () => {
       'unknown_campaign',
       'bad_boolean',
       'bad_outcome',
+      'inconsistent_outcome',
       'bad_channel',
       'bad_duration',
       'bad_revenue',
@@ -83,12 +85,34 @@ describe('loadExport', () => {
     for (const reason of reasons) expect(result.badByReason[reason]).toBe(1);
     const badTotal = result.rows.filter((r) => !r.ok).length;
     expect(Object.values(result.badByReason).reduce((a, b) => a + b, 0)).toBe(badTotal);
-    expect(result.rowsRead).toBe(11);
+    expect(result.rowsRead).toBe(12);
+  });
+
+  test('unparseable updated_at (any row) and ended_at (valid rows) are counted', () => {
+    const result = load([
+      goodRow({ call_id: 'c1', updated_at: 'nope' }),
+      goodRow({ call_id: 'c2', ended_at: '' }),
+      goodRow({ call_id: 'c3', ended_at: 'nope', updated_at: '' }),
+      goodRow({ call_id: 'c4', location_id: 'loc_zzz', updated_at: 'nope' }),
+      goodRow({ call_id: 'c5' }),
+    ]);
+    expect(result.unparseableUpdatedAt).toBe(3);
+    expect(result.unparseableEndedAt).toBe(2);
+  });
+
+  test('a calls file with mixed LF and CRLF endings keeps every row', () => {
+    const lines = callsCsv([goodRow({ call_id: 'c1' }), goodRow({ call_id: 'c2' }), goodRow({ call_id: 'c3' })])
+      .trimEnd()
+      .split('\n');
+    const calls = lines.map((line, i) => line + (i % 2 === 0 ? '\r\n' : '\n')).join('');
+    const result = loadExport({ calls, campaigns: CAMPAIGNS, locations: LOCATIONS });
+    expect(result.rowsRead).toBe(3);
+    expect(result.rows.every((r) => r.ok)).toBe(true);
   });
 
   test('all reasons are present with 0 when nothing is bad', () => {
     const result = load([goodRow()]);
-    expect(Object.values(result.badByReason)).toHaveLength(10);
+    expect(Object.values(result.badByReason)).toHaveLength(11);
     expect(Object.values(result.badByReason).every((n) => n === 0)).toBe(true);
   });
 
