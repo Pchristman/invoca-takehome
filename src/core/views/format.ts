@@ -18,6 +18,12 @@ export function formatUsd(usd: number): string {
   return `${rounded < 0 ? '-' : ''}$${whole.format(Math.abs(rounded))}`;
 }
 
+/** A ratio of dollars to dollars, to the cent: 4.2857 becomes "$4.29". */
+export function formatUsdPerDollar(ratio: number): string {
+  const rounded = roundTo(ratio, 2);
+  return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toFixed(2)}`;
+}
+
 export function formatRate(fraction: number): string {
   return `${oneDecimal.format(roundTo(fraction * 100, 1))}%`;
 }

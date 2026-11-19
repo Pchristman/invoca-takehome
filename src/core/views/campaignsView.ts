@@ -5,7 +5,7 @@ import { THRESHOLDS } from '../thresholds';
 import type { CallStore, Channel, CleanCall } from '../types';
 import { callsPerWeek } from '../weeks';
 import type { WeekBucket } from '../weeks';
-import { makeAction, makeFactSheet } from './facts';
+import { fillPlaceholders, makeAction, makeFactSheet } from './facts';
 import type { Action, Facts } from './facts';
 import { makeViewContext } from './viewContext';
 import type { ViewBase } from './viewContext';
@@ -50,16 +50,17 @@ export interface CampaignsOptions {
 }
 
 const SHIFT_TEMPLATE =
-  'Shift budget from {shift.worst.name} (est. {shift.worst.cost_per_booking} per booking) toward {shift.best.name} (est. {shift.best.cost_per_booking} per booking).';
-const ATTRIBUTION_TEMPLATE =
-  '{attribution.calls} ({attribution.bookings}, {attribution.revenue}) came in on {attribution.numbers} not tied to any campaign. Assign each to a campaign.';
-const FEW_ELIGIBLE_TEMPLATE =
-  'No budget shift is suggested: fewer than two campaigns have a daily budget and at least {no_shift.min_bookings} in this range.';
-const SAME_VALUE_TEMPLATE =
-  'No budget shift is suggested: the eligible campaigns earn the same revenue per budget dollar.';
+  'Shift budget from {shift.worst.name} (est. {shift.worst.value} revenue per budget dollar) toward {shift.best.name} (est. {shift.best.value} revenue per budget dollar).';
+const ATTRIBUTION_START = '{attribution.calls} ({attribution.bookings}, {attribution.revenue}) came in on ';
+const ATTRIBUTION_END = ' not tied to any campaign. Assign each to a campaign.';
+const FEW_ELIGIBLE_REASON =
+  'fewer than two campaigns have a daily budget and at least {no_shift.min_bookings} in this range.';
+const SAME_VALUE_REASON = 'the eligible campaigns earn the same revenue per budget dollar.';
+const NO_SHIFT_PREFIX = 'No budget shift is suggested: ';
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const BOOKING = ['booking', 'bookings'] as const;
+const BLANK_NUMBER = ['with no tracking number', 'with no tracking number'] as const;
 
 export function buildCampaigns(
   store: CallStore,
@@ -108,42 +109,53 @@ export function buildCampaigns(
   // Actions, in order. The "no shift" sentence is built whenever nothing is marked, because its text is the reason.
   let shift: Action | null = null;
   let noShift: Action | null = null;
+  let noShiftReason: string | null = null;
   if (best && worst) {
     shift = makeAction(
       'shift_budget',
       SHIFT_TEMPLATE,
       {
         'shift.worst.name': { kind: 'name', value: worst.name },
-        'shift.worst.cost_per_booking': { kind: 'usd', value: worst.estimatedCostPerBookingUsd! },
+        'shift.worst.value': { kind: 'usd_per_dollar', value: worst.revenuePerBudgetDollar! },
         'shift.best.name': { kind: 'name', value: best.name },
-        'shift.best.cost_per_booking': { kind: 'usd', value: best.estimatedCostPerBookingUsd! },
+        'shift.best.value': { kind: 'usd_per_dollar', value: best.revenuePerBudgetDollar! },
       },
       { view: 'campaigns' },
     );
   } else if (picked.eligible < 2) {
+    noShiftReason = FEW_ELIGIBLE_REASON;
     noShift = makeAction(
       'no_budget_shift',
-      FEW_ELIGIBLE_TEMPLATE,
+      NO_SHIFT_PREFIX + FEW_ELIGIBLE_REASON,
       { 'no_shift.min_bookings': { kind: 'count', value: THRESHOLDS.MIN_BOOKINGS_TO_RANK, noun: BOOKING } },
       { view: 'campaigns' },
     );
   } else {
-    noShift = makeAction('no_budget_shift', SAME_VALUE_TEMPLATE, {}, { view: 'campaigns' });
+    noShiftReason = SAME_VALUE_REASON;
+    noShift = makeAction('no_budget_shift', NO_SHIFT_PREFIX + SAME_VALUE_REASON, {}, { view: 'campaigns' });
   }
 
   let fixAttribution: Action | null = null;
   if (unattributed) {
+    // Calls with a blank tracking number are their own clause, so the count of numbers never reads as 0.
+    const named = unattributed.trackingNumbers.length;
+    const blank = unattributed.calls - unattributed.trackingNumbers.reduce((sum, n) => sum + n.calls, 0);
+    const clauses = [
+      ...(named > 0 || blank === 0 ? ['{attribution.numbers}'] : []),
+      ...(blank > 0 ? ['{attribution.blank}'] : []),
+    ];
+    const facts: Facts = {};
+    if (named > 0 || blank === 0) {
+      facts['attribution.numbers'] = { kind: 'count', value: named, noun: ['tracking number', 'tracking numbers'] };
+    }
+    if (blank > 0) facts['attribution.blank'] = { kind: 'count', value: blank, noun: BLANK_NUMBER };
     fixAttribution = makeAction(
       'fix_attribution',
-      ATTRIBUTION_TEMPLATE,
+      ATTRIBUTION_START + clauses.join(' and ') + ATTRIBUTION_END,
       {
+        ...facts,
         'attribution.calls': { kind: 'count', value: unattributed.calls, noun: ['call', 'calls'] },
         'attribution.bookings': { kind: 'count', value: unattributed.bookings, noun: BOOKING },
-        'attribution.numbers': {
-          kind: 'count',
-          value: unattributed.trackingNumbers.length,
-          noun: ['tracking number', 'tracking numbers'],
-        },
         'attribution.revenue': { kind: 'usd', value: unattributed.revenueUsd },
       },
       { view: 'campaigns' },
@@ -155,11 +167,11 @@ export function buildCampaigns(
   if (fixAttribution) actions.push(fixAttribution);
   if (actions.length === 0) actions.push(noShift!); // never empty
 
-  // The reason is the sentence after the colon, capitalised.
+  // The reason is the same constant the sentence is built from, capitalised.
   let reason: string | null = null;
-  if (noShift) {
-    const afterColon = noShift.text.slice(noShift.text.indexOf(': ') + 2);
-    reason = afterColon.charAt(0).toUpperCase() + afterColon.slice(1);
+  if (noShift && noShiftReason) {
+    const filled = fillPlaceholders(noShiftReason, noShift.facts);
+    reason = filled.charAt(0).toUpperCase() + filled.slice(1);
   }
 
   const facts: Facts = Object.assign({}, ...actions.map((a) => a.facts));

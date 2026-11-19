@@ -6,7 +6,7 @@ import { callsInRange } from '../../src/core/metrics';
 import { dataSpan, resolveRange } from '../../src/core/ranges';
 import type { RangeSpec } from '../../src/core/ranges';
 import { readExportFromDir } from '../../src/node/readDataDir';
-import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview, formatUsd } from '../../src/core/views';
+import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview, formatUsdPerDollar } from '../../src/core/views';
 import type { Action } from '../../src/core/views';
 import { expectAllFinite } from '../core/views/fixtures';
 
@@ -54,7 +54,7 @@ describe('shipped export, views over all data', () => {
     for (const row of campaigns.rows.filter((r) => r.isBest || r.isWorst)) {
       const name = store.campaigns.find((c) => c.id === row.campaignId)!.name;
       expect(shift.text).toContain(name);
-      expect(shift.text).toContain(formatUsd(row.estimatedCostPerBookingUsd!));
+      expect(shift.text).toContain(`${formatUsdPerDollar(row.revenuePerBudgetDollar!)} revenue per budget dollar`);
     }
   });
 

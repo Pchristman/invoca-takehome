@@ -18,5 +18,6 @@ export {
   formatPointsChange,
   formatRate,
   formatUsd,
+  formatUsdPerDollar,
   formatWeekday,
 } from './format';

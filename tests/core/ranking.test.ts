@@ -72,6 +72,17 @@ describe('pickBestWorst', () => {
     expect(result.best?.campaignId).toBe('cmp_b');
   });
 
+  test('values that differ only by floating-point noise are the same value', () => {
+    const result = pickBestWorst([perf('cmp_a', 10, 600, 0.1 + 0.2), perf('cmp_b', 10, 600, 0.3)]);
+    expect(result).toEqual({ eligible: 2, best: null, worst: null });
+  });
+
+  test('a campaign with no bookings is never eligible, even if minBookings is 0', () => {
+    const result = pickBestWorst([A, B, perf('cmp_z', 0, 600, 0)], 0);
+    expect(result.eligible).toBe(2);
+    expect(result.worst?.campaignId).toBe('cmp_a');
+  });
+
   test('minBookings can be overridden', () => {
     const tooFew = perf('cmp_d', 4, 600, 20);
     expect(pickBestWorst([A, B, C, tooFew], 1).best?.campaignId).toBe('cmp_d');

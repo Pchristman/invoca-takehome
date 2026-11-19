@@ -20,6 +20,11 @@ function byId(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** Equal to the cent, so floating-point noise never makes a spread. */
+function sameValue(a: number, b: number): boolean {
+  return Math.round(a * 100) === Math.round(b * 100);
+}
+
 /**
  * Best and worst campaign by revenue per budget dollar. Rows are real campaigns only (the caller leaves
  * out "Unattributed"). A campaign needs a budget above $0 and at least `minBookings` bookings. Fewer than
@@ -30,11 +35,13 @@ export function pickBestWorst(
   minBookings: number = THRESHOLDS.MIN_BOOKINGS_TO_RANK,
 ): BestWorst {
   // Highest value first; equal values by the lower campaign id, so the order never depends on the input order.
+  // At least one booking, whatever minBookings says: a campaign with none has no cost per booking to quote.
+  const needed = Math.max(minBookings, 1);
   const eligible = rows
     .filter(
       (row) =>
         row.estimatedSpendUsd > 0 &&
-        row.bookings >= minBookings &&
+        row.bookings >= needed &&
         row.revenuePerBudgetDollar !== null &&
         Number.isFinite(row.revenuePerBudgetDollar),
     )
@@ -42,11 +49,11 @@ export function pickBestWorst(
 
   const best = eligible[0];
   const lowest = eligible[eligible.length - 1];
-  if (eligible.length < 2 || best!.revenuePerBudgetDollar === lowest!.revenuePerBudgetDollar) {
+  if (eligible.length < 2 || sameValue(best!.revenuePerBudgetDollar!, lowest!.revenuePerBudgetDollar!)) {
     return { eligible: eligible.length, best: null, worst: null };
   }
   // Ties for worst also go to the lower campaign id: the first row at the lowest value in this order.
-  const worst = eligible.find((row) => row.revenuePerBudgetDollar === lowest!.revenuePerBudgetDollar)!;
+  const worst = eligible.find((row) => sameValue(row.revenuePerBudgetDollar!, lowest!.revenuePerBudgetDollar!))!;
   return { eligible: eligible.length, best: best!, worst };
 }
 

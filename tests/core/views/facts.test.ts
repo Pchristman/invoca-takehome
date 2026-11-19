@@ -8,6 +8,8 @@ describe('formatFact', () => {
     expect(formatFact({ kind: 'name', value: 'Alpha' })).toBe('Alpha');
     expect(formatFact({ kind: 'count', value: 1, noun: ['call', 'calls'] })).toBe('1 call');
     expect(formatFact({ kind: 'usd', value: 12 })).toBe('$12');
+    expect(formatFact({ kind: 'usd_per_dollar', value: 4.2857 })).toBe('$4.29');
+    expect(formatFact({ kind: 'usd_per_dollar', value: 2 })).toBe('$2.00');
     expect(formatFact({ kind: 'hour', value: 9 })).toBe('09:00');
     expect(formatFact({ kind: 'percent_change', value: 8.2235 })).toBe('+8.2%');
     expect(formatFact({ kind: 'points_change', value: 5 })).toBe('+5.0 points');
@@ -15,6 +17,7 @@ describe('formatFact', () => {
   test('throws on non-finite numbers', () => {
     expect(() => formatFact({ kind: 'usd', value: NaN })).toThrow();
     expect(() => formatFact({ kind: 'rate', value: Infinity })).toThrow();
+    expect(() => formatFact({ kind: 'usd_per_dollar', value: NaN })).toThrow();
   });
 });
 
@@ -27,6 +30,11 @@ describe('fillPlaceholders', () => {
   test('unknown keys throw and are named', () => {
     expect(() => fillPlaceholders('{nope}', facts)).toThrow(/nope/);
     expect(() => fillPlaceholders('{one} {two}', facts)).toThrow(/one.*two|two.*one/);
+  });
+  test('malformed placeholders throw and are named', () => {
+    expect(() => fillPlaceholders('Call {Office} now', facts)).toThrow(/\{Office\}/);
+    expect(() => fillPlaceholders('{a x}', facts)).toThrow(/a x/);
+    expect(() => fillPlaceholders('{}', facts)).toThrow(/Malformed/);
   });
 });
 

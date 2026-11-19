@@ -54,10 +54,11 @@ const store = (calls: CleanCall[], withAttribution = true) =>
   makeStore(withAttribution ? [...calls, ...unattributedCalls()] : calls, { campaigns, locations });
 
 describe('buildCampaigns', () => {
-  it('rows are every campaign, ranked by calls, ties by id', () => {
-    const extra = [...campaigns, campaign('cmp_e', 'Epsilon', 'social', 5)];
-    const view = buildCampaigns(makeStore(mainCalls(), { campaigns: extra, locations }), fourteen);
+  it('rows are every campaign, ranked by calls, ties by id, whatever order the store lists them', () => {
+    const scrambled = [campaigns[3]!, campaigns[2]!, campaigns[0]!, campaign('cmp_e', 'Epsilon', 'social', 5), campaigns[1]!];
+    const view = buildCampaigns(makeStore(mainCalls(), { campaigns: scrambled, locations }), fourteen);
     expect(view.rows.map((r) => r.campaignId)).toEqual(['cmp_a', 'cmp_b', 'cmp_c', 'cmp_d', 'cmp_e']);
+    expect(view.weekly!.campaignId).toBe('cmp_a');
     const last = view.rows[4]!;
     expect(last.calls).toBe(0);
     expect(last.bookingRate).toBeNull();
@@ -101,10 +102,39 @@ describe('buildCampaigns', () => {
     expect(view.bestWorst).toEqual({ eligible: 2, reason: null });
   });
 
-  it('the shift action names both campaigns with their cost per booking', () => {
+  it('the shift sentence quotes the ranking metric even when cost per booking disagrees', () => {
+    const two = [campaign('cmp_a', 'Best', 'social', 10), campaign('cmp_b', 'Worst', 'display', 10)];
+    const calls = [...campaignCalls('cmp_a', 5, 5, 1000), ...campaignCalls('cmp_b', 10, 10, 50)];
+    const view = buildCampaigns(makeStore(calls, { campaigns: two, locations }), fourteen);
+    expect(view.rows.find((r) => r.isBest)!.name).toBe('Best');
+    expect(view.rows.find((r) => r.isWorst)!.name).toBe('Worst');
+    expect(view.actions[0]!.text).toBe(
+      'Shift budget from Worst (est. $3.57 revenue per budget dollar) toward Best (est. $35.71 revenue per budget dollar).',
+    );
+  });
+
+  it('calls with a blank tracking number are counted on their own, never as 0 numbers', () => {
+    const blank = (n: number) =>
+      Array.from({ length: n }, () =>
+        makeCall({ campaignId: null, unattributed: true, trackingNumber: '', revenueUsd: 0, booked: false, outcome: 'not_qualified', localDate: '2026-09-05' }),
+      );
+    const text = (calls: CleanCall[]) =>
+      buildCampaigns(makeStore(calls, { campaigns, locations }), fourteen).actions.find((a) => a.kind === 'fix_attribution')!.text;
+    expect(text(blank(2))).toBe(
+      '2 calls (0 bookings, $0) came in on 2 with no tracking number not tied to any campaign. Assign each to a campaign.',
+    );
+    expect(text(blank(1))).toBe(
+      '1 call (0 bookings, $0) came in on 1 with no tracking number not tied to any campaign. Assign each to a campaign.',
+    );
+    expect(text([...blank(1), ...unattributedCalls()])).toBe(
+      '4 calls (2 bookings, $150) came in on 2 tracking numbers and 1 with no tracking number not tied to any campaign. Assign each to a campaign.',
+    );
+  });
+
+  it('the shift action names both campaigns with their revenue per budget dollar', () => {
     const view = buildCampaigns(store(mainCalls(), false), fourteen);
     const action = view.actions[0]!;
-    expect(action.text).toBe('Shift budget from Beta (est. $56 per booking) toward Alpha (est. $23 per booking).');
+    expect(action.text).toBe('Shift budget from Beta (est. $0.89 revenue per budget dollar) toward Alpha (est. $4.29 revenue per budget dollar).');
     expect(action.kind).toBe('shift_budget');
     expect(action.actionable).toBe(true);
     expect(action.link).toEqual({ view: 'campaigns' });
