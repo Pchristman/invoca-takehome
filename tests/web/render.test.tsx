@@ -2,6 +2,7 @@
 // Covers what a model test cannot: that the component prints the model, and that dev-only things are absent.
 // Data comes from the real view builders (tests/web/fixtures.ts). Where a fixture lacks a case, the test says
 // how it builds it: another store, or a hand-edited copy of real JSON view data.
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type {
@@ -708,9 +709,23 @@ describe('Heatmap', () => {
   });
 
   it('the busiest cell is level 4 and prints its count', () => {
-    const html = render('office');
-    expect(html).toMatch(/<td class="heat-cell heat-4" data-level="4"[^>]*>\d+<span class="visually-hidden">/);
-    expect(count(html, 'data-level="4"')).toBeGreaterThanOrEqual(1);
+    // Hand-set counts: the max (8) is in one cell, a quarter of it (2) in another.
+    const first = view.heatmap.byOffice[0]!;
+    const hours = first.hours.map(() => 0);
+    hours[10] = 8;
+    hours[11] = 2;
+    const source = { ...view.heatmap, byOffice: [{ ...first, hours, total: 10 }] };
+    const cellsOf = (html: string) =>
+      [...html.matchAll(/<td class="heat-cell heat-(\d)"[^>]*>(\d*)<span/g)].map((m) => ({ level: Number(m[1]), text: m[2] }));
+    const cells = cellsOf(render('office', source));
+    expect(cells.find((c) => c.text === '8')?.level).toBe(4);
+    expect(cells.find((c) => c.text === '2')?.level).toBeLessThan(4);
+    expect(cells.filter((c) => c.level === 4)).toHaveLength(1);
+    // And on the real data, every cell holding the maximum count is level 4.
+    const max = Math.max(...view.heatmap.byOffice.flatMap((r) => r.hours));
+    const real = cellsOf(render('office')).filter((c) => c.text === String(max));
+    expect(real.length).toBeGreaterThan(0);
+    expect(real.every((c) => c.level === 4)).toBe(true);
   });
 
   it('the mode buttons are pressed to match the mode', () => {
@@ -863,6 +878,45 @@ describe('MissedCallsView', () => {
     // Server markup marks nothing when no option matches; React then picks the first option in the browser.
     expect(options.filter((o) => o.includes('selected=""'))).toEqual([]);
     expect(options[0]).toContain('All offices');
+  });
+
+  it('a very long office name is whole and escaped, in a picker that cannot widen the page', () => {
+    const long = 'N'.repeat(300);
+    const html = renderToStaticMarkup(
+      <MissedCallsScreen
+        view={real}
+        state={plainState}
+        span={span}
+        offices={[{ id: 'loc_x', name: long }, { id: 'loc_y', name: '<img src=x onerror=alert(1)>' }]}
+        onSelectOffice={noop}
+      />,
+    );
+    expect(html).toContain(`>${long}</option>`);
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toContain('<img');
+    expect(html).toContain('class="button office-select"');
+    const css = readFileSync('src/web/styles/base.css', 'utf8');
+    expect(css).toMatch(/\.office-select\s*\{[^}]*max-width:\s*100%/);
+  });
+
+  it('hides Download CSV while busy, because the link would fetch the other office', () => {
+    expect(render(real, base, true)).not.toContain('Download CSV');
+    expect(render(real, base, false)).toContain('Download CSV');
+  });
+
+  it('prints the lost value once, with est. only in the heading', () => {
+    const html = render(real);
+    const start = html.indexOf('<h2>Est. lost value</h2>');
+    const section = html.slice(start, html.indexOf('</section>', start));
+    expect(section).toContain(`<strong>${esc(missedCallsModel(real, span).lostValue.value)}</strong>`);
+    expect(section.toLowerCase().split('est.').length - 1).toBe(1);
+  });
+
+  it('marks the estimate column from the model flag', () => {
+    const html = render(real);
+    const heads = html.match(/<th [^>]*>[^<]*<\/th>/g) ?? [];
+    const marked = heads.filter((h) => h.includes(' est"')).map((h) => h.replace(/<[^>]*>/g, ''));
+    expect(marked).toEqual(['Est. value']);
   });
 
   it('busy shows Updating… and aria-busy, and idle shows neither', () => {

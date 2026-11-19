@@ -1,5 +1,12 @@
 import type { MissedCallsModel } from '../models/missedCallsModel';
 
+type Column = MissedCallsModel['callbacks']['columns'][number];
+
+function cellClass(column: Column): string | undefined {
+  const names = [column.numeric ? 'num' : '', column.estimate ? 'est' : ''].filter((n) => n !== '');
+  return names.length === 0 ? undefined : names.join(' ');
+}
+
 export function CallbackTable({
   model,
   onPage,
@@ -16,7 +23,7 @@ export function CallbackTable({
           <thead>
             <tr>
               {model.columns.map((column) => (
-                <th key={column.label} scope="col" className={column.numeric ? 'num' : undefined}>
+                <th key={column.label} scope="col" className={cellClass(column)} title={column.estimate ? 'Estimate: see how it works below' : undefined}>
                   {column.label}
                 </th>
               ))}
@@ -26,7 +33,7 @@ export function CallbackTable({
             {model.rows.map((row) => (
               <tr key={row.key}>
                 {row.cells.map((text, i) => (
-                  <td key={model.columns[i]!.label} className={model.columns[i]!.numeric ? 'num' : undefined}>
+                  <td key={model.columns[i]!.label} className={cellClass(model.columns[i]!)}>
                     {text}
                   </td>
                 ))}
