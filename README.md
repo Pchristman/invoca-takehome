@@ -10,8 +10,8 @@ A small local web product that helps a marketing manager track inbound call perf
 | `npm test` | available (vitest) |
 | `npm run typecheck` | available |
 | `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
-| `npm start` | not built yet (Phase 6/7) |
-| `npm run dev` | not built yet (Phase 6/7) |
+| `npm start` | available; serves the JSON API and, once Phase 7 builds it, the web app; reads `.env` (`PORT`, default 3000; `DATA_DIR`) |
+| `npm run dev` | not built yet |
 
 Copy `.env.example` to `.env` to configure. Never commit `.env`.
 
@@ -39,3 +39,25 @@ Things to know when reading it:
 - Its cmp_06 has 33 bookings against 27 in the shipped export: the fade plants calls with no bookings, but the other synthetic calls copy from every campaign.
 
 The default stays the shipped export. To use the extended one, set `DATA_DIR=data/extended`. To regenerate it (same seed, same bytes), run `npm run generate:extended`; the script and its settings are in `scripts/generate-extended.ts`.
+
+## API
+
+`npm start` loads the export once and serves JSON on **127.0.0.1 only** (the callback list carries caller hashes). A missing folder, file or column, a bad `PORT` or a busy port prints one `Cannot start: ...` line and exits 1. Every route is GET only.
+
+| Route | Query parameters | 200 body |
+| --- | --- | --- |
+| `/api/meta` | none | data span, campaign and office lists, presets, skipped rows, load notes |
+| `/api/overview` | range, compare | overview view |
+| `/api/campaigns` | range, compare, `campaign` | campaigns view |
+| `/api/locations` | range, compare | locations view |
+| `/api/missed-calls` | range, compare, `location` | missed-calls view |
+| `/api/missed-calls/callbacks.csv` | range, compare, `location` | CSV file |
+| `/api/takeaway/:view` | as that view | template takeaway text |
+| `/api/data-notes` | none | data notes (always available) |
+
+- **Range:** `range=last7|last28|all`, or `start=YYYY-MM-DD&end=YYYY-MM-DD`. Neither given means `last28`.
+- **Compare (optional):** `compareStart` and `compareEnd` together.
+- Parameters a route does not use are ignored.
+- **Errors** are JSON: `{ "error": { "code", "message", "field"? } }`. Status 400 for a bad parameter or unknown campaign or office, 409 `no_data` for an empty export, 404 `not_found`, 500 `internal` (no details).
+- **CSV:** UTF-8 with a byte-order mark and CRLF line ends, so a spreadsheet opens non-ASCII names correctly. A cell starting with `=`, `+`, `-`, `@`, tab or CR gets a leading `'` so a spreadsheet cannot run it as a formula; tracking numbers therefore appear as `'+1-...`.
+- Phase 7 adds the built web app at `/`.
