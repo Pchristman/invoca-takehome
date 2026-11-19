@@ -9,10 +9,11 @@ import { DEFAULT_PRESET, PRESETS, statusFor } from './api';
 import type { AiStatus, ApiError, DataNotesResponse, Meta, TakeawayResponse } from './api';
 import { callbacksToCsv } from './csv';
 import { parseViewQuery } from './params';
+import { serveWebApp } from './staticFiles';
 import type { Parsed, ViewQuery, ViewQueryWants } from './params';
 
 export interface AppOptions {
-  /** The built web app's folder (used from Task 5). */
+  /** The built web app's folder (defaults to Vite's output folder). */
   webRoot?: string;
 }
 
@@ -39,7 +40,7 @@ const AI_OFF: AiStatus = { status: 'off', spendUsd: 0, cacheHits: 0, checkerFail
 
 const INTERNAL_MESSAGE = 'Something went wrong on the server.';
 
-export function createApp(store: CallStore, _options: AppOptions = {}): Hono {
+export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   const app = new Hono();
   const span: DateRange | null = dataSpan(store.calls);
 
@@ -106,6 +107,10 @@ export function createApp(store: CallStore, _options: AppOptions = {}): Hono {
       'Content-Disposition': `attachment; filename="callbacks-${view.range.start}-to-${view.range.end}.csv"`,
     });
   });
+
+  // Last, and never for the API: an unknown /api/ path must stay a JSON 404, not the app.
+  const webApp = serveWebApp(options.webRoot ?? 'dist');
+  app.use('*', async (c, next) => (c.req.path.startsWith('/api/') ? next() : webApp(c, next)));
 
   app.notFound((c) => {
     if (c.req.path.startsWith('/api/')) {
