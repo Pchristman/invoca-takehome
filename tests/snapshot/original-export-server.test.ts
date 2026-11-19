@@ -104,11 +104,14 @@ describe('shipped export over HTTP', () => {
     const lines = new TextDecoder('utf-8', { ignoreBOM: true })
       .decode(bytes)
       .slice(1)
-      .split(/\r?\n/)
-      .filter((line) => line !== '');
+      .split('\r\n');
+    // Every line, the last included, ends CRLF, so splitting on CRLF leaves one empty piece at the end.
+    expect(lines.pop()).toBe('');
+    expect(lines.some((line) => line.includes('\n') || line.includes('\r'))).toBe(false);
+    expect(lines[0]).toBe(
+      'caller_hash,unanswered_attempts,last_attempt_local,office,campaign,tracking_number,estimated_value_usd',
+    );
     expect(lines.length - 1).toBe(body.callbacks.rows.length);
-    expect(lines[0]).toBe(lines[0]!.trim());
-    expect(lines[0]!.length).toBeGreaterThan(0);
   });
 
   it('a takeaway for each view', async () => {
