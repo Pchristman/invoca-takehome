@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   isValidTimeZone,
+  normalizeTimeZone,
   parseBoolean,
   parseEnum,
   parseInteger,
@@ -91,7 +92,35 @@ describe('isValidTimeZone', () => {
   test.each(['America/Phoenix', 'America/New_York', 'UTC'])('accepts %s', (tz) => {
     expect(isValidTimeZone(tz)).toBe(true);
   });
-  test.each(['Mars/Olympus', '', '   '])('rejects %j', (tz) => {
+  test.each(['Mars/Olympus', '', '   ', '+05:00', '-0700', '+05', '-08:00'])('rejects %j', (tz) => {
     expect(isValidTimeZone(tz)).toBe(false);
+  });
+  test('accepts tzdb aliases (they are IANA identifiers)', () => {
+    expect(isValidTimeZone('EST')).toBe(true);
+    expect(isValidTimeZone('US/Arizona')).toBe(true);
+  });
+});
+
+describe('normalizeTimeZone', () => {
+  test('returns the canonical IANA spelling', () => {
+    expect(normalizeTimeZone('america/phoenix')).toBe('America/Phoenix');
+    expect(normalizeTimeZone(' America/Denver ')).toBe('America/Denver');
+  });
+  test('returns null for offsets and unknown names', () => {
+    expect(normalizeTimeZone('+05:00')).toBeNull();
+    expect(normalizeTimeZone('Mars/Olympus')).toBeNull();
+    expect(normalizeTimeZone('')).toBeNull();
+  });
+});
+
+describe('negative zero and huge numbers', () => {
+  test('-0 parses as plain 0, not negative zero', () => {
+    expect(Object.is(parseInteger('-0'), 0)).toBe(true);
+    expect(Object.is(parseMoney('-0'), 0)).toBe(true);
+    expect(Object.is(parseMoney('-0.00'), 0)).toBe(true);
+  });
+  test('numbers too large to be exact are rejected', () => {
+    expect(parseInteger('99999999999999999999')).toBeNull();
+    expect(parseMoney('9'.repeat(400))).toBeNull();
   });
 });

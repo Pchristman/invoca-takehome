@@ -25,23 +25,38 @@ export function parseEnum<T extends string>(s: string, allowed: readonly T[]): T
   return allowed.find((value) => value === text) ?? null;
 }
 
+/** Whole numbers only, and only ones a JS number holds exactly. `-0` becomes plain 0. */
 export function parseInteger(s: string): number | null {
   const text = s.trim();
-  return /^-?\d+$/.test(text) ? Number(text) : null;
+  if (!/^-?\d+$/.test(text)) return null;
+  const n = Number(text);
+  return Number.isSafeInteger(n) ? n + 0 : null;
 }
 
-/** Plain decimal such as `432.50`. No currency symbol, thousands separator or exponent. */
+/** Plain decimal such as `432.50`. No currency symbol, thousands separator or exponent. `-0` becomes plain 0. */
 export function parseMoney(s: string): number | null {
   const text = s.trim();
-  return /^-?\d+(\.\d+)?$/.test(text) ? Number(text) : null;
+  if (!/^-?\d+(\.\d+)?$/.test(text)) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n + 0 : null;
+}
+
+/**
+ * The canonical IANA name for a time zone, or null. Intl also accepts UTC offsets such as "+05:00"
+ * (no daylight saving, not an IANA zone), so those are rejected. tzdb aliases such as "EST" are
+ * IANA identifiers and are accepted.
+ */
+export function normalizeTimeZone(tz: string): string | null {
+  const name = tz.trim();
+  if (name === '' || /^[+-]/.test(name)) return null;
+  try {
+    const canonical = new Intl.DateTimeFormat('en-US', { timeZone: name }).resolvedOptions().timeZone;
+    return /^[+-]/.test(canonical) ? null : canonical;
+  } catch {
+    return null;
+  }
 }
 
 export function isValidTimeZone(tz: string): boolean {
-  if (tz.trim() === '') return false;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz.trim() });
-    return true;
-  } catch {
-    return false;
-  }
+  return normalizeTimeZone(tz) !== null;
 }
