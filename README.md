@@ -10,8 +10,9 @@ A small local web product that helps a marketing manager track inbound call perf
 | `npm test` | available (vitest) |
 | `npm run typecheck` | available |
 | `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
-| `npm start` | available; serves the JSON API and, once Phase 7 builds it, the web app; reads `.env` (only this command does) (`PORT`, default 3000; `DATA_DIR`) |
-| `npm run dev` | not built yet |
+| `npm run build` | available; builds the web app into `dist/` |
+| `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (only this command does) (`PORT`, default 3000; `DATA_DIR`) |
+| `npm run dev` | available; the server (restarting on change) and Vite with hot reload together, `/api` proxied to the server; the page is at the address Vite prints on start |
 
 Copy `.env.example` to `.env` to configure. Never commit `.env`.
 
@@ -60,4 +61,19 @@ The default stays the shipped export. To use the extended one, set `DATA_DIR=dat
 - Parameters a route does not use are ignored.
 - **Errors** are JSON: `{ "error": { "code", "message", "field"? } }`. Status 400 for a bad parameter or unknown campaign or office, 409 `no_data` for an empty export, 404 `not_found`, 500 `internal` (no details).
 - **CSV:** UTF-8 with a byte-order mark and CRLF line ends, so a spreadsheet opens non-ASCII names correctly. A cell starting with `=`, `+`, `-`, `@`, tab or CR gets a leading `'` so a spreadsheet cannot run it as a formula; tracking numbers therefore appear as `'+1-...`.
-- Phase 7 adds the built web app at `/`.
+
+## Web app
+
+Open `http://127.0.0.1:3000/` after `npm start`. The nav has four views: Overview, Campaigns, Locations and Missed calls. Locations and Missed calls show "Not built yet" for now (Phase 8).
+
+The URL holds the screen, so a link, a refresh or the back button reproduces it:
+
+| Parameter | Meaning |
+| --- | --- |
+| `view` | `campaigns`, `locations` or `missed-calls`; absent means Overview |
+| `range` | `last7`, `last28` or `all` |
+| `start`, `end` | a custom range, `YYYY-MM-DD` |
+| `campaign` | the campaign shown in the Campaigns weekly chart |
+| `dev` | add `?dev` to the URL to open the Data notes panel |
+
+To open the extended export: `DATA_DIR=data/extended npm start`.
