@@ -4,18 +4,23 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/server/app';
 import { get, serverFixture, tempDir } from './helpers';
 
+let tmp: string;
 let webRoot: string;
+const SECRET = 'sentinel-7f3a91c2-not-for-the-web';
 
 beforeEach(() => {
-  webRoot = tempDir();
-  mkdirSync(join(webRoot, 'assets'));
+  // The web root is <tmp>/web; a secret sits beside it, one level up, where a path escape would find it.
+  tmp = tempDir();
+  webRoot = join(tmp, 'web');
+  mkdirSync(join(webRoot, 'assets'), { recursive: true });
+  writeFileSync(join(tmp, 'secret.txt'), SECRET);
   writeFileSync(join(webRoot, 'index.html'), '<html>app</html>');
   writeFileSync(join(webRoot, 'assets', 'app.js'), 'console.log(1)');
   writeFileSync(join(webRoot, 'assets', 'app.css'), 'body{}');
 });
 
 afterEach(() => {
-  rmSync(webRoot, { recursive: true, force: true });
+  rmSync(tmp, { recursive: true, force: true });
 });
 
 const appWithWeb = () => createApp(serverFixture(), { webRoot });
@@ -54,10 +59,11 @@ describe('serving the built web app', () => {
     expect(meta.json).toHaveProperty('hasData');
   });
 
-  it.each(['/../package.json', '/%2e%2e/package.json', '/..%2fpackage.json', '/..%5cpackage.json', '/assets/../../package.json'])(
+  it.each(['/../secret.txt', '/%2e%2e/secret.txt', '/..%2fsecret.txt', '/..%5csecret.txt', '/assets/..%2f..%2fsecret.txt', '/..%2f..%2f..%2fpackage.json'])(
     'a path outside the web folder is never served: %s',
     async (path) => {
       const result = await get(appWithWeb(), path);
+      expect(result.text).not.toContain(SECRET);
       expect(result.text).not.toContain('"name": "invoca"');
     },
   );
