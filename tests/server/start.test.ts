@@ -1,11 +1,15 @@
 import { copyFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LoadError } from '../../src/core/errors';
 import { ConfigError, parsePort } from '../../src/server/config';
 import { start } from '../../src/server/start';
 import type { RunningServer } from '../../src/server/start';
+import { loadDotEnv } from '../../src/node/env';
 import { tempDir } from './helpers';
+
+// start() must not read a .env file: only the npm start entry does. The spy keeps this test off the real .env.
+vi.mock('../../src/node/env', () => ({ loadDotEnv: vi.fn() }));
 
 const SHIPPED = 'tests/fixtures/original-export';
 const HEADER =
@@ -146,5 +150,12 @@ describe('parsePort', () => {
     } catch (error) {
       expect((error as Error).message.length).toBeLessThan(300);
     }
+  });
+});
+
+describe('start and .env', () => {
+  it('does not read a .env file (the npm start entry does that)', async () => {
+    await startServer(SHIPPED);
+    expect(loadDotEnv).not.toHaveBeenCalled();
   });
 });

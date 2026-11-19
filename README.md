@@ -10,7 +10,7 @@ A small local web product that helps a marketing manager track inbound call perf
 | `npm test` | available (vitest) |
 | `npm run typecheck` | available |
 | `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
-| `npm start` | available; serves the JSON API and, once Phase 7 builds it, the web app; reads `.env` (`PORT`, default 3000; `DATA_DIR`) |
+| `npm start` | available; serves the JSON API and, once Phase 7 builds it, the web app; reads `.env` (only this command does) (`PORT`, default 3000; `DATA_DIR`) |
 | `npm run dev` | not built yet |
 
 Copy `.env.example` to `.env` to configure. Never commit `.env`.

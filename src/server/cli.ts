@@ -1,10 +1,12 @@
 import { LoadError } from '../core/errors';
 import { dataSpan } from '../core/ranges';
+import { loadDotEnv } from '../node/env';
 import { ConfigError } from './config';
 import { start } from './start';
 
 /** The `npm start` entry: print where it is serving, or one "Cannot start" line and exit 1. */
 async function main(): Promise<void> {
+  loadDotEnv(); // the shell still wins
   try {
     const server = await start();
     const { calls, dataNotes } = server.store;

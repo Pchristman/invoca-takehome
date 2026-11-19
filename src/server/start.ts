@@ -2,7 +2,6 @@ import { serve } from '@hono/node-server';
 import type { AddressInfo } from 'node:net';
 import { cleanExport } from '../core/clean';
 import type { CallStore } from '../core/types';
-import { loadDotEnv } from '../node/env';
 import { readExportFromDir } from '../node/readDataDir';
 import { createApp } from './app';
 import { ConfigError, parsePort } from './config';
@@ -25,9 +24,8 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
-/** The only code that reads files, opens a port or touches process.env. Throws LoadError (data) or ConfigError (port). */
+/** The only code that reads the export, opens a port or reads PORT. It does not read .env (cli.ts does). Throws LoadError (data) or ConfigError (port). */
 export async function start(options: StartOptions = {}): Promise<RunningServer> {
-  loadDotEnv(); // the shell still wins
   const requested = options.port ?? parsePort(process.env.PORT);
   const store = cleanExport(readExportFromDir(options.dataDir));
   const app = createApp(store, { webRoot: options.webRoot });
