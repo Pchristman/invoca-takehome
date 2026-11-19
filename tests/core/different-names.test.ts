@@ -204,8 +204,10 @@ describe('the server on a different export', () => {
 describe('nothing in src/ is tied to the shipped dataset', () => {
   const srcDir = join(__dirname, '..', '..', 'src');
   const sourceFiles = readdirSync(srcDir, { recursive: true, encoding: 'utf8' })
-    .filter((f) => f.endsWith('.ts'))
+    .filter((f) => /\.tsx?$/.test(f))
     .map((f) => ({ file: f, text: readFileSync(join(srcDir, f), 'utf8') }));
+  // The page shell is shipped code too.
+  sourceFiles.push({ file: '../index.html', text: readFileSync(join(srcDir, '..', 'index.html'), 'utf8') });
 
   // Every name, id and zone in the shipped export, plus the tracking-number prefix.
   const shipped = readExportFromDir(join(__dirname, '..', 'fixtures', 'original-export'));
@@ -218,6 +220,9 @@ describe('nothing in src/ is tied to the shipped dataset', () => {
   test('the shipped export gave us names to look for', () => {
     expect(needles.length).toBeGreaterThan(30);
     expect(sourceFiles.length).toBeGreaterThan(5);
+    // The scan covers components and the page shell, not just .ts.
+    expect(sourceFiles.some((f) => f.file.endsWith('.tsx'))).toBe(true);
+    expect(sourceFiles.some((f) => f.file.endsWith('index.html'))).toBe(true);
   });
 
   test.each([...new Set(needles)])('no source file contains "%s"', (needle) => {

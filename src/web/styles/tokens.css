@@ -9,7 +9,8 @@
     up on bg 6.3, up on surface 5.9
     down on bg 7.3, down on surface 6.8
     notice-text on notice-bg 8.6
-  Non-text parts (border, chart bars) need 3:1: border on bg 3.1, chart bar on bg 4.3.
+  Non-text parts (border, chart bars) need 3:1, on bg and on surface: border 3.4, 3.1;
+  chart bar 4.3, 4.0; chart bar partial 3.4, 3.2. tests/web/tokens.test.ts checks all of these.
 */
 :root {
   /* color */
@@ -17,7 +18,7 @@
   --color-text-muted: #52606d;
   --color-bg: #ffffff;
   --color-surface: #f5f7fa;
-  --color-border: #8795a1;
+  --color-border: #7f8e9b;
   --color-accent: #1f5fa8;
   --color-accent-text: #ffffff;
   --color-up: #1b6e3c;
@@ -25,7 +26,7 @@
   --color-notice-bg: #fff4d6;
   --color-notice-text: #5c4200;
   --color-chart-bar: #3b7dbd;
-  --color-chart-bar-partial: #9db9d6;
+  --color-chart-bar-partial: #5f8fc0;
 
   /* type */
   --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
