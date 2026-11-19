@@ -170,13 +170,19 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
     };
   };
 
+  /** A start for a copy of `template`, whole weeks away, inside the span margin. */
+  const shiftedStart = (template: Row): number => {
+    const startMs = shiftByWeeksInto(Date.parse(template.started_at ?? ''), lo, hi, rng);
+    if (startMs === null) throw new GenerateError(`The data span is too short to place a copy of call ${template.call_id}`);
+    return startMs;
+  };
+
   // Plain calls: week-shifted clones of attributed, non-pending real calls.
   const plainPool = templates.filter((r) => (r.campaign_id ?? '') !== '' && !isPending(r));
   if (config.plainCalls > 0 && plainPool.length === 0) throw new GenerateError('No plain templates: every real call is unattributed or pending');
   for (let i = 0; i < config.plainCalls; i++) {
     const template = plainPool[randInt(rng, 0, plainPool.length - 1)] as Row;
-    const startMs = shiftByWeeksInto(Date.parse(template.started_at ?? ''), lo, hi, rng);
-    if (startMs === null) throw new GenerateError(`The data span is too short to place a copy of call ${template.call_id}`);
+    const startMs = shiftedStart(template);
     synthetic.push(serialise(header, clone(template, startMs)));
   }
 
@@ -184,6 +190,7 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
   const attributed = templates.filter((r) => (r.campaign_id ?? '') !== '');
   const unansweredPool = attributed.filter((r) => r.answered === 'false');
   const bookedPool = attributed.filter((r) => r.outcome === 'booked' && Number(r.revenue_usd) > 0);
+  const notBookedPool = attributed.filter((r) => r.answered === 'true' && (r.outcome === 'qualified_lead' || r.outcome === 'not_qualified'));
   const pick = (pool: Row[]): Row => pool[randInt(rng, 0, pool.length - 1)] as Row;
 
   // Pattern A: an office whose calls in one local-time window mostly go unanswered.
@@ -212,6 +219,27 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
       }
       if (startMs < 0) throw new GenerateError(`Pattern A: no time in the data span falls in the window for ${a.locationId}`);
       synthetic.push(serialise(header, { ...clone(template, startMs), location_id: a.locationId }));
+    }
+  }
+
+  // Pattern B: an office with a normal answer rate but few bookings. Week-shifted clones, any campaign.
+  const b = config.officeLowConversion;
+  if (b.calls > 0) {
+    const notBooked = b.calls - b.unanswered - b.booked;
+    if (!locations.some((l) => l.location_id === b.locationId)) throw new GenerateError(`Pattern B: office ${b.locationId} is not in locations.csv`);
+    if (b.unanswered < 0 || b.booked < 0 || notBooked < 0) throw new GenerateError(`Pattern B: unanswered (${b.unanswered}) plus booked (${b.booked}) must fit within calls (${b.calls})`);
+    if (b.unanswered > 0 && unansweredPool.length === 0) throw new GenerateError('Pattern B: no unanswered calls to copy');
+    if (b.booked > 0 && bookedPool.length === 0) throw new GenerateError('Pattern B: no booked calls with revenue to copy');
+    if (notBooked > 0 && notBookedPool.length === 0) throw new GenerateError('Pattern B: no answered, not booked calls to copy');
+    const plan: Row[][] = [
+      ...Array.from({ length: b.unanswered }, () => unansweredPool),
+      ...Array.from({ length: b.booked }, () => bookedPool),
+      ...Array.from({ length: notBooked }, () => notBookedPool),
+    ];
+    for (const pool of plan) {
+      const template = pick(pool);
+      const startMs = shiftedStart(template);
+      synthetic.push(serialise(header, { ...clone(template, startMs), location_id: b.locationId }));
     }
   }
 

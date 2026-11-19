@@ -193,3 +193,61 @@ describe('generateExtendedCalls: pattern A, office answer drop', () => {
     expect(() => generateExtendedCalls(noUnanswered, withA())).toThrow(/unanswered/i);
   });
 });
+
+// ---------- Task 3: pattern B, the office low-conversion outlier ----------
+
+const B_LOC_B = { locationId: 'loc_b', calls: 6, unanswered: 1, booked: 1 };
+const withB = (over: Partial<typeof B_LOC_B> = {}) => ({ ...OFF, officeLowConversion: { ...B_LOC_B, ...over } });
+
+describe('generateExtendedCalls: pattern B, office low conversion', () => {
+  it('counts are exact', () => {
+    const calls = synthOf(generateExtendedCalls(FIXTURE, withB()));
+    expect(calls).toHaveLength(6);
+    for (const c of calls) expect(c.locationId).toBe('loc_b');
+    expect(calls.filter((c) => !c.answered)).toHaveLength(1);
+    const booked = calls.filter((c) => c.booked);
+    expect(booked).toHaveLength(1);
+    expect(booked[0]?.revenueUsd).toBeGreaterThan(0);
+    const notBooked = calls.filter((c) => c.answered && !c.booked);
+    expect(notBooked).toHaveLength(4);
+    for (const c of notBooked) {
+      expect(['qualified_lead', 'not_qualified']).toContain(c.outcome);
+      expect(c.revenueUsd).toBe(0);
+    }
+  });
+
+  it('no pending, no unattributed, no bad rows', () => {
+    const store = cleaned(generateExtendedCalls(FIXTURE, withB({ calls: 60, unanswered: 12, booked: 5 })));
+    const calls = store.calls.filter((c) => c.callId.startsWith('x_'));
+    expect(calls).toHaveLength(60);
+    expect(calls.some((c) => c.pending || c.unattributed)).toBe(false);
+    expect(store.dataNotes.badCalls).toBe(0);
+  });
+
+  it('starts stay inside the span margin', () => {
+    const starts = originalRows.map((r) => ms(r.started_at));
+    const lo = Math.min(...starts) + DAY;
+    const hi = Math.max(...starts) - DAY;
+    for (const r of syntheticOf(generateExtendedCalls(FIXTURE, withB({ calls: 60, unanswered: 12, booked: 5 })))) {
+      expect(ms(r.started_at)).toBeGreaterThanOrEqual(lo);
+      expect(ms(r.started_at)).toBeLessThanOrEqual(hi);
+    }
+  });
+
+  it('booked + unanswered above calls throws GenerateError', () => {
+    expect(() => generateExtendedCalls(FIXTURE, withB({ calls: 5, unanswered: 3, booked: 3 }))).toThrow(GenerateError);
+  });
+
+  it('a target office not in locations.csv throws GenerateError naming it', () => {
+    expect(() => generateExtendedCalls(FIXTURE, withB({ locationId: 'loc_zz' }))).toThrow(/loc_zz/);
+  });
+
+  it('no answered-not-booked templates and a positive remainder throws GenerateError', () => {
+    const noQualified = { ...FIXTURE, calls: callsText([
+      { id: 'c1', start: '2026-09-01T10:00:00Z', answered: false, outcome: 'missed' },
+      { id: 'c2', start: '2026-11-01T10:00:00Z', outcome: 'booked', revenue: '100' },
+    ]) };
+    expect(() => generateExtendedCalls(noQualified, withB())).toThrow(GenerateError);
+    expect(() => generateExtendedCalls(noQualified, withB())).toThrow(/not booked/i);
+  });
+});
