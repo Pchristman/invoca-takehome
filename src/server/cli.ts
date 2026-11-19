@@ -20,7 +20,8 @@ async function main(): Promise<void> {
   } catch (error) {
     if (error instanceof LoadError || error instanceof ConfigError) {
       console.error(`Cannot start: ${error.message}`);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     throw error;
   }
