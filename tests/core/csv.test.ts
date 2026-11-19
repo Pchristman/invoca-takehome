@@ -55,6 +55,34 @@ describe('readTable', () => {
     expect(t.rows[0]?.a).toBe('1');
   });
 
+  test('BOM before a quoted first header still matches (needs the BOM option, not just trim)', () => {
+    const t = readTable('﻿"a",b\n1,2', file, required);
+    expect(t.rows[0]).toEqual({ a: '1', b: '2' });
+  });
+
+  test('mixed LF and CRLF line endings keep every row', () => {
+    const t = readTable('a,b\r\n1,2\n3,4\r\n5,6\n', file, required);
+    expect(t.rows).toEqual([
+      { a: '1', b: '2' },
+      { a: '3', b: '4' },
+      { a: '5', b: '6' },
+    ]);
+  });
+
+  test('a stray quote inside a field is kept as text, not a startup error', () => {
+    expect(readTable('a,b\nx"y,2\n', file, required).rows[0]).toEqual({ a: 'x"y', b: '2' });
+    expect(readTable('a,b\n"x" y,2\n', file, required).rows[0]).toEqual({ a: '"x" y', b: '2' });
+  });
+
+  test('a repeated required header is a LoadError naming the column', () => {
+    expect(() => readTable('a,b,a\n1,2,3', file, required)).toThrow(LoadError);
+    expect(() => readTable('a,b,a\n1,2,3', file, required)).toThrow(/"a"/);
+  });
+
+  test('a repeated extra header is ignored', () => {
+    expect(readTable('a,b,z,z\n1,2,3,4', file, required).rows[0]).toMatchObject({ a: '1', b: '2' });
+  });
+
   test('padded headers are trimmed', () => {
     const t = readTable(' a , b \n1,2', file, required);
     expect(t.rows[0]).toEqual({ a: '1', b: '2' });
