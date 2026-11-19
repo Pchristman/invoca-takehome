@@ -116,6 +116,21 @@ function serialise(header: string[], row: Row): string {
     .join(',');
 }
 
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/** Local weekday (0 = Monday) and hour (0-23) of an instant in an IANA zone. Build once per zone. */
+function localClock(timeZone: string): (ms: number) => { weekday: number; hour: number } {
+  const format = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: 'numeric', hourCycle: 'h23' });
+  return (ms) => {
+    const parts = format.formatToParts(new Date(ms));
+    const weekday = WEEKDAYS.indexOf(parts.find((p) => p.type === 'weekday')?.value ?? '');
+    const hour = Number(parts.find((p) => p.type === 'hour')?.value);
+    return { weekday, hour };
+  };
+}
+
+const MAX_ATTEMPTS = 100_000;
+
 export function generateExtendedCalls(input: ExportTexts, partial: Partial<ExtendedConfig> = {}): string {
   const config: ExtendedConfig = { ...DEFAULT_CONFIG, ...partial };
   const rng = makeRng(config.seed);
@@ -139,6 +154,7 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
 
   const templates = finalStates(rows).filter((r) => !Number.isNaN(Date.parse(r.started_at ?? '')));
   const synthetic: string[] = [];
+  const locations = parse(input.locations, { columns: true, skip_empty_lines: true }) as Row[];
 
   /** A copy of `template` starting at `startMs`, with new id, caller hash and timestamps. */
   const clone = (template: Row, startMs: number): Row => {
@@ -162,6 +178,41 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
     const startMs = shiftByWeeksInto(Date.parse(template.started_at ?? ''), lo, hi, rng);
     if (startMs === null) throw new GenerateError(`The data span is too short to place a copy of call ${template.call_id}`);
     synthetic.push(serialise(header, clone(template, startMs)));
+  }
+
+  // Pools for the planted patterns: attributed calls only, so none of them is unattributed.
+  const attributed = templates.filter((r) => (r.campaign_id ?? '') !== '');
+  const unansweredPool = attributed.filter((r) => r.answered === 'false');
+  const bookedPool = attributed.filter((r) => r.outcome === 'booked' && Number(r.revenue_usd) > 0);
+  const pick = (pool: Row[]): Row => pool[randInt(rng, 0, pool.length - 1)] as Row;
+
+  // Pattern A: an office whose calls in one local-time window mostly go unanswered.
+  const a = config.officeAnswerDrop;
+  if (a.calls > 0) {
+    const office = locations.find((l) => l.location_id === a.locationId);
+    if (!office) throw new GenerateError(`Pattern A: office ${a.locationId} is not in locations.csv`);
+    if (a.answered < 0 || a.answered > a.calls) throw new GenerateError(`Pattern A: answered (${a.answered}) must be between 0 and calls (${a.calls})`);
+    if (a.calls - a.answered > 0 && unansweredPool.length === 0) throw new GenerateError('Pattern A: no unanswered calls to copy');
+    if (a.answered > 0 && bookedPool.length === 0) throw new GenerateError('Pattern A: no booked calls with revenue to copy');
+    const clockAt = localClock(office.timezone ?? '');
+    const inWindow = (ms: number): boolean => {
+      const { weekday, hour } = clockAt(ms);
+      return weekday >= a.weekdays.from && weekday <= a.weekdays.to && hour >= a.hours.from && hour <= a.hours.to;
+    };
+    const loSecond = Math.ceil(lo / SECOND);
+    const hiSecond = Math.floor(hi / SECOND);
+    for (let i = 0; i < a.calls; i++) {
+      // The first `answered` calls are answered and booked, the rest unanswered. The answered ones are
+      // booked on purpose: it keeps this office's booking rate near the others, so it is flagged for one thing.
+      const template = pick(i < a.answered ? bookedPool : unansweredPool);
+      let startMs = -1;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS && startMs < 0; attempt++) {
+        const candidate = randInt(rng, loSecond, hiSecond) * SECOND;
+        if (inWindow(candidate)) startMs = candidate;
+      }
+      if (startMs < 0) throw new GenerateError(`Pattern A: no time in the data span falls in the window for ${a.locationId}`);
+      synthetic.push(serialise(header, { ...clone(template, startMs), location_id: a.locationId }));
+    }
   }
 
   return input.calls + synthetic.map((line) => line + '\r\n').join('');

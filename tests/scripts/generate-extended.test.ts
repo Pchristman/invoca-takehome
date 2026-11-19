@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { parse } from 'csv-parse/sync';
 import { describe, expect, it } from 'vitest';
 import { GenerateError, generateExtendedCalls } from '../../scripts/generate-extended';
+import { cleanExport } from '../../src/core/clean';
+import { loadExport } from '../../src/core/loadExport';
 import { callsText, FIXTURE, OFF } from './extendedFixture';
 
 type Row = Record<string, string>;
@@ -95,5 +97,99 @@ describe('generateExtendedCalls: plain calls', () => {
   it('no clock or Math.random', () => {
     const source = readFileSync('scripts/generate-extended.ts', 'utf8');
     expect(source).not.toMatch(/Math\.random|Date\.now|new Date\(\)/);
+  });
+});
+
+// ---------- Task 2: pattern A, the office answer-rate drop ----------
+
+const cleaned = (calls: string) => cleanExport(loadExport({ ...FIXTURE, calls }));
+const synthOf = (calls: string) => cleaned(calls).calls.filter((c) => c.callId.startsWith('x_'));
+
+const A_LOC_A = { locationId: 'loc_a', weekdays: { from: 0, to: 4 }, hours: { from: 9, to: 11 }, calls: 6, answered: 2 };
+const withA = (over: Partial<typeof A_LOC_A> = {}) => ({ ...OFF, officeAnswerDrop: { ...A_LOC_A, ...over } });
+
+describe('generateExtendedCalls: pattern A, office answer drop', () => {
+  it('all at the target office, in the window by local time', () => {
+    const calls = synthOf(generateExtendedCalls(FIXTURE, withA()));
+    expect(calls).toHaveLength(6);
+    for (const c of calls) {
+      expect(c.locationId).toBe('loc_a');
+      expect(c.localWeekday).toBeGreaterThanOrEqual(0);
+      expect(c.localWeekday).toBeLessThanOrEqual(4);
+      expect(c.localHour).toBeGreaterThanOrEqual(9);
+      expect(c.localHour).toBeLessThanOrEqual(11);
+    }
+  });
+
+  it('the window holds across a DST change (New York, 1 Nov)', () => {
+    const calls = synthOf(generateExtendedCalls(FIXTURE, withA({ locationId: 'loc_b', calls: 40, answered: 8 })));
+    expect(calls).toHaveLength(40);
+    for (const c of calls) {
+      expect(c.localHour).toBeGreaterThanOrEqual(9);
+      expect(c.localHour).toBeLessThanOrEqual(11);
+    }
+    expect(calls.some((c) => c.localDate >= '2026-11-01')).toBe(true);
+    expect(calls.some((c) => c.localDate < '2026-11-01')).toBe(true);
+  });
+
+  it('exactly answered of them are answered, and those are booked', () => {
+    const calls = synthOf(generateExtendedCalls(FIXTURE, withA()));
+    const answered = calls.filter((c) => c.answered);
+    expect(answered).toHaveLength(2);
+    for (const c of answered) {
+      expect(c.booked).toBe(true);
+      expect(c.revenueUsd).toBeGreaterThan(0);
+    }
+    const unanswered = calls.filter((c) => !c.answered);
+    expect(unanswered).toHaveLength(4);
+    for (const c of unanswered) {
+      expect(['missed', 'voicemail', null]).toContain(c.outcome);
+      expect(c.revenueUsd).toBe(0);
+      expect(c.agentId).toBeNull();
+    }
+  });
+
+  it('no bad rows, and revenue only on booked', () => {
+    const { dataNotes } = cleaned(generateExtendedCalls(FIXTURE, withA()));
+    expect(dataNotes.badCalls).toBe(0);
+    expect(dataNotes.revenueOnNonBookedCalls).toBe(0);
+  });
+
+  it('a target office not in locations.csv throws GenerateError naming it', () => {
+    expect(() => generateExtendedCalls(FIXTURE, withA({ locationId: 'loc_zz' }))).toThrow(GenerateError);
+    expect(() => generateExtendedCalls(FIXTURE, withA({ locationId: 'loc_zz' }))).toThrow(/loc_zz/);
+  });
+
+  it('answered above calls throws GenerateError', () => {
+    expect(() => generateExtendedCalls(FIXTURE, withA({ calls: 3, answered: 4 }))).toThrow(GenerateError);
+  });
+
+  it('a window that never occurs throws GenerateError', () => {
+    const short = { ...FIXTURE, calls: callsText([
+      { id: 'c1', start: '2026-10-01T10:00:00Z', outcome: 'booked', revenue: '100' },
+      { id: 'c2', start: '2026-10-04T10:00:00Z', answered: false, outcome: 'missed' },
+    ]) };
+    const config = withA({ weekdays: { from: 6, to: 6 } });
+    expect(() => generateExtendedCalls(short, config)).toThrow(GenerateError);
+    expect(() => generateExtendedCalls(short, config)).toThrow(/window|span/i);
+  });
+
+  it('an empty window (hours from after to) throws GenerateError naming the window', () => {
+    const config = withA({ hours: { from: 9, to: 8 } });
+    expect(() => generateExtendedCalls(FIXTURE, config)).toThrow(/window/i);
+  });
+
+  it('no booked templates, or no unanswered templates, throws GenerateError naming which', () => {
+    const wide = (rows: Parameters<typeof callsText>[0]) => ({ ...FIXTURE, calls: callsText(rows) });
+    const noBooked = wide([
+      { id: 'c1', start: '2026-09-01T10:00:00Z', answered: false, outcome: 'missed' },
+      { id: 'c2', start: '2026-11-01T10:00:00Z', outcome: 'qualified_lead' },
+    ]);
+    expect(() => generateExtendedCalls(noBooked, withA())).toThrow(/booked/i);
+    const noUnanswered = wide([
+      { id: 'c1', start: '2026-09-01T10:00:00Z', outcome: 'booked', revenue: '100' },
+      { id: 'c2', start: '2026-11-01T10:00:00Z', outcome: 'qualified_lead' },
+    ]);
+    expect(() => generateExtendedCalls(noUnanswered, withA())).toThrow(/unanswered/i);
   });
 });
