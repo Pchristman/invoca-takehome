@@ -13,7 +13,7 @@ function fromUtcMs(ms: number): LocalDate {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-/** True for a strict "YYYY-MM-DD" that is a real calendar date (no 2026-02-30, no 2026-2-3). */
+/** True for a strict "YYYY-MM-DD" that is a real calendar date (no February 30, no unpadded month). */
 export function isLocalDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   // An impossible date shifts when it goes through Date.UTC, so it fails the round trip.

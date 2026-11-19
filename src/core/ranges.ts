@@ -45,7 +45,7 @@ export function dataSpan(calls: readonly CleanCall[]): DateRange | null {
 export function checkDates(start: string, end: string): RangeError | null {
   for (const value of [start, end]) {
     if (!isLocalDate(value)) {
-      return { code: 'bad_date', message: `"${value}" is not a date. Use the form YYYY-MM-DD, for example 2026-09-30.` };
+      return { code: 'bad_date', message: `"${value}" is not a date. Use the form YYYY-MM-DD.` };
     }
   }
   if (start > end) {
