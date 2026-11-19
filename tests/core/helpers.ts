@@ -1,6 +1,6 @@
 import { loadExport } from '../../src/core/loadExport';
 import { CALL_COLUMNS } from '../../src/core/validate';
-import type { LoadedExport } from '../../src/core/types';
+import type { CleanCall, LoadedExport } from '../../src/core/types';
 
 export const CAMPAIGNS = 'campaign_id,name,channel,daily_budget_usd\ncmp_a,Alpha,social,10\ncmp_b,Beta,direct,0\n';
 export const LOCATIONS =
@@ -34,3 +34,31 @@ export const loadFixture = (
   campaigns = CAMPAIGNS,
   locations = LOCATIONS,
 ): LoadedExport => loadExport({ calls: callsCsv(rows), campaigns, locations });
+
+let callCounter = 0;
+
+/** A booked, answered, cleaned call with every field filled; override any field by name. */
+export const makeCall = (over: Partial<CleanCall> = {}): CleanCall => {
+  callCounter += 1;
+  return {
+    callId: `call_${callCounter}`,
+    startedAt: new Date('2026-09-10T16:00:00Z'),
+    durationSeconds: 97,
+    callerHash: `h_${callCounter}`,
+    trackingNumber: '+1-555-0100',
+    campaignId: 'cmp_a',
+    unattributed: false,
+    channel: 'social',
+    locationId: 'loc_1',
+    answered: true,
+    outcome: 'booked',
+    booked: true,
+    pending: false,
+    revenueUsd: 100,
+    agentId: 'agt_1',
+    localDate: '2026-09-10',
+    localHour: 10,
+    localWeekday: 3,
+    ...over,
+  };
+};
