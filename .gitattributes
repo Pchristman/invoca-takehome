@@ -1,0 +1,2 @@
+# CSVs are data fixtures: never rewrite their line endings (the shipped export is CRLF).
+*.csv -text

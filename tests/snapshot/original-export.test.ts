@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { readExportFromDir } from '../../src/node/readDataDir';
@@ -17,6 +18,14 @@ describe('shipped export through the loader', () => {
     expect(result.locations).toHaveLength(8);
     expect(result.referenceIssues).toEqual([]);
     expect(result.notes).toEqual([]);
+  });
+
+  test('the fixture keeps the original CRLF line endings (git must not rewrite them)', () => {
+    for (const name of ['calls.csv', 'campaigns.csv', 'locations.csv']) {
+      const text = readFileSync(join(FIXTURE_DIR, name), 'utf8');
+      expect(text).toContain('\r\n');
+      expect(text.replace(/\r\n/g, '')).not.toMatch(/[\r\n]/);
+    }
   });
 
   test('has no bad rows', () => {
