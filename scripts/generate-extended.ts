@@ -46,6 +46,7 @@ type Row = Record<string, string>;
 const SECOND = 1000;
 const DAY = 24 * 60 * 60 * SECOND;
 const WEEK = 7 * DAY;
+const HOUR = 60 * 60 * SECOND;
 
 /** mulberry32: a small seeded generator. Returns numbers in [0, 1). */
 function makeRng(seed: number): () => number {
@@ -153,7 +154,7 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
   };
 
   const templates = finalStates(rows).filter((r) => !Number.isNaN(Date.parse(r.started_at ?? '')));
-  const synthetic: string[] = [];
+  const synthetic: Row[] = [];
   const locations = parse(input.locations, { columns: true, skip_empty_lines: true }) as Row[];
   const campaigns = parse(input.campaigns, { columns: true, skip_empty_lines: true }) as Row[];
 
@@ -184,7 +185,7 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
   for (let i = 0; i < config.plainCalls; i++) {
     const template = plainPool[randInt(rng, 0, plainPool.length - 1)] as Row;
     const startMs = shiftedStart(template);
-    synthetic.push(serialise(header, clone(template, startMs)));
+    synthetic.push(clone(template, startMs));
   }
 
   // Pools for the planted patterns: attributed calls only, so none of them is unattributed.
@@ -219,7 +220,7 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
         if (inWindow(candidate)) startMs = candidate;
       }
       if (startMs < 0) throw new GenerateError(`Pattern A: no time in the data span falls in the window for ${a.locationId}`);
-      synthetic.push(serialise(header, { ...clone(template, startMs), location_id: a.locationId }));
+      synthetic.push({ ...clone(template, startMs), location_id: a.locationId });
     }
   }
 
@@ -240,12 +241,12 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
     for (const pool of plan) {
       const template = pick(pool);
       const startMs = shiftedStart(template);
-      synthetic.push(serialise(header, { ...clone(template, startMs), location_id: b.locationId }));
+      synthetic.push({ ...clone(template, startMs), location_id: b.locationId });
     }
   }
 
   // Patterns C and D: one campaign's calls added to one window, using that campaign's own calls as templates.
-  // Windows are offsets from the last call: "recent" is the last windowDays days (not counting the margin DAY
+  // Windows are offsets from the last call: "recent" is the last windowDays days (not counting the margin day
   // at the end), "earlier" is the windowDays days before it.
   const recent = { from: last - (config.windowDays - 1) * DAY, to: last - DAY };
   const earlier = { from: last - (2 * config.windowDays - 1) * DAY, to: last - config.windowDays * DAY };
@@ -269,11 +270,48 @@ export function generateExtendedCalls(input: ExportTexts, partial: Partial<Exten
     ];
     for (const pool of plan) {
       const template = pick(pool);
-      synthetic.push(serialise(header, clone(template, shiftedStart(template, window.from, window.to))));
+      synthetic.push(clone(template, shiftedStart(template, window.from, window.to)));
     }
   };
   plantInWindow('Pattern C', config.campaignSurge, recent);
   plantInWindow('Pattern D', config.campaignFade, earlier);
 
-  return input.calls + synthetic.map((line) => line + '\r\n').join('');
+  // Unattributed: copies of real unattributed calls, so the set of unattributed tracking numbers does not grow.
+  // Pending ones are left out of the pool so this group does not change the pending count.
+  const unattributedPool = templates.filter((r) => (r.campaign_id ?? '') === '' && !isPending(r));
+  if (config.unattributedCalls > 0 && unattributedPool.length === 0) throw new GenerateError('No unattributed templates: no real call has an empty campaign_id');
+  for (let i = 0; i < config.unattributedCalls; i++) {
+    const template = pick(unattributedPool);
+    synthetic.push(clone(template, shiftedStart(template)));
+  }
+
+  // Pending: answered, no outcome yet, one row each. Attributed only, so this group does not change the unattributed count.
+  const pendingPool = attributed.filter(isPending);
+  if (config.pendingCalls > 0 && pendingPool.length === 0) throw new GenerateError('No pending templates: no real attributed call is answered with an empty outcome');
+  for (let i = 0; i < config.pendingCalls; i++) {
+    const template = pick(pendingPool);
+    synthetic.push(clone(template, shiftedStart(template)));
+  }
+
+  // Duplicated: the first row has no outcome yet; a later row (1 to 47 hours on) fills it in; threeRowCalls of
+  // them get a third identical row (1 to 24 hours on). The last update is so within 71 hours (+30 s) of the call's end.
+  if (config.threeRowCalls < 0 || config.threeRowCalls > config.duplicatedCalls) {
+    throw new GenerateError(`threeRowCalls (${config.threeRowCalls}) must be between 0 and duplicatedCalls (${config.duplicatedCalls})`);
+  }
+  const duplicablePool = attributed.filter((r) => r.answered === 'true' && (r.outcome ?? '') !== '');
+  if (config.duplicatedCalls > 0 && duplicablePool.length === 0) throw new GenerateError('No duplicate templates: no real attributed call is answered with an outcome');
+  for (let i = 0; i < config.duplicatedCalls; i++) {
+    const template = pick(duplicablePool);
+    const finished = clone(template, shiftedStart(template));
+    const firstRow = { ...finished, outcome: '', revenue_usd: '' };
+    const secondRow = { ...finished, updated_at: toIso(Date.parse(finished.updated_at ?? '') + randInt(rng, 1, 47) * HOUR) };
+    synthetic.push(firstRow, secondRow);
+    if (i < config.threeRowCalls) {
+      synthetic.push({ ...secondRow, updated_at: toIso(Date.parse(secondRow.updated_at ?? '') + randInt(rng, 1, 24) * HOUR) });
+    }
+  }
+
+  // All synthetic rows go after the original text, oldest update first.
+  synthetic.sort((x, y) => (x.updated_at ?? '').localeCompare(y.updated_at ?? '') || (x.call_id ?? '').localeCompare(y.call_id ?? ''));
+  return input.calls + synthetic.map((row) => serialise(header, row) + '\r\n').join('');
 }

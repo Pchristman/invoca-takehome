@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { GenerateError, generateExtendedCalls } from '../../scripts/generate-extended';
 import { cleanExport } from '../../src/core/clean';
 import { loadExport } from '../../src/core/loadExport';
-import { callsText, FIXTURE, OFF } from './extendedFixture';
+import { callsText, FIXTURE, OFF, TINY } from './extendedFixture';
 
 type Row = Record<string, string>;
 const parseRows = (text: string): Row[] => parse(text, { columns: true, skip_empty_lines: true }) as Row[];
@@ -45,7 +45,7 @@ describe('generateExtendedCalls: plain calls', () => {
 
   it('synthetic ids are x_ numbered from 1 and do not collide with the input', () => {
     const ids = syntheticOf(generateExtendedCalls(FIXTURE, PLAIN5)).map((r) => r.call_id);
-    expect(ids).toEqual(['x_000001', 'x_000002', 'x_000003', 'x_000004', 'x_000005']);
+    expect([...ids].sort()).toEqual(['x_000001', 'x_000002', 'x_000003', 'x_000004', 'x_000005']);
 
     const clash = { ...FIXTURE, calls: callsText([{ id: 'x_000001', start: '2026-10-01T10:00:00Z', outcome: 'qualified_lead' }, { id: 'c1', start: '2026-12-01T10:00:00Z', outcome: 'qualified_lead' }]) };
     expect(() => generateExtendedCalls(clash, { ...PLAIN5, plainCalls: 1 })).toThrow(GenerateError);
@@ -338,5 +338,92 @@ describe('generateExtendedCalls: patterns C and D, campaign surge and fade', () 
   it('counts that do not fit within calls throw GenerateError', () => {
     const config = { ...CD, campaignFade: { campaignId: 'camp_b', calls: 3, unanswered: 2, booked: 2 } };
     expect(() => generateExtendedCalls(FIXTURE, config)).toThrow(GenerateError);
+  });
+});
+
+// ---------- Task 5: unattributed, pending and duplicate calls ----------
+
+const MESSY = { ...OFF, unattributedCalls: 2, pendingCalls: 1, duplicatedCalls: 3, threeRowCalls: 1 };
+const HOUR = 3_600_000;
+
+describe('generateExtendedCalls: unattributed, pending and duplicate calls', () => {
+  const out = generateExtendedCalls(FIXTURE, MESSY);
+  const store = cleaned(out);
+  const synthRaw = syntheticOf(out);
+  const synth = store.calls.filter((c) => c.callId.startsWith('x_'));
+  const rawRowsOf = (id: string | undefined) => synthRaw.filter((r) => r.call_id === id);
+
+  it('unattributed calls have an empty campaign_id and an existing tracking number', () => {
+    const inputNumbers = new Set(cleaned(FIXTURE.calls).calls.filter((c) => c.unattributed).map((c) => c.trackingNumber));
+    const un = synth.filter((c) => c.unattributed);
+    expect(un).toHaveLength(2);
+    for (const c of un) expect(inputNumbers.has(c.trackingNumber)).toBe(true);
+    expect(store.dataNotes.unattributedTrackingNumbers.length).toBe(cleaned(FIXTURE.calls).dataNotes.unattributedTrackingNumbers.length);
+  });
+
+  it('pending calls are answered with no outcome and one row each', () => {
+    const pending = synth.filter((c) => c.pending);
+    expect(pending).toHaveLength(1);
+    expect(rawRowsOf(pending[0]!.callId)).toHaveLength(1);
+  });
+
+  it('duplicated calls: two rows, or three for threeRowCalls', () => {
+    const dupIds = [...new Set(synthRaw.map((r) => r.call_id))].filter((id) => rawRowsOf(id).length > 1);
+    expect(dupIds).toHaveLength(3);
+    expect(dupIds.reduce((n, id) => n + rawRowsOf(id).length, 0)).toBe(7);
+    expect(dupIds.filter((id) => rawRowsOf(id).length === 3)).toHaveLength(1);
+  });
+
+  it('the later row wins and fills in the outcome', () => {
+    const dupIds = new Set(synthRaw.map((r) => r.call_id).filter((id) => rawRowsOf(id).length > 1));
+    for (const c of synth.filter((c) => dupIds.has(c.callId))) expect(c.outcome).not.toBeNull();
+    expect(store.dataNotes.duplicateRowsCollapsed).toBe(cleaned(FIXTURE.calls).dataNotes.duplicateRowsCollapsed + 4);
+  });
+
+  it('no ties, and the last update is within 71 hours of the end', () => {
+    expect(store.dataNotes.tiedCalls).toBe(cleaned(FIXTURE.calls).dataNotes.tiedCalls);
+    for (const id of new Set(synthRaw.map((r) => r.call_id))) {
+      const rows = rawRowsOf(id);
+      const updates = rows.map((r) => ms(r.updated_at));
+      expect(new Set(updates).size).toBe(rows.length);
+      expect(Math.max(...updates) - ms(rows[0]!.ended_at)).toBeLessThanOrEqual(71 * HOUR + 30_000);
+    }
+  });
+
+  it('the outcome lag stays what the input had', () => {
+    const own = cleaned(FIXTURE.calls).dataNotes.outcomeLagDays;
+    expect(own).toBeGreaterThan(0);
+    expect(store.dataNotes.outcomeLagDays).toBe(own);
+  });
+
+  it('synthetic rows are sorted by updated_at then call_id and come after the original rows', () => {
+    expect(out.startsWith(FIXTURE.calls)).toBe(true);
+    const keys = synthRaw.map((r) => `${r.updated_at}|${r.call_id}`);
+    expect(keys).toEqual([...keys].sort());
+  });
+
+  it('a quota with no templates throws GenerateError naming it', () => {
+    const attributedOnly = { ...FIXTURE, calls: callsText([
+      { id: 'c1', start: '2026-09-01T10:00:00Z', outcome: 'booked', revenue: '100' },
+      { id: 'c2', start: '2026-11-01T10:00:00Z', outcome: 'qualified_lead' },
+    ]) };
+    expect(() => generateExtendedCalls(attributedOnly, { ...OFF, unattributedCalls: 1 })).toThrow(/unattributed/i);
+    expect(() => generateExtendedCalls(attributedOnly, { ...OFF, pendingCalls: 1 })).toThrow(/pending/i);
+    const nothingToDuplicate = { ...FIXTURE, calls: callsText([
+      { id: 'c1', start: '2026-09-01T10:00:00Z', answered: false, outcome: 'missed' },
+      { id: 'c2', start: '2026-11-01T10:00:00Z', answered: false, outcome: 'missed' },
+    ]) };
+    expect(() => generateExtendedCalls(nothingToDuplicate, { ...OFF, duplicatedCalls: 1 })).toThrow(/duplicat/i);
+  });
+
+  it('threeRowCalls above duplicatedCalls throws GenerateError', () => {
+    expect(() => generateExtendedCalls(FIXTURE, { ...OFF, duplicatedCalls: 1, threeRowCalls: 2 })).toThrow(GenerateError);
+  });
+
+  it('with every group on (TINY), no bad rows and revenue only on booked', () => {
+    const tiny = cleaned(generateExtendedCalls(FIXTURE, TINY));
+    expect(tiny.dataNotes.badCalls).toBe(0);
+    expect(tiny.dataNotes.revenueOnNonBookedCalls).toBe(0);
+    expect(tiny.calls.filter((c) => c.callId.startsWith('x_'))).toHaveLength(6 + 6 + 6 + 6 + 5 + 2 + 1 + 3);
   });
 });
