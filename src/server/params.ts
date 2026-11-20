@@ -94,9 +94,8 @@ export function parseViewQuery(
   if (compareStart !== '') {
     const problem = checkDates(compareStart, compareEnd);
     if (problem) {
-      let field: string | undefined;
-      if (problem.field === 'start') field = 'compareStart';
-      else if (problem.field === 'end') field = 'compareEnd';
+      // An inverted pair names no single date; put it on the end so the range control shows the message.
+      const field = problem.field === 'start' ? 'compareStart' : 'compareEnd';
       return fail({ ...problem, field, message: `Comparison range: ${problem.message}` });
     }
     previous = { start: compareStart, end: compareEnd };

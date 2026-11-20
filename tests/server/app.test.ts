@@ -89,12 +89,40 @@ describe('the four views', () => {
 
     const shortRes = await get(app, `${base}&compareStart=2026-09-01&compareEnd=2026-09-02`);
     expect(shortRes.status).toBe(200);
-    expect(body(shortRes.json).notes.comparison.available).toBe(false);
-    expect(body(shortRes.json).notes.comparison.reason).toMatch(/^No like-for-like comparison/);
+    const shortBody = body(shortRes.json);
+    expect(shortBody.notes.comparison.available).toBe(true);
+    expect(shortBody.notes.comparison.perDay).toBe(true);
+    expect(shortBody.notes.comparison.reason).toBeNull();
+    // 6 calls in 3 days against 4 in 2: per day that is 2 against 2 (totals would say +50%).
+    expect(shortBody.tiles.calls).toEqual({ current: 6, previous: 4, change: { kind: 'percent', value: 0 } });
 
     const outside = await get(app, `${base}&compareStart=2026-08-01&compareEnd=2026-08-03`);
     expect(outside.status).toBe(200);
     expect(body(outside.json).notes.comparison.available).toBe(false);
+  });
+
+  it('Campaigns withholds alerts across lengths and says why', async () => {
+    const r = await get(app, '/api/campaigns?start=2026-09-08&end=2026-09-10&compareStart=2026-09-01&compareEnd=2026-09-02');
+    expect(r.status).toBe(200);
+    const alerts = body(r.json).alerts;
+    expect(alerts.checked).toBe(false);
+    expect(alerts.reason).toBe('Call-change alerts need two periods of the same length; these are 3 and 2 days.');
+  });
+
+  it('a half-filled or inverted comparison range is 400 with the field', async () => {
+    const base = '/api/overview?start=2026-09-08&end=2026-09-10';
+    const half = await get(app, `${base}&compareStart=2026-09-01`);
+    expect(half.status).toBe(400);
+    expect(body(half.json).error.code).toBe('bad_param');
+    expect(body(half.json).error.field).toBe('compareEnd');
+
+    const inverted = await get(app, `${base}&compareStart=2026-09-05&compareEnd=2026-09-01`);
+    expect(inverted.status).toBe(400);
+    const e = body(inverted.json).error;
+    // checkDates names no field for an inverted pair; the server puts it on compareEnd so the range control shows the message.
+    expect(e.code).toBe('start_after_end');
+    expect(e.field).toBe('compareEnd');
+    expect(e.message).toMatch(/^Comparison range:/);
   });
 
   it('a partial overlap is clamped, not refused', async () => {

@@ -154,6 +154,20 @@ describe('views on a different export', () => {
     const london = buildMissedCalls(store, range, previous, { locationId: 'zz_lon' });
     expect(london.officeFilter).toEqual({ locationId: 'zz_lon', name: 'London Desk' });
   });
+
+  test('a 7-day range against a 3-day range compares per day and stays finite', () => {
+    const range = resolve({ kind: 'preset', preset: 'last7' });
+    const second = { start: '2031-05-05', end: '2031-05-07' };
+    const overview = buildOverview(store, range, second);
+    const campaigns = buildCampaigns(store, range, second);
+    for (const view of [overview, campaigns]) {
+      expect(view.notes.comparison).toMatchObject({ available: true, perDay: true, currentDays: 7, previousDays: 3 });
+      expectAllFinite(view);
+      const text = JSON.stringify(view);
+      expect(text).not.toContain('undefined');
+      expect(text).not.toContain('NaN');
+    }
+  });
 });
 
 describe('call-change alerts on a different export', () => {
