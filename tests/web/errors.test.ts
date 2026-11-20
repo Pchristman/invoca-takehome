@@ -136,18 +136,30 @@ describe('comparison wording matches the real server', () => {
       start: '2026-09-01',
       end: '2026-09-07',
     });
+    // Another length and outside the data: the data wins, so the reason still has a colon.
     const unequal = resolveComparison(
       span,
       { start: '2026-09-10', end: '2026-09-12' },
-      { start: '2026-09-01', end: '2026-09-02' },
+      { start: '2026-07-01', end: '2026-07-02' },
     );
     for (const result of [before, unequal]) {
       if (!result.ok) throw new Error('comparison should resolve');
       expect(result.comparison.unavailableReason).toContain(':');
     }
-    // Real reasons start with the two phrases Task 6 splits on.
     if (before.ok) expect(before.comparison.unavailableReason).toMatch(/^No full previous period:/);
-    if (unequal.ok) expect(unequal.comparison.unavailableReason).toMatch(/^No like-for-like comparison:/);
+    if (unequal.ok) expect(unequal.comparison.unavailableReason).toMatch(/^No full previous period:/);
+  });
+
+  it('a plain unequal range inside the data is available', () => {
+    const span = dataSpan(emptyRangeStore().calls)!;
+    const result = resolveComparison(
+      span,
+      { start: '2026-09-10', end: '2026-09-12' },
+      { start: '2026-09-01', end: '2026-09-02' },
+    );
+    if (!result.ok) throw new Error('comparison should resolve');
+    expect(result.comparison.available).toBe(true);
+    expect(result.comparison.unavailableReason).toBeNull();
   });
 });
 

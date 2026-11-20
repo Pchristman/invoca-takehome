@@ -60,6 +60,17 @@ export function changeInCount(current: number, previous: number): Change {
   return { kind: 'percent', value: ((current - previous) / previous) * 100 };
 }
 
+/**
+ * Change in a count or an amount of money between ranges of different lengths, compared per day. Nothing
+ * when either day count isn't a positive whole number. Equal lengths give exactly `changeInCount`.
+ */
+export function changeInCountPerDay(current: number, currentDays: number, previous: number, previousDays: number): Change {
+  const usable = (days: number) => Number.isInteger(days) && days > 0;
+  if (!usable(currentDays) || !usable(previousDays)) return { kind: 'none' };
+  if (currentDays === previousDays) return changeInCount(current, previous);
+  return changeInCount(current / currentDays, previous / previousDays);
+}
+
 /** Change in a rate, in percentage points. Nothing when either rate is missing or both are zero. */
 export function changeInRate(current: number | null, previous: number | null): Change {
   if (current === null || previous === null) return { kind: 'none' };

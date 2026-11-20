@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   callsInRange,
   changeInCount,
+  changeInCountPerDay,
   changeInRate,
   costPerBooking,
   estimatedSpend,
@@ -44,6 +45,47 @@ describe('changeInCount', () => {
     const change = changeInCount(432894, 400000);
     expect(change.kind).toBe('percent');
     expect(change.kind === 'percent' && change.value).toBeCloseTo(8.2235, 3);
+  });
+});
+
+describe('changeInCountPerDay', () => {
+  test.each([
+    ['equal days equals changeInCount', 56, 28, 28, 28, 100],
+    ['28 days against 7', 56, 28, 7, 7, 100],
+    ['7 days against 14', 14, 7, 14, 14, 100],
+    ['7 days against 3, same rate', 14, 7, 6, 3, 0],
+    ['1 day against 28', 5, 1, 28, 28, 400],
+    ['zero now', 0, 7, 12, 3, -100],
+  ])('%s', (_name, current, currentDays, previous, previousDays, percent) => {
+    const change = changeInCountPerDay(current, currentDays, previous, previousDays);
+    expect(change.kind).toBe('percent');
+    expect(change.kind === 'percent' && change.value).toBeCloseTo(percent);
+  });
+
+  test('zero before is new', () => {
+    expect(changeInCountPerDay(10, 7, 0, 14)).toEqual({ kind: 'new' });
+  });
+
+  test('both zero is none', () => {
+    expect(changeInCountPerDay(0, 7, 0, 3)).toEqual({ kind: 'none' });
+  });
+
+  test.each([
+    [5, 0, 5, 7],
+    [5, 7, 5, -1],
+    [5, 2.5, 5, 7],
+    [5, NaN, 5, 7],
+    [5, 7, 5, Infinity],
+    [5, 0, 5, 0],
+  ])('days not usable (%s, %s, %s, %s) shows no change', (current, currentDays, previous, previousDays) => {
+    expect(changeInCountPerDay(current, currentDays, previous, previousDays)).toEqual({ kind: 'none' });
+  });
+
+  test.each([
+    [NaN, 7, 5, 3],
+    [5, 7, Infinity, 3],
+  ])('count not usable (%s, %s, %s, %s) shows no change', (current, currentDays, previous, previousDays) => {
+    expect(changeInCountPerDay(current, currentDays, previous, previousDays)).toEqual({ kind: 'none' });
   });
 });
 

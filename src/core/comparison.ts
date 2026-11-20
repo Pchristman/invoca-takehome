@@ -4,15 +4,14 @@ import type { DateRange, RangeError } from './ranges';
 
 export interface RangeComparison {
   previous: DateRange & { days: number };
-  /**
-   * True only when a like-for-like change can be shown: every day of `previous` lies inside the data AND
-   * both ranges have the same number of days. Counts from periods of different lengths are never compared.
-   */
+  /** True when every day of `previous` lies inside the data. The two ranges may differ in length (see `perDay`). */
   available: boolean;
-  /** One line starting "No full previous period" or "No like-for-like comparison"; null when available. */
+  /** One line starting "No full previous period"; null when available. */
   unavailableReason: string | null;
   /** False when the two ranges have different numbers of days. */
   sameLength: boolean;
+  /** True exactly when `available` and the two ranges differ in length: counts and money compare per day. */
+  perDay: boolean;
   /** True when the two ranges share at least one day. */
   overlaps: boolean;
 }
@@ -36,8 +35,8 @@ function coverageProblem(span: DateRange, previous: DateRange): string | null {
 
 /**
  * The range to compare `current` with. Left out, it is the same number of days immediately before `current`.
- * A range the data doesn't fully cover, or one of a different length, comes back with `available: false` and
- * the reason; that is not an error. Per-day comparison of unequal lengths is stretch S2.
+ * A range the data doesn't fully cover comes back with `available: false` and the reason; that is not an
+ * error. A range of a different length is available and flagged `perDay`: counts compare per day.
  */
 export function resolveComparison(span: DateRange, current: DateRange, previous?: DateRange): ComparisonResult {
   // `current` normally comes from resolveRange, but this function must not throw or blame the wrong dates.
@@ -52,11 +51,7 @@ export function resolveComparison(span: DateRange, current: DateRange, previous?
 
   const days = inclusiveDays(wanted.start, wanted.end);
   const sameLength = days === currentDays;
-  const unavailableReason =
-    coverageProblem(span, wanted) ??
-    (sameLength
-      ? null
-      : `No like-for-like comparison: the selected range is ${currentDays} days and the other range is ${days} days.`);
+  const unavailableReason = coverageProblem(span, wanted);
   return {
     ok: true,
     comparison: {
@@ -64,6 +59,7 @@ export function resolveComparison(span: DateRange, current: DateRange, previous?
       available: unavailableReason === null,
       unavailableReason,
       sameLength,
+      perDay: unavailableReason === null && !sameLength,
       overlaps: wanted.start <= current.end && current.start <= wanted.end,
     },
   };

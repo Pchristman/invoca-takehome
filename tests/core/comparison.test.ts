@@ -20,6 +20,7 @@ describe('resolveComparison default previous period', () => {
       available: true,
       unavailableReason: null,
       sameLength: true,
+      perDay: false,
       overlaps: false,
     });
   });
@@ -77,14 +78,57 @@ describe('resolveComparison with an explicit second range', () => {
     expect(c.unavailableReason).toBeNull();
   });
 
-  test('an explicit second range of another length is unavailable until per-day comparison exists', () => {
+  test('another length is available and per day', () => {
     const c = compare(current, range('2026-09-01', '2026-09-03'));
-    expect(c.available).toBe(false);
+    expect(c.available).toBe(true);
+    expect(c.perDay).toBe(true);
     expect(c.sameLength).toBe(false);
+    expect(c.unavailableReason).toBeNull();
     expect(c.previous.days).toBe(3);
-    expect(c.unavailableReason).toMatch(/^No like-for-like comparison/);
-    expect(c.unavailableReason).toContain('7 days');
-    expect(c.unavailableReason).toContain('3 days');
+  });
+
+  test('the same length is not per day', () => {
+    expect(compare(current, range('2026-09-01', '2026-09-07')).perDay).toBe(false);
+  });
+
+  test.each([
+    ['wholly before', '2026-07-01', '2026-07-03'],
+    ['wholly after', '2026-11-05', '2026-11-08'],
+    ['straddling the start', '2026-08-30', '2026-09-02'],
+    ['straddling the end', '2026-10-28', '2026-11-02'],
+  ])('outside the data beats the length: %s', (_name, start, end) => {
+    const c = compare(current, range(start, end));
+    expect(c.available).toBe(false);
+    expect(c.perDay).toBe(false);
+    expect(c.unavailableReason).toMatch(/^No full previous period/);
+  });
+
+  test('the selected range itself is available, overlaps, and is not per day', () => {
+    const c = compare(current, current);
+    expect(c.available).toBe(true);
+    expect(c.overlaps).toBe(true);
+    expect(c.perDay).toBe(false);
+  });
+
+  test('a range that contains the selected range is per day and overlaps', () => {
+    const c = compare(current, range('2026-10-01', '2026-10-29'));
+    expect(c.available).toBe(true);
+    expect(c.overlaps).toBe(true);
+    expect(c.perDay).toBe(true);
+  });
+
+  test('a range later than the selected range is available', () => {
+    const c = compare(range('2026-09-08', '2026-09-14'), range('2026-10-01', '2026-10-07'));
+    expect(c.available).toBe(true);
+    expect(c.overlaps).toBe(false);
+    expect(c.perDay).toBe(false);
+  });
+
+  test('a one-day second range is available and per day', () => {
+    const c = compare(current, range('2026-09-01', '2026-09-01'));
+    expect(c.available).toBe(true);
+    expect(c.perDay).toBe(true);
+    expect(c.previous.days).toBe(1);
   });
 
   test('a range the data does not cover is reported as that, before the length', () => {
