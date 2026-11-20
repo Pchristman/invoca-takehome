@@ -6,7 +6,7 @@ import type { ViewName } from '../core/views/facts';
 export interface CallLogLine {
   time: string; // ISO 8601 UTC
   model: string;
-  purpose: ViewName;
+  purpose: ViewName | 'question';
   inputTokens: number;
   outputTokens: number;
   costUsd: number;

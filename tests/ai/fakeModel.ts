@@ -11,6 +11,11 @@ export function textReply(takeaway: string, usage: Usage = USAGE): ModelReply {
   return { kind: 'text', text: JSON.stringify({ takeaway }), usage };
 }
 
+/** A text reply holding any value as JSON (used for the question reply shape). */
+export function jsonReply(reply: unknown, usage: Usage = USAGE): ModelReply {
+  return { kind: 'text', text: JSON.stringify(reply), usage };
+}
+
 export class FakeModel implements TakeawayModel {
   readonly id = MODEL_ID;
   calls = 0;

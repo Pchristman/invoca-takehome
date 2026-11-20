@@ -3,14 +3,26 @@
 import type { AiStatus } from '../server/api';
 import { fillPlaceholders, type FactSheet } from '../core/views/facts';
 import { appendLogLine, checkLogWritable, loadLog, type CallLogLine, type LogSummary } from './callLog';
-import { cacheKey, TakeawayCache } from './cache';
+import { cacheKey, questionCacheKey, TakeawayCache } from './cache';
 import { checkTakeaway, type KnownNames } from './checker';
 import { costNanoUsd, MAX_OUTPUT_TOKENS, nanoToUsd, worstCaseNanoUsd } from './pricing';
 import { buildPrompt, parseReply, PROMPT_VERSION } from './prompt';
-import { ModelError, type ModelReply, type TakeawayModel, type TakeawayReason, type TakeawayResult } from './types';
+import { buildQuestionPrompt, parseFilterReply, QUESTION_PROMPT_VERSION, type FilterReply, type QuestionContext } from './question';
+import {
+  ModelError, type ModelReply, type QuestionReason, type TakeawayModel, type TakeawayReason, type TakeawayResult, type Usage,
+} from './types';
+
+/** What the caller's validator says about a model reply: a value, or a detail the user may read. */
+export type Validation<T> = { ok: true; value: T } | { ok: false; detail: string };
+
+export type InterpretResult<T> =
+  | { ok: true; reply: FilterReply; value: T; cached: boolean }
+  | { ok: false; reason: QuestionReason; detail: string | null };
 
 export interface TakeawayService {
   takeaway(sheet: FactSheet, template: string): Promise<TakeawayResult>; // never rejects
+  /** Turn a question into a validated filter. Never rejects. */
+  interpret<T>(question: string, context: QuestionContext, validate: (reply: FilterReply) => Validation<T>): Promise<InterpretResult<T>>;
   status(): AiStatus;
 }
 
@@ -35,6 +47,7 @@ function templateResult(template: string, reason: TakeawayReason): TakeawayResul
 export function offService(): TakeawayService {
   return {
     takeaway: async (_sheet, template) => templateResult(template, 'ai_off'),
+    interpret: async () => ({ ok: false, reason: 'ai_off', detail: null }),
     status: () => ({ status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 }),
   };
 }
@@ -68,8 +81,9 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
   }
 
   let reservedNano = 0; // worst case of every call in flight
-  const inFlight = new Map<string, Promise<TakeawayResult>>();
+  const inFlight = new Map<string, Promise<unknown>>(); // takeaway and question calls share it; their keys never collide
   const rememberedFailures = new Map<string, TakeawayReason>(); // this session only; never timeouts or API errors
+  const rememberedQuestionFailures = new Map<string, { reason: QuestionReason; detail: string | null }>(); // same rule
 
   /** Record a log line and keep the in-memory summary in step. A log that cannot be written turns AI off. */
   function record(line: CallLogLine): void {
@@ -97,18 +111,27 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
   if (cache.loadProblem !== null) console.error(`AI cache problem: ${cache.loadProblem}`);
   if (summary.skippedLines > 0) console.error(`AI call log: ${summary.skippedLines} unreadable lines were skipped when adding up spend.`);
 
-  function logLine(sheet: FactSheet, fields: Partial<CallLogLine>): CallLogLine {
+  function logLine(purpose: CallLogLine['purpose'], fields: Partial<CallLogLine>): CallLogLine {
     return {
-      time: now().toISOString(), model: model?.id ?? '', purpose: sheet.view,
+      time: now().toISOString(), model: model?.id ?? '', purpose,
       inputTokens: 0, outputTokens: 0, costUsd: 0, cached: false, checkPassed: null, failure: null,
       ...fields,
     };
   }
 
-  /** The model call and everything after it. The caller has already reserved the budget. */
-  async function callModel(
-    activeModel: TakeawayModel, key: string, sheet: FactSheet, template: string, prompt: { system: string; user: string },
-  ): Promise<TakeawayResult> {
+  type Prompt = { system: string; user: string };
+  type PaidFields = Pick<CallLogLine, 'inputTokens' | 'outputTokens' | 'costUsd'>;
+  type CallOutcome =
+    | { kind: 'error'; reason: 'timeout' | 'api_error' } // already logged
+    | { kind: 'refusal' } // already logged
+    | { kind: 'text'; text: string; paid: PaidFields }; // the caller checks it and logs
+
+  function paidFields(modelId: string, usage: Usage): PaidFields {
+    return { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: nanoToUsd(costNanoUsd(modelId, usage)) };
+  }
+
+  /** The model call with its timeout. Errors and refusals are logged here; a text reply is the caller's to check and log. */
+  async function callWithTimeout(activeModel: TakeawayModel, purpose: CallLogLine['purpose'], prompt: Prompt): Promise<CallOutcome> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<never>((_resolve, reject) => {
@@ -126,45 +149,112 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
       ]);
     } catch (error) {
       // Only the code is kept: an SDK message can hold request details.
-      const reason: TakeawayReason = error instanceof ModelError ? error.code : 'api_error';
-      record(logLine(sheet, { failure: reason }));
-      return templateResult(template, reason);
+      const reason = error instanceof ModelError ? error.code : 'api_error';
+      record(logLine(purpose, { failure: reason }));
+      return { kind: 'error', reason };
     } finally {
       clearTimeout(timer);
     }
 
-    const costNano = costNanoUsd(activeModel.id, reply.usage);
-    const paid = { inputTokens: reply.usage.inputTokens, outputTokens: reply.usage.outputTokens, costUsd: nanoToUsd(costNano) };
-
+    const paid = paidFields(activeModel.id, reply.usage);
     if (reply.kind === 'refusal') {
-      record(logLine(sheet, { ...paid, failure: 'refusal' }));
+      record(logLine(purpose, { ...paid, failure: 'refusal' }));
+      return { kind: 'refusal' };
+    }
+    return { kind: 'text', text: reply.text, paid };
+  }
+
+  /**
+   * The guard, shared by takeaways and questions: a duplicate shares the running call; a call that would
+   * pass the limit is not made; otherwise its worst case is reserved until it finishes. There is no await
+   * before the reservation and the in-flight entry are made, so two requests can never both pass the guard.
+   */
+  function guarded<R>(key: string, prompt: Prompt, overBudget: R, crashed: R, run: () => Promise<R>): R | Promise<R> {
+    const running = inFlight.get(key) as Promise<R> | undefined;
+    if (running) return running;
+
+    const worstNano = worstCaseNanoUsd(model!.id, prompt.system.length + prompt.user.length);
+    if (summary.spendNanoUsd + reservedNano + worstNano > limitNano) return overBudget;
+
+    reservedNano += worstNano;
+    const call = run()
+      .catch(() => crashed)
+      .finally(() => {
+        reservedNano -= worstNano;
+        inFlight.delete(key);
+      });
+    inFlight.set(key, call);
+    return call;
+  }
+
+  /** The model call for a takeaway and the checks on its reply. The caller has already reserved the budget. */
+  async function callModel(activeModel: TakeawayModel, key: string, sheet: FactSheet, template: string, prompt: Prompt): Promise<TakeawayResult> {
+    const outcome = await callWithTimeout(activeModel, sheet.view, prompt);
+    if (outcome.kind === 'error') return templateResult(template, outcome.reason);
+    if (outcome.kind === 'refusal') {
       rememberedFailures.set(key, 'refusal');
       return templateResult(template, 'refusal');
     }
 
-    const text = parseReply(reply.text);
+    const { paid } = outcome;
+    const text = parseReply(outcome.text);
     if (text === null) {
-      record(logLine(sheet, { ...paid, checkPassed: false, failure: 'malformed' }));
+      record(logLine(sheet.view, { ...paid, checkPassed: false, failure: 'malformed' }));
       rememberedFailures.set(key, 'malformed');
       return templateResult(template, 'malformed');
     }
 
     const check = checkTakeaway(text, sheet, known);
     if (!check.ok) {
-      record(logLine(sheet, { ...paid, checkPassed: false, failure: check.reason }));
+      record(logLine(sheet.view, { ...paid, checkPassed: false, failure: check.reason }));
       rememberedFailures.set(key, 'check_failed');
       return templateResult(template, 'check_failed');
     }
 
-    record(logLine(sheet, { ...paid, checkPassed: true }));
+    record(logLine(sheet.view, { ...paid, checkPassed: true }));
     if (!cache.set(key, text)) warnCacheNotSaved();
     return { text: fillPlaceholders(text, sheet.facts), source: 'ai', reason: null };
   }
 
-  /**
-   * Steps 1 to 6 of the flow. There is no await in here, so the reservation and the in-flight
-   * entry are made before any other request can run: two requests can never both pass the guard.
-   */
+  /** The model call for a question and the checks on its reply. The caller has already reserved the budget. */
+  async function askModel<T>(
+    activeModel: TakeawayModel, key: string, prompt: Prompt, validate: (reply: FilterReply) => Validation<T>,
+  ): Promise<InterpretResult<T>> {
+    const remember = (reason: QuestionReason, detail: string | null): InterpretResult<T> => {
+      rememberedQuestionFailures.set(key, { reason, detail });
+      return { ok: false, reason, detail };
+    };
+
+    const outcome = await callWithTimeout(activeModel, 'question', prompt);
+    if (outcome.kind === 'error') return { ok: false, reason: outcome.reason, detail: null };
+    if (outcome.kind === 'refusal') return remember('refusal', null);
+
+    const { paid } = outcome;
+    const reply = parseFilterReply(outcome.text);
+    if (reply === null) {
+      record(logLine('question', { ...paid, checkPassed: false, failure: 'malformed' }));
+      return remember('malformed', null);
+    }
+
+    if (!reply.answerable) {
+      record(logLine('question', { ...paid, checkPassed: true }));
+      if (!cache.set(key, JSON.stringify(reply))) warnCacheNotSaved();
+      return { ok: false, reason: 'unanswerable', detail: null };
+    }
+
+    const checked = validate(reply);
+    if (!checked.ok) {
+      // The failure code is fixed: the detail can hold names from the reply and never goes in the log.
+      record(logLine('question', { ...paid, checkPassed: false, failure: 'invalid_filter' }));
+      return remember('invalid_filter', checked.detail);
+    }
+
+    record(logLine('question', { ...paid, checkPassed: true }));
+    if (!cache.set(key, JSON.stringify(reply))) warnCacheNotSaved();
+    return { ok: true, reply, value: checked.value, cached: false };
+  }
+
+  /** Steps 1 to 6 of the takeaway flow. Everything up to the guard is synchronous. */
   function decide(sheet: FactSheet, template: string): TakeawayResult | Promise<TakeawayResult> {
     if (model === null) return templateResult(template, 'ai_off');
     if (Object.keys(sheet.facts).length === 0) return templateResult(template, 'no_facts');
@@ -181,32 +271,60 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
     if (cached !== undefined) {
       const check = checkTakeaway(cached, sheet, known);
       if (check.ok) {
-        record(logLine(sheet, { cached: true, checkPassed: true }));
+        record(logLine(sheet.view, { cached: true, checkPassed: true }));
         return { text: fillPlaceholders(cached, sheet.facts), source: 'ai', reason: null };
       }
       // Not served, so not a hit: cached false, no tokens, no cost. The failure is the check's own reason.
       if (!cache.delete(key)) warnCacheNotSaved();
       rememberedFailures.set(key, 'check_failed');
-      record(logLine(sheet, { checkPassed: false, failure: check.reason }));
+      record(logLine(sheet.view, { checkPassed: false, failure: check.reason }));
       return templateResult(template, 'check_failed');
     }
 
-    const running = inFlight.get(key);
-    if (running) return running;
-
     const prompt = buildPrompt(sheet);
-    const worstNano = worstCaseNanoUsd(model.id, prompt.system.length + prompt.user.length);
-    if (summary.spendNanoUsd + reservedNano + worstNano > limitNano) return templateResult(template, 'budget_reached');
+    return guarded(key, prompt, templateResult(template, 'budget_reached'), templateResult(template, 'api_error'),
+      () => callModel(model, key, sheet, template, prompt));
+  }
 
-    reservedNano += worstNano;
-    const call = callModel(model, key, sheet, template, prompt)
-      .catch(() => templateResult(template, 'api_error'))
-      .finally(() => {
-        reservedNano -= worstNano;
-        inFlight.delete(key);
-      });
-    inFlight.set(key, call);
-    return call;
+  /** The same flow for a question. The cache holds the model's raw reply as JSON. */
+  function decideQuestion<T>(
+    question: string, context: QuestionContext, validate: (reply: FilterReply) => Validation<T>,
+  ): InterpretResult<T> | Promise<InterpretResult<T>> {
+    if (model === null) return { ok: false, reason: 'ai_off', detail: null };
+    if (!logUsable) return { ok: false, reason: 'log_unavailable', detail: null };
+
+    const key = questionCacheKey({ snapshotId, question, promptVersion: QUESTION_PROMPT_VERSION, model: model.id });
+
+    const remembered = rememberedQuestionFailures.get(key);
+    if (remembered !== undefined) return { ok: false, ...remembered };
+
+    // A cached reply is parsed and validated on every hit: the file can be edited and the data can change.
+    const cachedText = cache.get(key);
+    if (cachedText !== undefined) {
+      const reply = parseFilterReply(cachedText);
+      if (reply !== null && !reply.answerable) {
+        record(logLine('question', { cached: true, checkPassed: true }));
+        return { ok: false, reason: 'unanswerable', detail: null };
+      }
+      const checked = reply === null ? null : validate(reply);
+      if (reply !== null && checked !== null && checked.ok) {
+        record(logLine('question', { cached: true, checkPassed: true }));
+        return { ok: true, reply, value: checked.value, cached: true };
+      }
+      if (!cache.delete(key)) warnCacheNotSaved();
+      const failure = { reason: 'invalid_filter' as const, detail: checked !== null && !checked.ok ? checked.detail : null };
+      rememberedQuestionFailures.set(key, failure);
+      record(logLine('question', { checkPassed: false, failure: 'invalid_filter' }));
+      return { ok: false, ...failure };
+    }
+
+    const prompt = buildQuestionPrompt(question, context);
+    return guarded<InterpretResult<T>>(
+      key, prompt,
+      { ok: false, reason: 'budget_reached', detail: null },
+      { ok: false, reason: 'api_error', detail: null },
+      () => askModel(model, key, prompt, validate),
+    );
   }
 
   return {
@@ -215,6 +333,14 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
         return await decide(sheet, template);
       } catch {
         return templateResult(template, 'api_error');
+      }
+    },
+
+    async interpret(question, context, validate) {
+      try {
+        return await decideQuestion(question, context, validate);
+      } catch {
+        return { ok: false, reason: 'api_error', detail: null };
       }
     },
 

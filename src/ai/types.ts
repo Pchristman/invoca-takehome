@@ -5,6 +5,11 @@ export type TakeawayReason =
   | 'ai_off' | 'budget_reached' | 'no_facts' | 'timeout' | 'api_error'
   | 'refusal' | 'malformed' | 'check_failed' | 'log_unavailable';
 
+/** Why a question did not become a filter. */
+export type QuestionReason =
+  | 'ai_off' | 'budget_reached' | 'timeout' | 'api_error' | 'refusal' | 'malformed'
+  | 'log_unavailable' | 'unanswerable' | 'invalid_filter';
+
 export interface TakeawayResult {
   /** Filled in, ready to show. */
   text: string;

@@ -20,6 +20,12 @@ export function cacheKey(parts: { snapshotId: string; sheet: FactSheet; promptVe
   return createHash('sha256').update(stableStringify(parts)).digest('hex');
 }
 
+/** Question cache key: the question is trimmed, lower-cased and has its spaces collapsed first. */
+export function questionCacheKey(parts: { snapshotId: string; question: string; promptVersion: string; model: string }): string {
+  const question = parts.question.trim().toLowerCase().replace(/\s+/g, ' ');
+  return createHash('sha256').update(stableStringify({ ...parts, question, purpose: 'question' })).digest('hex');
+}
+
 interface Entry { text: string; createdAt: string }
 
 function isEntry(value: unknown): value is Entry {
