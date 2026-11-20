@@ -203,4 +203,17 @@ describe('docker-compose.yml', () => {
     expect(compose).not.toContain('\r');
     expect(compose).not.toMatch(/\bargs:/);
   });
+
+  it('the image already holds what uploads need', () => {
+    const dockerfile = lines(readText('Dockerfile'));
+    expect(dockerfile).toContain('COPY src/db ./src/db');
+    expect(dockerfile).toContain('COPY src/server ./src/server');
+    const dbFolder = dockerfile.indexOf('RUN mkdir -p db && chown node:node db');
+    expect(dbFolder).toBeGreaterThan(-1);
+    expect(dbFolder).toBeLessThan(dockerfile.indexOf('USER node'));
+    expect(compose).toMatch(/source: \$\{DATA_DIR:-\.\}\s+target: \/data\s+read_only: true/);
+    // The database volume is not read-only, so an upload can write to it.
+    expect(compose).toMatch(/^\s+- calls-db:\/app\/db$/m);
+    expect(compose).not.toMatch(/calls-db:\/app\/db:ro/);
+  });
 });

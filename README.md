@@ -29,7 +29,7 @@ One command: `docker compose up --build`, then open `http://localhost:3000`. A `
 - **Another export:** `DATA_DIR=data/extended docker compose up --build` on a **first run**. After a first run the database already exists on the `calls-db` volume, so the app keeps serving the old data and prints a warning in `docker compose logs`; see "Database in Docker" below. `DATA_DIR` chooses the folder mounted read-only at `/data`; use forward slashes on Windows. A mistyped folder is created empty by Docker, and the app then prints `Cannot start: ...` (see `docker compose logs`).
 - **The default mount shows the container the whole repo folder, read-only.** The app reads only the three CSV files.
 - **Not on the network:** the server listens on all interfaces inside the container, and Compose publishes it only on your machine's `127.0.0.1`, so the callback list is not exposed. Never change the port line in `docker-compose.yml` to `0.0.0.0`.
-- **New data:** a restart alone is not enough, because the app reads the database, not the CSVs. See "Database in Docker" below.
+- **New data:** a restart alone is not enough, because the app reads the database, not the CSVs. Upload a CSV in the app (see "Upload a CSV"; it is kept on the `calls-db` volume), or see "Database in Docker" below.
 - **Separate from `npm start`:** Docker keeps its AI call log and cache on the volumes `ai-logs` and `ai-cache`, while `npm start` uses `./logs` and `./.cache`. Each has its own spend cap (using both doubles the effective cap), and a takeaway paid for in one is paid for again in the other.
 - **Start-up line:** inside the container it says `http://localhost:3000` even when `PORT=3001` publishes it on 3001; the host port is the `PORT` you set.
 - **Exported key:** your shell's exported `ANTHROPIC_API_KEY` beats `.env`. To run with AI off, unset it first (PowerShell: `Remove-Item Env:ANTHROPIC_API_KEY`), or real API calls will be made.
@@ -61,7 +61,7 @@ The app keeps its calls in one SQLite file, `DB_PATH` (default `data/calls.db`, 
 
 ### Limits of the database
 
-- A running server keeps its snapshot until restart, also after `npm run seed`.
+- A running server keeps its snapshot until restart after `npm run seed`. An upload (next section) updates it at once; `npm run seed` does not.
 - One process at a time should write.
 - Moving to another data folder needs `npm run seed <folder>` or moving the file aside; at start the app prints a warning when the folder is not what the database was seeded from.
 - A file from an older schema, or one that is corrupt, stops startup with a message; the app never deletes it. A file that is locked by another process, unreadable or read-only gets its own message, and none of those messages tells you to move the file aside unless it really is damaged.
@@ -88,9 +88,26 @@ Things to know when reading it:
 
 The default stays the shipped export. To use the extended one on a **first run** (no database yet), set `DATA_DIR=data/extended`; on a **later run** the existing database wins, so run `npm run seed data/extended` and restart (or move `data/calls.db` aside). To regenerate it (same seed, same bytes), run `npm run generate:extended`; the script and its settings are in `scripts/generate-extended.ts`.
 
+## Upload a CSV
+
+The **Upload data** button in the header opens a panel where you add one CSV to the database without a restart.
+
+- **What it takes:** one file at a time, either calls, campaigns or locations. The app tells which from the header columns, in any order. Extra columns are fine, and so are a byte-order mark and Windows line endings. The limit is 10 MB.
+- **Preview first.** After you choose a file the panel shows five counts for its rows: new, new versions, duplicates, conflicts and bad. It lists a few examples of each and writes nothing. The data changes only when you press the **Add** button.
+- **Order to use:** campaigns, then locations, then calls. A call that names a campaign or office the database lacks is reported as bad and not stored, with a hint to upload that file first. Upload the same calls file again afterwards.
+- **Calls** match on `call_id` and `updated_at`. A pair already stored is a duplicate, even when its other values differ; the preview says how many rows that was. A known `call_id` with a new `updated_at` is a new version, and the latest `updated_at` wins.
+- **Campaigns and locations** match on id. The same values are a duplicate. **Different values are a conflict and are not written**, so an upload cannot change a budget or a time zone. A campaign or location row with a problem (for example an invalid time zone) is bad and not written.
+- **Repeats inside the file** are caught: a repeated campaign or location id keeps its first row and later differing rows are conflicts; several rows for one new call are all new rows.
+- **One transaction.** All new rows are written together, or none are; if the write fails nothing is stored and the server keeps its old data. Pressing **Add** again, or uploading the same file twice, adds nothing the second time.
+- **Views and takeaways update without a restart.** After **Add**, "See the new data" reloads the page on the default range, so the date span, the pickers, every view and every takeaway are fetched again. The takeaway service is rebuilt for the new data, so a takeaway written for the old data is not reused. The AI counters on the dev data notes panel (cache hits, checker failures) restart at 0; the spend is read from the call log and carries over.
+- **Bad rows are reported, not stored.** The header's "skipped rows" count only covers rows stored by a seed, so an upload does not change it.
+- **Safety:** uploads are safe only because the server listens on localhost and there is no login. The upload routes also refuse a request that a browser marks as cross-site. Do not expose the port; the Docker compose file publishes it only on 127.0.0.1.
+- **`DB_PATH=:memory:`** keeps the data in memory, so an upload lasts until the server stops.
+- Each confirmed upload adds one row to the `seeds` table, labelled `upload: <file name>`. The database schema is unchanged.
+
 ## API
 
-`npm start` reads the database once at start (seeding it first if the file is missing) and serves JSON on **127.0.0.1 only** (the callback list carries caller hashes). A missing folder, file or column, a bad `PORT` or a busy port prints one `Cannot start: ...` line and exits 1. Every route is GET only.
+`npm start` reads the database at start (seeding it first if the file is missing) and again after each confirmed upload and serves JSON on **127.0.0.1 only** (the callback list carries caller hashes). A missing folder, file or column, a bad `PORT` or a busy port prints one `Cannot start: ...` line and exits 1. Every route is GET only except the two upload routes.
 
 | Route | Query parameters | 200 body |
 | --- | --- | --- |
@@ -104,6 +121,8 @@ The default stays the shipped export. To use the extended one on a **first run**
 | `/api/answer` | range, `view`, `f_*` filter | answer panel: totals and a table for the filter (code only) |
 | `/api/question` | `q` (at most 300 characters) | a validated filter as a query string (the only AI step; needs a key) |
 | `/api/data-notes` | none | data notes (always available) |
+| `POST /api/upload/preview` | one CSV in the multipart field `file` | what the file would add: counts, examples, hints (writes nothing) |
+| `POST /api/upload/commit` | one CSV in the multipart field `file` | what was written, and the fresh `/api/meta` body |
 
 - **Range:** `range=last7|last28|all`, or `start=YYYY-MM-DD&end=YYYY-MM-DD`. Neither given means `last28`.
 - **Compare (optional):** `compareStart` and `compareEnd` together.
