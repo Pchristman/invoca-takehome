@@ -28,9 +28,12 @@ One command: `docker compose up --build`, then open `http://localhost:3000`. A `
 - **The default mount shows the container the whole repo folder, read-only.** The app reads only the three CSV files.
 - **Not on the network:** the server listens on all interfaces inside the container, and Compose publishes it only on your machine's `127.0.0.1`, so the callback list is not exposed. Never change the port line in `docker-compose.yml` to `0.0.0.0`.
 - **New data:** run `docker compose restart`. The data is read once at start, like `npm start`.
+- **Separate from `npm start`:** Docker keeps its AI call log and cache on the volumes `ai-logs` and `ai-cache`, while `npm start` uses `./logs` and `./.cache`. Each has its own spend cap (using both doubles the effective cap), and a takeaway paid for in one is paid for again in the other.
+- **Start-up line:** inside the container it says `http://localhost:3000` even when `PORT=3001` publishes it on 3001; the host port is the `PORT` you set.
+- **Exported key:** your shell's exported `ANTHROPIC_API_KEY` beats `.env`. To run with AI off, unset it first (PowerShell: `Remove-Item Env:ANTHROPIC_API_KEY`), or real API calls will be made.
 - **AI cache and call log** live on the volumes `ai-cache` and `ai-logs`. `docker compose down` keeps them. **`docker compose down -v` deletes the call log, so the spend guard counts from $0 again.** To read the log: `docker compose run --rm app cat logs/ai-calls.jsonl`.
 - **The key** comes from `.env` at run time and is never in the image. A shell `ANTHROPIC_API_KEY` wins over `.env`, as with `npm start`.
-- **`HOST` warning:** some shells (zsh) set `HOST` to the machine name. If it is exported, `npm start` will try to listen on that name and say so. Unset it, or set `HOST=127.0.0.1`. Inside Docker the image sets its own `HOST`, so this does not matter there.
+- **`HOST` warning:** some shells (zsh) set `HOST` to the machine name. If it is exported (the shell beats `.env`), `npm start` listens on that address, which may be reachable from other devices on your network. When the bound address is not loopback, `npm start` prints a `Listening on a non-loopback address (...)` line; if you see it and did not mean it, unset `HOST` or set `HOST=127.0.0.1`. Inside Docker the image sets its own `HOST`, so this does not matter there.
 
 ## Data
 
@@ -113,6 +116,7 @@ Each view shows one short takeaway line under the date control, marked `AI` or `
 ### Known limits of AI takeaways
 
 - **One process at a time.** Each running copy of the app (and `npm run ai:try`) reads the call log once at start and counts only its own calls after that, so two running at once each get the full spend limit. The log and cache paths are relative to the folder you start from (like `DATA_DIR`): start from the project folder, or spend will read as $0.
+- **Docker and `npm start` do not share state.** Docker keeps its call log and cache on the volumes `ai-logs` and `ai-cache`; `npm start` uses `./logs` and `./.cache`. Each has its own spend cap (using both doubles the effective cap), and a takeaway paid for in one is paid for again in the other.
 - **The checker cannot see meaning.** It stops invented numbers and names, but not valid placeholders in the wrong place ("{worst.name} is the strongest"), and the model sees names cut to 80 characters, so it could write that cut-off form.
 - **Failed calls log $0.** A timeout or API error returns no token count, so it is logged at $0 and the real bill may be a little higher; the $5 default limit sits far below the $250 cap.
 - **Names are data, not trusted.** Campaign and office names reach the prompt, shortened and inside a JSON block; the checker is the hard limit, not the prompt.
