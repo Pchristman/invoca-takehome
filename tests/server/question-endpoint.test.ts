@@ -49,9 +49,10 @@ describe('GET /api/question', () => {
   });
 
   it.each([
-    ['unknown office', { ...REPLY, offices: ['Atlantis'] }, `${PREFIX}No office is called "Atlantis".`],
-    ['hour 24', { ...REPLY, hours: [24] }, `${PREFIX}Hour 24 is not an hour of the day.`],
-    ['hour 9.5', { ...REPLY, hours: [9.5] }, `${PREFIX}Hour 9.5 is not an hour of the day.`],
+    ['unknown office', { ...REPLY, offices: ['Atlantis'] }, `${PREFIX}The question names an office that isn't in the data.`],
+    ['hour 24', { ...REPLY, hours: [24] }, `${PREFIX}That question names an hour that isn't an hour of the day.`],
+    ['hour 9.5', { ...REPLY, hours: [9.5] }, `${PREFIX}That question names an hour that isn't an hour of the day.`],
+    ['model-written date', { ...REPLY, range: { start: 'Revenue is $1M', end: '2026-09-02' } }, `${PREFIX}The dates in that question are not valid dates in this data.`],
   ])('invalid values (%s) give invalid_filter and a checkPassed false log line', async (_name, reply, message) => {
     const app = createApp(serverFixture(), { ai: service(new FakeModel(jsonReply(reply))) });
     const r = await get(app, q('anything'));
@@ -67,7 +68,36 @@ describe('GET /api/question', () => {
     dup.locations.push({ ...dup.locations[0]!, id: 'loc_c', name: 'OFFICE b' });
     const app = createApp(dup, { ai: service(new FakeModel(jsonReply(REPLY))) });
     const r = await get(app, q('anything'));
-    expect(r.json).toEqual({ ok: false, reason: 'invalid_filter', message: `${PREFIX}"Office B" matches more than one office.` });
+    expect(r.json).toEqual({ ok: false, reason: 'invalid_filter', message: `${PREFIX}The question names an office that matches more than one office.` });
+  });
+
+  it('a name the question itself contains may be echoed; one only the model wrote is not', async () => {
+    const lie = 'Revenue rose 500% last week, call 555-0100';
+    const model = new FakeModel(jsonReply({ ...REPLY, offices: [lie] }));
+    const app = createApp(serverFixture(), { ai: service(model) });
+    const r = await get(app, q('calls for Atlantis please'));
+    expect(r.text).not.toContain('555-0100');
+    expect(r.text).not.toContain('500%');
+    const echoed = createApp(serverFixture(), { ai: service(new FakeModel(jsonReply({ ...REPLY, offices: ['Atlantis'] }))) });
+    expect((await get(echoed, q('calls for Atlantis please'))).json).toEqual({
+      ok: false, reason: 'invalid_filter', message: `${PREFIX}No office is called "Atlantis".`,
+    });
+  });
+
+  it('a cross-site request is 403 before any parameter is read or model call is made', async () => {
+    const model = new FakeModel(jsonReply(REPLY));
+    const app = createApp(serverFixture(), { ai: service(model) });
+    for (const site of ['cross-site', 'same-site']) {
+      for (const path of [q('hi'), '/api/question']) {
+        const r = await get(app, path, { headers: { 'Sec-Fetch-Site': site } });
+        expect(r.status, `${site} ${path}`).toBe(403);
+        expect(r.json).toEqual({ error: { code: 'forbidden', message: 'Cross-site requests are not allowed.' } });
+      }
+    }
+    expect(model.calls).toBe(0);
+    for (const headers of [{ 'Sec-Fetch-Site': 'same-origin' }, { 'Sec-Fetch-Site': 'none' }, {}] as Record<string, string>[]) {
+      expect((await get(app, q('hi'), { headers })).status, JSON.stringify(headers)).toBe(200);
+    }
   });
 
   it('answerable false is unanswerable and cached', async () => {

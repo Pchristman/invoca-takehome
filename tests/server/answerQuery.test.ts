@@ -59,6 +59,18 @@ describe('parseAnswerQuery', () => {
     expect(error.field).toBe(field);
   });
 
+  it('a repeated view is a bad_param on view, like a repeated range', () => {
+    const error = failure({ view: ['overview', 'campaigns'] });
+    expect(error.code).toBe('bad_param');
+    expect(error.field).toBe('view');
+  });
+
+  it('ignores compareStart and compareEnd, since an answer never compares', () => {
+    const r = parse({ compareStart: ['not a date'], compareEnd: ['2026-09-01'] });
+    expect(r.ok).toBe(true);
+    expect(parse({ compareStart: ['a', 'b'] }).ok).toBe(true);
+  });
+
   it('keeps a repeated id once, in order', () => {
     const r = parse({ f_office: ['loc_b', 'loc_a', 'loc_b'], f_hour: ['3', '3'] });
     if (!r.ok) throw new Error(JSON.stringify(r.error));

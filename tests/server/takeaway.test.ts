@@ -53,6 +53,23 @@ describe('GET /api/takeaway/:view', () => {
     expect(r.text).toBe(JSON.stringify({ view: name, text: calls[0]!.template, source: 'template', reason: 'ai_off' }));
   });
 
+  it('a cross-site request is 403 and the service is not called; same-origin, none and no header pass', async () => {
+    const { service, calls } = stub(AI_RESULT);
+    const app = createApp(serverFixture(), { ai: service });
+    for (const site of ['cross-site', 'same-site']) {
+      for (const path of ['/api/takeaway/overview', '/api/takeaway/nope', '/api/takeaway/overview?range=nonsense']) {
+        const r = await get(app, path, { headers: { 'Sec-Fetch-Site': site } });
+        expect(r.status, `${site} ${path}`).toBe(403);
+        expect(r.json).toEqual({ error: { code: 'forbidden', message: 'Cross-site requests are not allowed.' } });
+      }
+    }
+    expect(calls).toEqual([]);
+    for (const headers of [{ 'Sec-Fetch-Site': 'same-origin' }, { 'Sec-Fetch-Site': 'none' }, {}] as Record<string, string>[]) {
+      expect((await get(app, '/api/takeaway/overview', { headers })).status, JSON.stringify(headers)).toBe(200);
+    }
+    expect(calls).toHaveLength(3);
+  });
+
   it('bad params still 400 and the service is not called', async () => {
     const { service, calls } = stub(AI_RESULT);
     const app = createApp(serverFixture(), { ai: service });

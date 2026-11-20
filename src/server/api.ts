@@ -62,6 +62,7 @@ export type ApiErrorCode =
   | 'unknown_location'
   | 'unknown_view'
   | 'not_found'
+  | 'forbidden'
   | 'internal';
 
 /** The body of every error response is `{ error: ApiError }`. */
@@ -72,8 +73,9 @@ export interface ApiError {
   field?: string;
 }
 
-/** no_data is 409, not_found 404, internal 500; every other code is the caller's mistake: 400. */
-export function statusFor(code: ApiErrorCode): 400 | 404 | 409 | 500 {
+/** no_data is 409, forbidden 403, not_found 404, internal 500; every other code is the caller's mistake: 400. */
+export function statusFor(code: ApiErrorCode): 400 | 403 | 404 | 409 | 500 {
+  if (code === 'forbidden') return 403;
   if (code === 'no_data') return 409;
   if (code === 'not_found') return 404;
   if (code === 'internal') return 500;

@@ -73,7 +73,7 @@ const SYSTEM_LINES = [
   'Leave a list empty when the question does not restrict it.',
 ];
 
-function cut(text: string): string {
+export function cutName(text: string): string {
   return text.length > MAX_NAME_CHARS ? text.slice(0, MAX_NAME_CHARS) : text;
 }
 
@@ -84,8 +84,8 @@ export function buildQuestionPrompt(question: string, context: QuestionContext):
     data: {
       firstDate: context.firstDate,
       lastDate: context.lastDate,
-      offices: context.offices.map(cut),
-      campaigns: context.campaigns.map(cut),
+      offices: context.offices.map(cutName),
+      campaigns: context.campaigns.map(cutName),
     },
   }, null, 2);
   return { system, user };

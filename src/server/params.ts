@@ -176,9 +176,14 @@ function parseIds(
 
 /** Turn the URL's range, view and f_ filter into a resolved range and an AnswerFilter, or one message. Never throws. */
 export function parseAnswerQuery(store: CallStore, span: DateRange | null, query: Query): Parsed<AnswerQuery> {
-  const parsedRange = parseViewQuery(store, span, query);
+  // An answer never compares, so a comparison range in the URL is ignored, not checked.
+  const { compareStart: _ignoredStart, compareEnd: _ignoredEnd, ...withoutCompare } = query;
+  const parsedRange = parseViewQuery(store, span, withoutCompare);
   if (!parsedRange.ok) return parsedRange;
 
+  if ((query['view']?.length ?? 0) > 1) {
+    return fail({ code: 'bad_param', field: 'view', message: 'The parameter view was given more than once.' });
+  }
   const viewText = query['view']?.[0] ?? '';
   const view = viewText === '' ? 'overview' : ANSWER_VIEWS.find((v) => v === viewText);
   if (view === undefined) {

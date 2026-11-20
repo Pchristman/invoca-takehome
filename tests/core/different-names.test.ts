@@ -267,11 +267,11 @@ describe('the answer on a different export', () => {
       hours: [14],
       range: { preset: 'all' as const },
     };
-    expect(replyToQuery(store, span, reply)).toEqual({
+    expect(replyToQuery(store, span, reply, 'london desk and Quokka Promo')).toEqual({
       ok: true,
       value: 'view=missed-calls&f_office=zz_lon&f_campaign=zz_c1&f_weekday=0&f_hour=14&range=all',
     });
-    expect(replyToQuery(store, span, { ...reply, offices: ['Canyon Office'] }).ok).toBe(false);
+    expect(replyToQuery(store, span, { ...reply, offices: ['Canyon Office'] }, 'Canyon Office').ok).toBe(false);
   });
 });
 

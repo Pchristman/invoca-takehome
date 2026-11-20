@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     // The same call the server makes for /api/question: cache, spend guard and call log all apply.
     for (const [i, question] of args.questions.entries()) {
       const before = ai.status().spendUsd;
-      const result = await ai.interpret(question, questionContext(store, span), (reply) => replyToQuery(store, span, reply));
+      const result = await ai.interpret(question, questionContext(store, span), (reply) => replyToQuery(store, span, reply, question));
       const cost = ai.status().spendUsd - before;
       const outcome = result.ok ? { ok: true as const, cached: result.cached, value: result.value } : result;
       console.log(formatQuestionResult(i + 1, outcome, cost));

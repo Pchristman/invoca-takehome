@@ -61,7 +61,7 @@ function questionMessage(reason: QuestionReason, detail: string | null): string 
   }
 }
 
-const INTERNAL_MESSAGE ='Something went wrong on the server.';
+const INTERNAL_MESSAGE = 'Something went wrong on the server.';
 
 export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   const app = new Hono();
@@ -69,6 +69,16 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   const span: DateRange | null = dataSpan(store.calls);
 
   const errorResponse = (c: Context, error: ApiError) => c.json({ error }, statusFor(error.code));
+
+  /**
+   * For the paid routes: a page on another site can make the browser send a GET here. Browsers say where a
+   * request came from in Sec-Fetch-Site; anything but same-origin or none is refused. No header (curl, tests) passes.
+   */
+  const crossSite = (c: Context): Response | null => {
+    const site = c.req.header('Sec-Fetch-Site');
+    if (site === undefined || site === 'same-origin' || site === 'none') return null;
+    return errorResponse(c, { code: 'forbidden', message: 'Cross-site requests are not allowed.' });
+  };
 
   /** Parse the query the way `name`'s view does; the caller gets the parsed query or the error response to return. */
   const parseFor = (c: Context, name: ViewName): Parsed<ViewQuery> =>
@@ -117,6 +127,8 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
 
   // The only AI step of the question box: the model's reply is a filter, and it is shown only after the URL validator accepts it.
   app.get('/api/question', async (c) => {
+    const refused = crossSite(c);
+    if (refused) return refused;
     const asked = c.req.queries('q') ?? [];
     const q = (asked[0] ?? '').trim();
     if (asked.length > 1) {
@@ -131,7 +143,7 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
     if (span === null) {
       return errorResponse(c, { code: 'no_data', message: 'There are no calls to ask about.' });
     }
-    const result = await ai.interpret(q, questionContext(store, span), (reply) => replyToQuery(store, span, reply));
+    const result = await ai.interpret(q, questionContext(store, span), (reply) => replyToQuery(store, span, reply, q));
     const response: QuestionResponse = result.ok
       ? { ok: true, source: 'ai', cached: result.cached, query: result.value }
       : {
@@ -148,6 +160,8 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   });
 
   app.get('/api/takeaway/:view', async (c) => {
+    const refused = crossSite(c);
+    if (refused) return refused;
     const name = viewNames.find((n) => n === c.req.param('view'));
     if (!name) {
       return errorResponse(c, {
