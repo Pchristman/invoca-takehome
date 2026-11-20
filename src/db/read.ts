@@ -113,7 +113,7 @@ function readTables(db: DatabaseSync): LoadedExport {
     unparseableUpdatedAt,
     unparseableEndedAt,
     referenceIssues,
-    notes: rows.length === 0 ? ['The database holds no calls: starting with zero calls'] : [],
+    notes: rows.length === 0 ? ['calls.csv is empty: starting with zero calls'] : [],
   };
 }
 

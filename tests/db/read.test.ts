@@ -85,10 +85,10 @@ describe('readStore', () => {
   it('a database with no rows reads as zero calls with the note', () => {
     const db = seeded(csvTexts({ calls: [] }));
     const loaded = readLoadedExport(db);
-    expect(loaded.notes).toEqual(['The database holds no calls: starting with zero calls']);
+    expect(loaded.notes).toEqual(['calls.csv is empty: starting with zero calls']);
     const store = readStore(db);
     expect(store.calls).toEqual([]);
-    expect(store.dataNotes.notes).toContain('The database holds no calls: starting with zero calls');
+    expect(store.dataNotes.notes).toContain('calls.csv is empty: starting with zero calls');
   });
 
   it.each([

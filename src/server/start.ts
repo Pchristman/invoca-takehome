@@ -1,16 +1,17 @@
 import { serve } from '@hono/node-server';
 import type { AddressInfo } from 'node:net';
-import { cleanExport } from '../core/clean';
 import type { CallStore } from '../core/types';
-import { readExportFromDir } from '../node/readDataDir';
+import { loadStore } from '../db/prepare';
 import { createAiFromEnv } from '../ai/fromEnv';
 import type { TakeawayService } from '../ai/service';
 import { createApp } from './app';
-import { explainListenError, parseHost, parsePort } from './config';
+import { explainListenError, parseDbPath, parseHost, parsePort } from './config';
 
 export interface StartOptions {
   /** The export folder. Omitted: DATA_DIR, else the current directory (see readExportFromDir). */
   dataDir?: string;
+  /** The SQLite file. Omitted: a private in-memory database when dataDir is given, else DB_PATH, else data/calls.db. */
+  dbPath?: string;
   /** 0 picks a free port (tests). Omitted: PORT, else 3000. */
   port?: number;
   /** The address to listen on. Omitted: HOST, else 127.0.0.1 (loopback only). */
@@ -27,13 +28,22 @@ export interface RunningServer {
   port: number;
   url: string;
   store: CallStore;
+  /** One-line messages for the person starting the app: what was seeded, a data folder that is not what the database holds. */
+  notices: string[];
   close(): Promise<void>;
 }
 
-/** The only code that reads the export, opens a port or reads PORT. It does not read .env (cli.ts does). Throws LoadError (data) or ConfigError (port). */
+/** An explicit dataDir with no dbPath means "seed a private in-memory database from that folder" (tests, one-off runs). */
+function resolveDbPath(options: StartOptions): string {
+  if (options.dbPath !== undefined) return options.dbPath;
+  if (options.dataDir?.trim()) return ':memory:';
+  return parseDbPath(process.env.DB_PATH);
+}
+
+/** The only code that opens the database, opens a port or reads PORT and DB_PATH. It does not read .env (cli.ts does). Throws LoadError (data) or ConfigError (port). */
 export async function start(options: StartOptions = {}): Promise<RunningServer> {
   const requested = options.port ?? parsePort(process.env.PORT);
-  const store = cleanExport(readExportFromDir(options.dataDir));
+  const { store, notices } = loadStore({ dbPath: resolveDbPath(options), dataDir: options.dataDir });
   const app = createApp(store, { webRoot: options.webRoot, ai: options.ai ?? createAiFromEnv(store, process.env) });
 
   const requestedHost = options.host ?? parseHost(process.env.HOST);
@@ -52,6 +62,7 @@ export async function start(options: StartOptions = {}): Promise<RunningServer> 
     port,
     url: `http://${urlHost}:${port}`,
     store,
+    notices,
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));

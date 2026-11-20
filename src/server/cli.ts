@@ -16,7 +16,7 @@ async function main(): Promise<void> {
     parts.push(`at ${server.url}`);
     let line = parts.join(', ');
     if (dataNotes.badRows > 0) line += `, ${dataNotes.badRows} rows skipped`;
-    console.log([line, nonLoopbackWarning(server.host), ...dataNotes.notes].filter(Boolean).join('\n'));
+    console.log([line, nonLoopbackWarning(server.host), ...server.notices, ...dataNotes.notes].filter(Boolean).join('\n'));
   } catch (error) {
     if (error instanceof LoadError || error instanceof ConfigError) {
       console.error(`Cannot start: ${error.message}`);

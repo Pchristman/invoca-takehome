@@ -6,6 +6,7 @@ export default defineConfig({
     passWithNoTests: true,
     // No test may reach the real API, even when the developer's shell has a key. Tests that want AI inject a fake model.
     // An exported HOST (zsh sets it to the machine name) must not change where a test server binds.
-    env: { ANTHROPIC_API_KEY: '', HOST: '' },
+    // No test may create or read the real database file (data/calls.db): ':memory:' seeds a private database from the data folder.
+    env: { ANTHROPIC_API_KEY: '', HOST: '', DB_PATH: ':memory:' },
   },
 });

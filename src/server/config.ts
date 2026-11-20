@@ -21,6 +21,14 @@ export function parsePort(value: string | undefined): number {
   return port;
 }
 
+const DEFAULT_DB_PATH = 'data/calls.db';
+
+/** DB_PATH from the environment: unset or blank gives data/calls.db; otherwise the trimmed text (":memory:" is allowed). */
+export function parseDbPath(value: string | undefined): string {
+  const text = value?.trim() ?? '';
+  return text === '' ? DEFAULT_DB_PATH : text;
+}
+
 const DEFAULT_HOST = '127.0.0.1';
 
 /** HOST from the environment: unset or blank gives loopback; otherwise the trimmed text. */
