@@ -13,6 +13,7 @@ export interface UrlState {
   campaign: string | null;
   location: string | null;
   dev: boolean;
+  print: boolean; // the one-page print summary
 }
 
 export const VIEW_ORDER: readonly ViewName[] = ['overview', 'campaigns', 'locations', 'missed-calls'];
@@ -54,6 +55,7 @@ export function parseUrlState(search: string): UrlState {
     campaign: firstValue(params, 'campaign'),
     location: firstValue(params, 'location'),
     dev: params.has('dev'),
+    print: params.has('print'),
   };
 }
 
@@ -71,7 +73,7 @@ function rangePairs(state: UrlState): Array<[string, string]> {
   return pairs.filter(([, value]) => value !== '');
 }
 
-// '' for the defaults, else '?view=campaigns&range=last7&dev' (dev is written bare).
+// '' for the defaults, else '?view=campaigns&range=last7&dev' (print and dev are written bare, print first).
 export function toSearch(state: UrlState): string {
   const pairs: Array<[string, string]> = [];
   if (state.view !== 'overview') pairs.push(['view', state.view]);
@@ -80,6 +82,7 @@ export function toSearch(state: UrlState): string {
   if (state.location) pairs.push(['location', state.location]);
 
   const parts = pairs.map(([name, value]) => `${name}=${encodeURIComponent(value)}`);
+  if (state.print) parts.push('print');
   if (state.dev) parts.push('dev');
   return parts.length === 0 ? '' : `?${parts.join('&')}`;
 }
@@ -162,6 +165,7 @@ export function defaultsHref(state: UrlState): string {
     campaign: null,
     location: null,
     dev: state.dev,
+    print: state.print,
   };
   return `/${toSearch(target)}`;
 }
@@ -169,4 +173,19 @@ export function defaultsHref(state: UrlState): string {
 // The query for a takeaway: what changes its fact sheet. The campaign only picks the weekly chart, so it is left out.
 export function takeawayParams(state: UrlState, view: ViewName): URLSearchParams {
   return apiParams({ ...state, campaign: null }, view);
+}
+
+// The print page: the view, range and comparison, company-wide. Drops the filters and dev.
+export function printHref(state: UrlState): string {
+  return `/${toSearch({ ...state, campaign: null, location: null, dev: false, print: true })}`;
+}
+
+// The way back from the print page to the app: everything kept, print off.
+export function appHref(state: UrlState): string {
+  return `/${toSearch({ ...state, print: false })}`;
+}
+
+// The query for the print page's requests: the same as the screen's, with no campaign or location.
+export function printParams(state: UrlState, view: ViewName): URLSearchParams {
+  return apiParams({ ...state, campaign: null, location: null }, view);
 }

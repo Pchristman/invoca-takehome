@@ -16,6 +16,9 @@ import {
   presetOf,
   actionHref,
   defaultsHref,
+  printHref,
+  appHref,
+  printParams,
   type UrlState,
 } from '../../src/web/urlState';
 
@@ -26,6 +29,7 @@ const DEFAULTS: UrlState = {
   campaign: null,
   location: null,
   dev: false,
+  print: false,
 };
 
 function state(changes: Partial<UrlState>): UrlState {
@@ -419,5 +423,82 @@ describe('a comparison range in the URL', () => {
 
   it('is dropped by csvHref', () => {
     expect(csvHref(s)).toBe('/api/missed-calls/callbacks.csv?start=2026-09-08&end=2026-09-14');
+  });
+});
+
+describe('the print flag', () => {
+  const LAST7 = { kind: 'preset', preset: 'last7' } as const;
+  const COMPARE = { start: '2026-09-01', end: '2026-09-07' };
+  const FILTERED = state({
+    view: 'missed-calls',
+    range: LAST7,
+    compare: COMPARE,
+    campaign: 'cmp_a',
+    location: 'loc_a',
+    dev: true,
+  });
+
+  it('parses ?print and ?print=1 as true, nothing as false, and ?print&dev as both', () => {
+    expect(parseUrlState('?print').print).toBe(true);
+    expect(parseUrlState('?print=1').print).toBe(true);
+    expect(parseUrlState('').print).toBe(false);
+    const both = parseUrlState('?print&dev');
+    expect(both.print).toBe(true);
+    expect(both.dev).toBe(true);
+  });
+
+  it('toSearch writes a bare print before a bare dev', () => {
+    expect(toSearch(state({ print: true }))).toBe('?print');
+    expect(toSearch(state({ print: true, range: LAST7 }))).toBe('?range=last7&print');
+    expect(toSearch(state({ print: true, dev: true }))).toBe('?print&dev');
+    const full = state({ print: true, range: LAST7, compare: COMPARE });
+    expect(parseUrlState(toSearch(full))).toEqual(full);
+  });
+
+  it('printHref keeps view, range and comparison and drops campaign, location and dev', () => {
+    const href = printHref(FILTERED);
+    const params = new URLSearchParams(href.slice(href.indexOf('?')));
+    expect(href.startsWith('/?')).toBe(true);
+    expect(params.get('view')).toBe('missed-calls');
+    expect(params.get('range')).toBe('last7');
+    expect(params.get('compareStart')).toBe('2026-09-01');
+    expect(params.get('compareEnd')).toBe('2026-09-07');
+    expect(params.has('print')).toBe(true);
+    expect(params.has('campaign')).toBe(false);
+    expect(params.has('location')).toBe(false);
+    expect(params.has('dev')).toBe(false);
+  });
+
+  it('appHref drops only print', () => {
+    expect(appHref({ ...FILTERED, print: true })).toBe(`/${toSearch(FILTERED)}`);
+    expect(appHref(state({ print: true }))).toBe('/');
+  });
+
+  it('printParams has no campaign or location in any view and keeps range and comparison', () => {
+    const filtered = { ...FILTERED, print: true };
+    for (const view of VIEW_ORDER) {
+      const params = printParams(filtered, view);
+      expect(params.has('campaign')).toBe(false);
+      expect(params.has('location')).toBe(false);
+      expect(params.get('range')).toBe('last7');
+      expect(params.get('compareStart')).toBe('2026-09-01');
+      expect(params.get('compareEnd')).toBe('2026-09-07');
+    }
+  });
+
+  it('printParams matches takeawayParams when no filter is set, so the cache is shared', () => {
+    const plain = state({ range: LAST7, compare: COMPARE, print: true });
+    for (const view of VIEW_ORDER) {
+      expect(printParams(plain, view).toString()).toBe(takeawayParams(plain, view).toString());
+    }
+  });
+
+  it('defaultsHref and the with* helpers keep print; csvHref is unchanged', () => {
+    const printing = state({ print: true, range: LAST7 });
+    expect(defaultsHref(printing)).toBe('/?print');
+    expect(withRange(printing, null).print).toBe(true);
+    expect(withCompare(printing, COMPARE).print).toBe(true);
+    expect(withView(printing, 'campaigns').print).toBe(true);
+    expect(csvHref(printing)).toBe(csvHref(state({ range: LAST7 })));
   });
 });
