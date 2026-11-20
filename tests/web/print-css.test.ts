@@ -25,7 +25,26 @@ describe('print stylesheet', () => {
   });
 
   it('keeps blocks and tiles whole', () => {
-    expect(print).toContain('break-inside: avoid');
+    const media = block(print, print.indexOf('@media print'));
+    const rule = /([^{}]*)\{[^}]*break-inside:\s*avoid/.exec(media);
+    expect(rule).not.toBeNull();
+    for (const selector of ['.print-block', '.print-tile']) expect(rule![1]).toContain(selector);
+  });
+
+  it('draws the tile divider as a border, with no shadow', () => {
+    expect(print).toMatch(/\.print-tile \+ \.print-tile\s*\{[^}]*border-left:\s*1px solid var\(--color-rule\)/);
+    expect(print).not.toContain('box-shadow');
+  });
+
+  it('has no redundant loading selector', () => {
+    expect(print).not.toContain('[role="status"].loading');
+  });
+
+  it('the print text scale never shrinks from sm to 2xl', () => {
+    const body = block(tokens, tokens.indexOf('@media print'));
+    const sizes = ['sm', 'md', 'lg', 'xl', '2xl'].map((n) => Number(new RegExp(`--text-${n}\\s*:\\s*([\\d.]+)pt`).exec(body)?.[1]));
+    expect(sizes.every((n) => Number.isFinite(n))).toBe(true);
+    for (let i = 1; i < sizes.length; i++) expect(sizes[i]!).toBeGreaterThanOrEqual(sizes[i - 1]!);
   });
 
   it('wraps long names inside the page', () => {
