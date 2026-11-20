@@ -21,7 +21,8 @@ function html(settings: MotionSettings, m = model): string {
 }
 
 describe('WeeklyChart with motion on and off', () => {
-  it('prints the same page either way', () => {
+  // Node draws no bars (the chart measures a browser container), so this compares the words, table and legend only.
+  it('renders the same words, table and legend either way (bars are not rendered in Node)', () => {
     expect(html(MOTION_ON)).toBe(html(MOTION_OFF));
   });
 

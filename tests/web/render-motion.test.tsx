@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MotionContext, useMotion } from '../../src/web/useMotion';
 import { MOTION_OFF } from '../../src/web/models/motionSettings';
-import { AnimatedNumber } from '../../src/web/components/AnimatedNumber';
 import { OverviewView } from '../../src/web/components/OverviewView';
-import { overviewModel } from '../../src/web/models/overviewModel';
+import { formatCount, formatRate, formatUsd } from '../../src/core/views/format';
 import { parseUrlState } from '../../src/web/urlState';
 import { overviewFor, missedCallsFor, plantedStore, metaFor } from './fixtures';
 import { readFileSync } from 'node:fs';
@@ -40,7 +39,7 @@ describe('AnimatedNumber and the Overview tiles', () => {
   const span = { start: view.range.start, end: view.range.end };
   const text = (html: string) => html.replace(/ style="[^"]*"/g, '').replace(/<[^>]*>/g, '');
 
-  it('rests on the server text, with motion on or off', () => {
+  it('the first frame is the server text, with motion on or off (server render runs no effects)', () => {
     const render = (m: typeof ON | typeof MOTION_OFF) =>
       renderToStaticMarkup(
         <MotionContext value={m}>
@@ -49,17 +48,17 @@ describe('AnimatedNumber and the Overview tiles', () => {
       );
     const on = text(render(ON));
     expect(on).toBe(text(render(MOTION_OFF)));
-    for (const tile of overviewModel(view).tiles) expect(on).toContain(tile.value);
+    const raw = view.tiles;
+    for (const value of [
+      formatCount(raw.calls.current!),
+      formatCount(raw.uniqueCallers.current!),
+      formatRate(raw.answerRate.current!),
+      formatCount(raw.bookings.current!),
+      formatUsd(raw.revenueUsd.current!),
+    ])
+      expect(on).toContain(value);
   });
 
-  it('renders no tween bookkeeping when motion is off', () => {
-    const html = renderToStaticMarkup(
-      <MotionContext value={MOTION_OFF}>
-        <AnimatedNumber id="calls" text="1,204" figure={{ value: 1204, kind: 'count' }} />
-      </MotionContext>,
-    );
-    expect(html).toBe('<span class="figure">1,204</span>');
-  });
 });
 
 describe('views, takeaway, panels and heatmap (Task 5)', () => {

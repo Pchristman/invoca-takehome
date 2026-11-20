@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { cleanExport } from '../../src/core/clean';
+import { formatCount, formatRate, formatUsd } from '../../src/core/views/format';
 import { readExportFromDir } from '../../src/node/readDataDir';
 import { CampaignsView } from '../../src/web/components/CampaignsView';
 import { LocationsView } from '../../src/web/components/LocationsView';
@@ -13,7 +14,6 @@ import { MissedCallsView } from '../../src/web/components/MissedCallsView';
 import { OverviewView } from '../../src/web/components/OverviewView';
 import { MOTION_OFF } from '../../src/web/models/motionSettings';
 import type { MotionSettings } from '../../src/web/models/motionSettings';
-import { overviewModel } from '../../src/web/models/overviewModel';
 import { MotionContext } from '../../src/web/useMotion';
 import { parseUrlState } from '../../src/web/urlState';
 import { campaignsFor, locationsFor, metaFor, missedCallsFor, overviewFor } from './fixtures';
@@ -79,11 +79,18 @@ describe.each(exports)('motion on and off on the $name export', ({ dir }) => {
   run('the Overview contains every tile exact value, with motion on and off', () => {
     const { overview, list } = views();
     const node = list[0]!.node;
-    const tiles = overviewModel(overview).tiles;
-    expect(tiles).toHaveLength(5);
+    // Expected strings come from the raw export numbers and the core formatters, not from the web model.
+    const raw = overview.tiles;
+    const expected = [
+      formatCount(raw.calls.current!),
+      formatCount(raw.uniqueCallers.current!),
+      formatRate(raw.answerRate.current!),
+      formatCount(raw.bookings.current!),
+      formatUsd(raw.revenueUsd.current!),
+    ];
     for (const motion of [ON, MOTION_OFF]) {
       const out = text(render(motion, node));
-      for (const tile of tiles) expect(out).toContain(tile.value);
+      for (const value of expected) expect(out).toContain(value);
     }
   });
 });
