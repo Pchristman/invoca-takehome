@@ -8,6 +8,9 @@ export class ConfigError extends Error {
   }
 }
 
+/** The most bytes a request to an upload route may carry (the shipped calls.csv is under 1 MB). */
+export const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+
 const DEFAULT_PORT = 3000;
 
 /** PORT from the environment: unset or blank gives the default; otherwise a whole number from 1 to 65535. */

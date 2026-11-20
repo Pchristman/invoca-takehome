@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import type { AddressInfo } from 'node:net';
 import type { CallStore } from '../core/types';
 import { loadStore } from '../db/prepare';
+import { createUploadService } from '../db/upload/service';
 import { createAiFromEnv } from '../ai/fromEnv';
 import type { TakeawayService } from '../ai/service';
 import { createApp } from './app';
@@ -43,15 +44,25 @@ function resolveDbPath(options: StartOptions): string {
 /** The only code that opens the database, opens a port or reads PORT and DB_PATH. It does not read .env (cli.ts does). Throws LoadError (data) or ConfigError (port). */
 export async function start(options: StartOptions = {}): Promise<RunningServer> {
   const requested = options.port ?? parsePort(process.env.PORT);
-  const { store, notices } = loadStore({ dbPath: resolveDbPath(options), dataDir: options.dataDir });
-  const app = createApp(store, { webRoot: options.webRoot, ai: options.ai ?? createAiFromEnv(store, process.env) });
-
+  const { store, notices, database } = loadStore({ dbPath: resolveDbPath(options), dataDir: options.dataDir });
   const requestedHost = options.host ?? parseHost(process.env.HOST);
-  const server = serve({ fetch: app.fetch, port: requested, hostname: requestedHost });
-  await new Promise<void>((resolve, reject) => {
-    server.once('listening', resolve);
-    server.once('error', (error: NodeJS.ErrnoException) => reject(explainListenError(error, requested, requestedHost)));
-  });
+  let server: ReturnType<typeof serve>;
+  try {
+    const app = createApp(store, {
+      webRoot: options.webRoot,
+      ai: options.ai ?? createAiFromEnv(store, process.env),
+      uploads: createUploadService(database),
+      rebuildAi: (rebuilt) => createAiFromEnv(rebuilt, process.env),
+    });
+    server = serve({ fetch: app.fetch, port: requested, hostname: requestedHost });
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve);
+      server.once('error', (error: NodeJS.ErrnoException) => reject(explainListenError(error, requested, requestedHost)));
+    });
+  } catch (error) {
+    database.close(); // an in-memory connection or a file must not outlive a server that never started
+    throw error;
+  }
 
   const { address: host, port } = server.address() as AddressInfo;
   // A wildcard address is not a place a browser can go.
@@ -65,7 +76,10 @@ export async function start(options: StartOptions = {}): Promise<RunningServer> 
     notices,
     close: () =>
       new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
+        server.close((error) => {
+          database.close();
+          return error ? reject(error) : resolve();
+        });
         // fetch keeps connections alive; do not wait for them to idle out
         if ('closeAllConnections' in server) server.closeAllConnections();
       }),

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { offService } from '../ai/service';
 import type { TakeawayService } from '../ai/service';
+import type { UploadService } from '../db/upload/service';
 import type { QuestionReason, TakeawayResult } from '../ai/types';
 import { buildAnswer } from '../core/answer';
 import { dataSpan } from '../core/ranges';
@@ -15,6 +16,7 @@ import { callbacksToCsv } from './csv';
 import { parseAnswerQuery, parseViewQuery } from './params';
 import { QUESTION_MAX_CHARS, questionContext, replyToQuery } from './questionQuery';
 import { serveWebApp } from './staticFiles';
+import { mountUploadRoutes } from './uploadRoutes';
 import type { Parsed, ViewQuery, ViewQueryWants } from './params';
 
 export interface AppOptions {
@@ -22,6 +24,10 @@ export interface AppOptions {
   webRoot?: string;
   /** Writes the takeaways (defaults to AI off: every takeaway is the template sentence). */
   ai?: TakeawayService;
+  /** Previews and writes uploaded CSVs. Omitted: the upload routes answer upload_unavailable. */
+  uploads?: UploadService;
+  /** Builds the takeaway service for the store an upload produced. Omitted: the service stays as it was. */
+  rebuildAi?: (store: CallStore) => TakeawayService;
 }
 
 /** What each view needs from the URL and how to build it. The view routes (and the takeaway route) all read this one table. */
@@ -61,12 +67,20 @@ function questionMessage(reason: QuestionReason, detail: string | null): string 
   }
 }
 
+/** What every route reads: replaced as a whole when an upload succeeds. */
+interface Current {
+  store: CallStore;
+  span: DateRange | null;
+  ai: TakeawayService;
+}
+
 const INTERNAL_MESSAGE = 'Something went wrong on the server.';
 
 export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   const app = new Hono();
-  const ai = options.ai ?? offService();
-  const span: DateRange | null = dataSpan(store.calls);
+  // The data, its span and the takeaway service live in one slot that every handler reads once, at request time,
+  // so a successful upload can replace all three at once without disturbing a request already running.
+  const current: Current = { store, span: dataSpan(store.calls), ai: options.ai ?? offService() };
 
   const errorResponse = (c: Context, error: ApiError) => c.json({ error }, statusFor(error.code));
 
@@ -82,10 +96,11 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
 
   /** Parse the query the way `name`'s view does; the caller gets the parsed query or the error response to return. */
   const parseFor = (c: Context, name: ViewName): Parsed<ViewQuery> =>
-    parseViewQuery(store, span, c.req.queries(), VIEW_TABLE[name].wants);
+    parseViewQuery(current.store, current.span, c.req.queries(), VIEW_TABLE[name].wants);
 
-  app.get('/api/meta', (c) => {
-    const meta: Meta = {
+  const metaOf = (): Meta => {
+    const { store, span, ai } = current;
+    return {
       hasData: span !== null,
       callCount: store.calls.length,
       span,
@@ -97,12 +112,13 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
       notes: store.dataNotes.notes,
       aiStatus: ai.status().status,
     };
-    return c.json(meta);
-  });
+  };
+  app.get('/api/meta', (c) => c.json(metaOf()));
 
   /** One route per view: parse, map a parse error to its JSON response, build, return the builder's output untouched. */
   const route = (name: ViewName) =>
     app.get(`/api/${name}`, (c) => {
+      const { store } = current;
       const parsed = parseFor(c, name);
       if (!parsed.ok) return errorResponse(c, parsed.error);
       return c.json(VIEW_TABLE[name].build(store, parsed.value));
@@ -112,6 +128,7 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
 
   // Code only: the filter comes from the URL, and the AI service is never touched.
   app.get('/api/answer', (c) => {
+    const { store, span } = current;
     const parsed = parseAnswerQuery(store, span, c.req.queries());
     if (!parsed.ok) return errorResponse(c, parsed.error);
     const { range, filter } = parsed.value;
@@ -129,6 +146,7 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   app.get('/api/question', async (c) => {
     const refused = crossSite(c);
     if (refused) return refused;
+    const { store, span, ai } = current;
     const asked = c.req.queries('q') ?? [];
     const q = (asked[0] ?? '').trim();
     if (asked.length > 1) {
@@ -155,6 +173,7 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   });
 
   app.get('/api/data-notes', (c) => {
+    const { store, ai } = current;
     const response: DataNotesResponse = { dataNotes: store.dataNotes, ai: ai.status() };
     return c.json(response);
   });
@@ -162,6 +181,7 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   app.get('/api/takeaway/:view', async (c) => {
     const refused = crossSite(c);
     if (refused) return refused;
+    const { store, ai } = current;
     const name = viewNames.find((n) => n === c.req.param('view'));
     if (!name) {
       return errorResponse(c, {
@@ -189,6 +209,7 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   });
 
   app.get('/api/missed-calls/callbacks.csv', (c) => {
+    const { store } = current;
     const parsed = parseFor(c, 'missed-calls');
     if (!parsed.ok) return errorResponse(c, parsed.error);
     const view = VIEW_TABLE['missed-calls'].build(store, parsed.value);
@@ -197,6 +218,20 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="callbacks-${view.range.start}-to-${view.range.end}.csv"`,
     });
+  });
+
+  mountUploadRoutes(app, {
+    uploads: options.uploads,
+    crossSite,
+    meta: metaOf,
+    adopt: (commit) => {
+      if (commit.store !== null) {
+        current.store = commit.store;
+        current.span = dataSpan(commit.store.calls);
+        if (options.rebuildAi) current.ai = options.rebuildAi(commit.store);
+      }
+      return metaOf();
+    },
   });
 
   // Last, and only for GET and HEAD, never for the API: an unknown API path must stay a JSON 404, not the app.

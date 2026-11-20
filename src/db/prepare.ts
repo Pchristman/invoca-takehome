@@ -4,6 +4,7 @@ import { loadExport } from '../core/loadExport';
 import { convertDatabaseError } from './database';
 import type { CallStore } from '../core/types';
 import { readExportTexts, type ExportTexts } from '../node/readDataDir';
+import { createFileHandle, createMemoryHandle, type DatabaseHandle } from './handle';
 import { holdsNothing, openDatabase, openExistingDatabase, removeQuietly, startsEmpty } from './database';
 import { readStore } from './read';
 import { seedExport, type SeedReport } from './seed';
@@ -12,6 +13,8 @@ export interface LoadedStore {
   store: CallStore;
   /** One-line messages for the person starting the app (what was seeded, a stale data folder). */
   notices: string[];
+  /** How uploads reach the database: a file is opened for each use; `:memory:` keeps the seeded connection open. */
+  database: DatabaseHandle;
 }
 
 // Line endings are normalised so a checkout that only changed CRLF to LF is not mistaken for a different export.
@@ -72,19 +75,23 @@ function seedNewDatabase(dbPath: string, dataDir: string | undefined): LoadedSto
   const texts = readExportTexts(dataDir);
   const madeFile = dbPath !== ':memory:' && startsEmpty(dbPath);
   let db: DatabaseSync | undefined;
+  let keepOpen = false;
   try {
     db = openDatabase(dbPath);
     seedFromTexts(db, texts);
     const store = readStore(db);
-    const notices = dbPath === ':memory:' ? [] : [`Seeded ${dbPath} from ${texts.folder}: ${store.calls.length} calls.`];
-    return { store, notices };
+    if (dbPath === ':memory:') {
+      keepOpen = true; // the database is gone when its connection closes
+      return { store, notices: [], database: createMemoryHandle(db) };
+    }
+    return { store, notices: [`Seeded ${dbPath} from ${texts.folder}: ${store.calls.length} calls.`], database: createFileHandle(dbPath) };
   } catch (error) {
     db?.close();
     db = undefined;
     if (madeFile) removeQuietly(dbPath);
     throw error instanceof Error && 'errcode' in error ? convertDatabaseError(dbPath, error) : error;
   } finally {
-    db?.close(); // an open handle would lock the file on Windows
+    if (!keepOpen) db?.close(); // an open handle would lock the file on Windows
   }
 }
 
@@ -100,7 +107,7 @@ export function loadStore(options: { dbPath: string; dataDir?: string }): Loaded
   try {
     const store = readStore(db);
     const warning = staleSeedWarning(db, tryReadTexts(dataDir), dbPath);
-    return { store, notices: warning ? [warning] : [] };
+    return { store, notices: warning ? [warning] : [], database: createFileHandle(dbPath) };
   } finally {
     db.close();
   }
