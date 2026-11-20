@@ -39,7 +39,7 @@ I'm building a small local web product that helps a marketing manager track inbo
 
 - `docs/BRIEF.md`: the problem, constraints and data findings. Don't edit it without asking me.
 - `PLAN.md`: the design spec. Write it as instructions to the engineer building it, in this order: the user and their job; scope and non-goals; each view and the action it leads to; data rules; architecture; how AI is used, checked and budgeted; testing; build order in small steps, each one testable on its own; what "done" means.
-- `docs/DECISIONS.md`: one line per real decision: date, decision, why, what we rejected.
+- `docs/DECISIONS.md`: my high-level decisions about the app, the ones that matter for the decision summary (scope, what the user sees, data rules, architecture, AI use). One line each: date, decision, why, what we rejected. Implementation details, review fixes, test choices and wording don't go here; they belong in the plan and the commit. Add a line only for a decision of that size that I made or approved.
 - `docs/AI_COST_LOG.md`: the AI spend log. I maintain it; only write to it when I ask.
 - `README.md`: setup and the one command to run it.
 

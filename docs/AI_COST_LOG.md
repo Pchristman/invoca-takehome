@@ -25,3 +25,14 @@ Budget: $250 hard cap on the provided Claude API key, for building and running.
 | 2026-11-20 | claude-sonnet-5-5 ($4.38), claude-opus-5-5 review ($1.69), claude-haiku-5-5 ($0.0066) | Phase 9 build and adversarial review: docs/plans/09-ai-takeaway.md | 6.08 |
 | 2026-11-20 | claude-sonnet-5-5 ($0.81), claude-haiku-5-5 ($0.0003) | Phase 10 plan: docs/plans/10-docker.md | 0.81 |
 | 2026-11-20 | claude-sonnet-5-5 ($2.53), claude-opus-5-5 review ($0.99), claude-haiku-5-5 ($0.0051) | Phase 10 build and adversarial review: docs/plans/10-docker.md | 3.53 |
+| 2026-11-20 | claude-sonnet-5-5 ($0.92), claude-haiku-5-5 ($0.0003) | Stretch S1 plan: docs/plans/s1-alerts.md | 0.92 |
+| 2026-11-20 | claude-sonnet-5-5 ($3.14), claude-opus-5-5 review ($1.17), claude-haiku-5-5 ($0.0052) | Stretch S1 build and adversarial review: docs/plans/s1-alerts.md | 4.31 |
+| 2026-11-20 | claude-sonnet-5-5 ($1.14), claude-haiku-5-5 ($0.0001) | Stretch S2 plan: docs/plans/s2-daterange-compare.md | 1.14 |
+| 2026-11-20 | claude-sonnet-5-5 ($3.37), claude-opus-5-5 review ($1.25), claude-haiku-5-5 ($0.0051) | Stretch S2 build and adversarial review: docs/plans/s2-daterange-compare.md | 4.63 |
+| 2026-11-20 | claude-sonnet-5-5 ($1.08), claude-haiku-5-5 ($0.0001) | Stretch S3 plan: docs/plans/s3-print-friendly.md | 1.08 |
+| 2026-11-20 | claude-sonnet-5-5 ($2.18), claude-opus-5-5 review ($1.05), claude-haiku-5-5 ($0.0048) | Stretch S3 build and adversarial review: docs/plans/s3-print-friendly.md | 3.23 |
+| 2026-11-20 | claude-sonnet-5-5 ($0.89), claude-haiku-5-5 ($0.0001) | Stretch S4 plan: docs/plans/s4-english-question.md | 0.89 |
+| 2026-11-20 | claude-sonnet-5-5 ($6.10), claude-opus-5-5 review ($1.65), claude-haiku-5-5 ($0.0102) | Stretch S4 build and adversarial review: docs/plans/s4-english-question.md | 7.76 |
+| 2026-11-20 | claude-sonnet-5-5 ($0.91), claude-haiku-5-5 ($0.0002) | Stretch S5 plan: docs/plans/s5-visual-polish.md | 0.91 |
+| 2026-11-20 | claude-sonnet-5-5 ($3.57), claude-opus-5-5 review ($1.52), claude-haiku-5-5 ($0.0071) | Stretch S5 build and adversarial review: docs/plans/s5-visual-polish.md | 5.10 |
+| 2026-11-20 | claude-sonnet-5-5 ($0.78), claude-haiku-5-5 ($0.0003) | Stretch S6 plan: docs/plans/s6-database.md | 0.78 |
