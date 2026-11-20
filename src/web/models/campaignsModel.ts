@@ -4,6 +4,7 @@ import type { ActionKind } from '../../core/views/facts';
 import type { CampaignRow, CampaignsView, UnattributedRow } from '../../core/views/campaignsView';
 import { formatCount, formatRate, formatUsd, formatUsdPerDollar } from '../../core/views/format';
 import { BLANK, humanize } from '../format';
+import { changeModel } from './changeModel';
 import { compareSortValues } from './sorting';
 import type { SortValue } from './sorting';
 
@@ -11,12 +12,15 @@ export type SortKey =
   | 'name'
   | 'channel'
   | 'calls'
+  | 'callsChange'
   | 'bookings'
   | 'bookingRate'
   | 'revenueUsd'
   | 'estimatedSpendUsd'
   | 'estimatedCostPerBookingUsd'
   | 'revenuePerBudgetDollar';
+
+export type Mark = 'best' | 'worst' | 'jump' | 'drop';
 
 export interface CampaignSort {
   key: SortKey;
@@ -39,7 +43,7 @@ export interface Cell {
 export interface CampaignRowModel {
   id: string | null;
   name: string;
-  marks: ('best' | 'worst')[];
+  marks: Mark[];
   cells: Record<SortKey, Cell>;
 }
 
@@ -49,6 +53,8 @@ export interface CampaignsModel {
   rows: CampaignRowModel[]; // sorted by `sort`; unattributed is NOT in here
   unattributed: (CampaignRowModel & { trackingNumbers: { text: string }[] }) | null; // pinned last, never sorted
   bestWorstNote: string | null; // bestWorst.reason, only when nothing is marked
+  alertsNote: string | null; // why no alerts, or the all-clear; null when something is flagged
+  alertsRule: string | null; // how alerts are decided; null when no comparison was made
   actions: { kind: ActionKind; text: string; actionable: boolean }[];
   chartChoices: { id: string; name: string }[]; // every campaign, in the API's order
   selectedCampaignId: string | null; // weekly?.campaignId
@@ -58,6 +64,7 @@ const COLUMNS: CampaignsModel['columns'] = [
   { key: 'name', label: 'Campaign', numeric: false, estimate: false },
   { key: 'channel', label: 'Channel', numeric: false, estimate: false },
   { key: 'calls', label: 'Calls', numeric: true, estimate: false },
+  { key: 'callsChange', label: 'Calls vs previous', numeric: true, estimate: false },
   { key: 'bookings', label: 'Bookings', numeric: true, estimate: false },
   { key: 'bookingRate', label: 'Booking rate', numeric: true, estimate: false },
   { key: 'revenueUsd', label: 'Revenue', numeric: true, estimate: false },
@@ -77,13 +84,22 @@ function numberCell(value: number | null, format: (n: number) => string, note: s
   return note === null ? { text: BLANK } : { text: BLANK, note };
 }
 
-function cellsFor(row: CampaignRow): Record<SortKey, Cell> {
+/** "+54.1% (was 218)", "new (was 0)", or a blank that says why. */
+function callsChangeCell(row: CampaignRow, noPreviousReason: string | null): Cell {
+  if (row.previousCalls === null) return { text: BLANK, note: noPreviousReason ?? 'No previous period.' };
+  const change = changeModel(row.callsChange);
+  if (change === null) return { text: BLANK, note: 'No calls in either period.' };
+  return { text: `${change.text} (was ${formatCount(row.previousCalls)})` };
+}
+
+function cellsFor(row: CampaignRow, noPreviousReason: string | null): Record<SortKey, Cell> {
   const noBudget = row.estimatedSpendUsd === null ? NOT_APPLICABLE : row.estimatedSpendUsd === 0 ? ZERO_BUDGET : null;
   const costNote = noBudget ?? (row.bookings === 0 ? NO_BOOKINGS : null);
   return {
     name: { text: row.name },
     channel: { text: humanize(row.channel) },
     calls: { text: formatCount(row.calls) },
+    callsChange: callsChangeCell(row, noPreviousReason),
     bookings: { text: formatCount(row.bookings) },
     bookingRate: numberCell(row.bookingRate, formatRate, NO_CALLS),
     revenueUsd: { text: formatUsd(row.revenueUsd) },
@@ -93,20 +109,20 @@ function cellsFor(row: CampaignRow): Record<SortKey, Cell> {
   };
 }
 
-function marksFor(row: CampaignRow): ('best' | 'worst')[] {
-  const marks: ('best' | 'worst')[] = [];
+function marksFor(row: CampaignRow): Mark[] {
+  const marks: Mark[] = [];
   if (row.isBest) marks.push('best');
   if (row.isWorst) marks.push('worst');
+  if (row.alert !== null) marks.push(row.alert.direction);
   return marks;
 }
 
-function rowModel(row: CampaignRow): CampaignRowModel {
-  return { id: row.campaignId, name: row.name, marks: marksFor(row), cells: cellsFor(row) };
+function rowModel(row: CampaignRow, noPreviousReason: string | null): CampaignRowModel {
+  return { id: row.campaignId, name: row.name, marks: marksFor(row), cells: cellsFor(row, noPreviousReason) };
 }
-
-function unattributedModel(row: UnattributedRow): NonNullable<CampaignsModel['unattributed']> {
+function unattributedModel(row: UnattributedRow, noPreviousReason: string | null): NonNullable<CampaignsModel['unattributed']> {
   return {
-    ...rowModel(row),
+    ...rowModel(row, noPreviousReason),
     trackingNumbers: row.trackingNumbers.map((n) => ({
       text: `${n.trackingNumber} · ${formatCount(n.calls, ['call', 'calls'])}`,
     })),
@@ -115,6 +131,11 @@ function unattributedModel(row: UnattributedRow): NonNullable<CampaignsModel['un
 
 function sortValue(row: CampaignRow, key: SortKey): SortValue {
   if (key === 'name') return row.name.toLowerCase();
+  if (key === 'callsChange') {
+    if (row.previousCalls === null) return null;
+    if (row.callsChange.kind === 'percent') return row.callsChange.value;
+    return row.callsChange.kind === 'new' ? Number.MAX_VALUE : null;
+  }
   return row[key];
 }
 
@@ -125,15 +146,28 @@ export function sortCampaignRows(rows: CampaignRow[], sort: CampaignSort): Campa
   );
 }
 
+const ALL_CLEAR = "No campaign's calls changed by more than chance explains.";
+
+function alertsRuleText({ minCalls, z }: CampaignsView['alerts']): string {
+  return (
+    'A campaign is marked when its calls differ from the previous period by more than chance explains. ' +
+    `Campaigns with fewer than ${formatCount(minCalls)} calls across both periods are not tested. ` +
+    `Score = (calls now − calls before) ÷ √(calls now + calls before); marked when the score reaches ${formatCount(z)} in either direction.`
+  );
+}
+
 export function campaignsModel(view: CampaignsView, sort: CampaignSort): CampaignsModel {
   const allRows = view.unattributed ? [...view.rows, view.unattributed] : view.rows;
+  const { alerts } = view;
   const marked = view.rows.some((r) => r.isBest || r.isWorst);
   return {
     empty: allRows.every((r) => r.calls === 0),
     columns: COLUMNS,
-    rows: sortCampaignRows(view.rows, sort).map(rowModel),
-    unattributed: view.unattributed ? unattributedModel(view.unattributed) : null,
+    rows: sortCampaignRows(view.rows, sort).map((r) => rowModel(r, alerts.reason)),
+    unattributed: view.unattributed ? unattributedModel(view.unattributed, alerts.reason) : null,
     bestWorstNote: marked ? null : view.bestWorst.reason,
+    alertsNote: !alerts.checked ? alerts.reason : alerts.flagged === 0 ? ALL_CLEAR : null,
+    alertsRule: alerts.checked ? alertsRuleText(alerts) : null,
     actions: view.actions.map((a) => ({ kind: a.kind, text: a.text, actionable: a.actionable })),
     chartChoices: view.rows.map((r) => ({ id: r.campaignId ?? '', name: r.name })),
     selectedCampaignId: view.weekly?.campaignId ?? null,

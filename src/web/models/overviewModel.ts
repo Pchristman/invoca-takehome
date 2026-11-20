@@ -1,13 +1,14 @@
 // What the Overview screen prints, decided here so the component only draws it.
 // No arithmetic on metrics: every value is the API's value passed through a core format function.
-import type { Change } from '../../core/metrics';
-import { formatCount, formatPercentChange, formatPointsChange, formatRate, formatUsd } from '../../core/views/format';
+import { formatCount, formatRate, formatUsd } from '../../core/views/format';
 import type { ActionLink } from '../../core/views/facts';
 import type { OverviewView, Tile } from '../../core/views/overviewView';
 import { BLANK } from '../format';
+import { changeModel } from './changeModel';
+import type { Tone } from './changeModel';
 import { VIEW_LABELS } from './viewLabels';
 
-export type Tone = 'up' | 'down' | 'flat' | 'new';
+export type { Tone };
 
 export interface TileModel {
   key: 'calls' | 'uniqueCallers' | 'answerRate' | 'bookings' | 'revenueUsd';
@@ -38,32 +39,6 @@ const TILES: { key: TileModel['key']; label: string; format: (value: number) => 
   { key: 'bookings', label: 'Bookings', format: formatCount },
   { key: 'revenueUsd', label: 'Revenue', format: formatUsd },
 ];
-
-// The tone comes from the sign of the text the format function printed: '+' up, '-' down, else flat.
-// So a +0.04 that prints '0.0%' is flat, with no rounding done here.
-function toneOfText(text: string): Tone {
-  if (text.startsWith('+')) return 'up';
-  if (text.startsWith('-')) return 'down';
-  return 'flat';
-}
-
-function changeModel(change: Change): TileModel['change'] {
-  switch (change.kind) {
-    case 'percent': {
-      const text = formatPercentChange(change.value);
-      return { text, tone: toneOfText(text) };
-    }
-    case 'points': {
-      const text = formatPointsChange(change.value);
-      return { text, tone: toneOfText(text) };
-    }
-    case 'new':
-      return { text: 'new', tone: 'new' };
-    case 'none':
-      return null;
-  }
-}
-
 
 export function overviewModel(view: OverviewView): OverviewModel {
   const { comparison } = view.notes;

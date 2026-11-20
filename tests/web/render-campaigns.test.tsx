@@ -66,3 +66,63 @@ describe('Campaigns screen on an empty range', () => {
     expect(withCalls.match(/<table/g)?.length).toBe(2);
   });
 });
+
+describe('Campaigns screen alerts', () => {
+  const span = dataSpan(serverFixture().calls)!;
+  const real = campaignsFor('range=all');
+  const render = (view: typeof real) =>
+    renderToStaticMarkup(<CampaignsScreen view={view} state={parseUrlState('')} span={span} onSelectCampaign={noop} />);
+  /** A hand-built comparison: the first row dropped, the second is named like markup. */
+  const flagged = (): typeof real => {
+    const [first, second, ...rest] = real.rows;
+    return {
+      ...real,
+      rows: [
+        { ...first!, previousCalls: 100, callsChange: { kind: 'percent', value: -60 }, alert: { direction: 'drop', z: -5 } },
+        { ...second!, name: '<b>x</b>', previousCalls: 5, callsChange: { kind: 'new' } },
+        ...rest,
+      ],
+      alerts: { checked: true, reason: null, flagged: 1, z: 3, minCalls: 20 },
+    };
+  };
+
+  it('a flagged row shows the word "Calls dropped" and its change', () => {
+    const html = render(flagged());
+    expect(html).toContain('Calls dropped');
+    expect(html).toContain('-60.0% (was 100)');
+    expect(html).not.toContain('Calls jumped');
+  });
+
+  it('shows the details block with the rule, and no all-clear note when something is flagged', () => {
+    const view = flagged();
+    const html = render(view);
+    expect(html).toContain('How alerts are decided');
+    expect(html).toContain('fewer than 20 calls across both periods');
+    expect(html).not.toContain('by more than chance explains.</p>');
+  });
+
+  it('a name with markup is escaped in the row and the badge', () => {
+    const html = render(flagged());
+    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
+    expect(html).not.toContain('<b>x</b>');
+  });
+
+  it('an unavailable comparison shows a dash, the reason hidden, and the note; no rule', () => {
+    expect(real.alerts.checked).toBe(false);
+    const html = render(real);
+    const reason = real.alerts.reason!;
+    expect(html).toContain('<td class="num"><span title=');
+    expect(html).toContain(`<span class="visually-hidden"> ${reason.replace(/'/g, '&#x27;')}</span>`);
+    expect(html).toContain(`<p class="muted small">${reason.replace(/'/g, '&#x27;')}</p>`);
+    expect(html).not.toContain('How alerts are decided');
+  });
+
+  it('shows the all-clear when checked and nothing is flagged', () => {
+    const html = render({ ...real, alerts: { checked: true, reason: null, flagged: 0, z: 3, minCalls: 20 } });
+    expect(html).toContain("No campaign&#x27;s calls changed by more than chance explains.");
+  });
+
+  it('has no dev-only content', () => {
+    expect(render(flagged())).not.toContain('dev');
+  });
+});

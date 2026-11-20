@@ -56,6 +56,12 @@ export function CampaignsView({
         ) : (
           <CampaignTable model={model} sort={sort} onSort={(key) => setSort((current) => nextSort(current, key))} />
         )}
+        {model.alertsRule !== null && (
+          <details className="small">
+            <summary>How alerts are decided</summary>
+            <p>{model.alertsRule}</p>
+          </details>
+        )}
       </section>
       <section className="section" aria-busy={chartBusy ? 'true' : undefined}>
         {model.chartChoices.length > 0 && (

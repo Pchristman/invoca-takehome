@@ -154,3 +154,18 @@ describe('top actions', () => {
     });
   });
 });
+
+describe('top actions with an alert entry', () => {
+  it('gives four rows, the second labelled Campaigns with the alert text', () => {
+    const real = overviewFor('range=last7');
+    const [campaigns, ...rest] = real.topActions;
+    const alert = {
+      ...campaigns!,
+      action: { ...campaigns!.action, kind: 'review_call_changes' as const, text: 'Calls jumped for 2 campaigns.' },
+    };
+    const model = overviewModel({ ...real, topActions: [campaigns!, alert, ...rest] });
+    expect(model.topActions).toHaveLength(4);
+    expect(model.topActions[1]!.viewLabel).toBe('Campaigns');
+    expect(model.topActions[1]!.text).toBe('Calls jumped for 2 campaigns.');
+  });
+});

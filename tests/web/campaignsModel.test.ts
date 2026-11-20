@@ -38,6 +38,7 @@ describe('columns', () => {
       'Campaign',
       'Channel',
       'Calls',
+      'Calls vs previous',
       'Bookings',
       'Booking rate',
       'Revenue',
@@ -45,8 +46,8 @@ describe('columns', () => {
       'Est. cost per booking',
       'Est. revenue per budget $',
     ]);
-    expect(columns.map((c) => c.estimate)).toEqual([false, false, false, false, false, false, true, true, true]);
-    expect(columns.map((c) => c.numeric)).toEqual([false, false, true, true, true, true, true, true, true]);
+    expect(columns.map((c) => c.estimate)).toEqual([false, false, false, false, false, false, false, true, true, true]);
+    expect(columns.map((c) => c.numeric)).toEqual([false, false, true, true, true, true, true, true, true, true]);
   });
 });
 
@@ -269,5 +270,96 @@ describe('empty campaigns range', () => {
   it('is not empty with calls', () => {
     expect(campaignsModel(server, DEFAULT_SORT).empty).toBe(false);
     expect(rowOf(server, server.rows[0]!.campaignId!).calls).toBeGreaterThan(0);
+  });
+});
+
+describe('calls vs previous column', () => {
+  const cell = (r: CampaignRow, view: CampaignsView = server) =>
+    campaignsModel({ ...view, rows: [r] }, DEFAULT_SORT).rows[0]!.cells.callsChange;
+
+  it('prints a percent with the previous count', () => {
+    expect(cell(row('a', { calls: 336, previousCalls: 218, callsChange: { kind: 'percent', value: 54.1 } }))).toEqual({
+      text: '+54.1% (was 218)',
+    });
+    expect(cell(row('a', { previousCalls: 1218, callsChange: { kind: 'percent', value: -20 } })).text).toBe(
+      '-20.0% (was 1,218)',
+    );
+  });
+
+  it('prints new as "new (was 0)"', () => {
+    expect(cell(row('a', { previousCalls: 0, callsChange: { kind: 'new' } }))).toEqual({ text: 'new (was 0)' });
+  });
+
+  it('blanks with a reason: no previous period, or no calls in either', () => {
+    const noPrevious = { ...server, alerts: { ...server.alerts, reason: 'No full previous period: x.' } };
+    expect(cell(row('a'), noPrevious)).toEqual({ text: BLANK, note: 'No full previous period: x.' });
+    const noReason = { ...server, alerts: { ...server.alerts, reason: null } };
+    expect(cell(row('a'), noReason)).toEqual({ text: BLANK, note: 'No previous period.' });
+    expect(cell(row('a', { previousCalls: 0, callsChange: { kind: 'none' } }))).toEqual({
+      text: BLANK,
+      note: 'No calls in either period.',
+    });
+  });
+
+  it('sorts new first, then percents high to low, blanks last, ties by id', () => {
+    const rows = [
+      row('b', { previousCalls: 5, callsChange: { kind: 'percent', value: 0.1 } }),
+      row('blank'),
+      row('n2', { previousCalls: 0, callsChange: { kind: 'new' } }),
+      row('c', { previousCalls: 5, callsChange: { kind: 'percent', value: 0.5 } }),
+      row('n1', { previousCalls: 0, callsChange: { kind: 'new' } }),
+      row('d', { previousCalls: 5, callsChange: { kind: 'percent', value: -0.3 } }),
+    ];
+    const ids = (dir: 'asc' | 'desc') => sortCampaignRows(rows, { key: 'callsChange', dir }).map((r) => r.campaignId);
+    expect(ids('desc')).toEqual(['n1', 'n2', 'c', 'b', 'd', 'blank']);
+    expect(ids('asc')).toEqual(['d', 'b', 'c', 'n1', 'n2', 'blank']);
+  });
+
+  it('starts descending when first chosen', () => {
+    expect(nextSort(DEFAULT_SORT, 'callsChange')).toEqual({ key: 'callsChange', dir: 'desc' });
+  });
+});
+
+describe('jump and drop marks', () => {
+  const marksOf = (r: CampaignRow) => campaignsModel({ ...server, rows: [r] }, DEFAULT_SORT).rows[0]!.marks;
+
+  it('adds the alert direction after best and worst', () => {
+    expect(marksOf(row('a', { alert: { direction: 'drop', z: -4 } }))).toEqual(['drop']);
+    expect(marksOf(row('a', { alert: { direction: 'jump', z: 4 } }))).toEqual(['jump']);
+    expect(marksOf(row('a', { isWorst: true, alert: { direction: 'drop', z: -4 } }))).toEqual(['worst', 'drop']);
+    expect(marksOf(row('a'))).toEqual([]);
+  });
+});
+
+describe('alerts note and rule', () => {
+  const withAlerts = (alerts: Partial<CampaignsView['alerts']>): CampaignsView => ({
+    ...server,
+    alerts: { checked: true, reason: null, flagged: 0, z: 3, minCalls: 20, ...alerts },
+  });
+
+  it('alertsNote gives the reason when not checked, the all-clear when none flagged, else null', () => {
+    const notChecked = withAlerts({ checked: false, reason: 'No full previous period: nope.' });
+    expect(campaignsModel(notChecked, DEFAULT_SORT).alertsNote).toBe('No full previous period: nope.');
+    expect(campaignsModel(withAlerts({}), DEFAULT_SORT).alertsNote).toBe(
+      "No campaign's calls changed by more than chance explains.",
+    );
+    expect(campaignsModel(withAlerts({ flagged: 2 }), DEFAULT_SORT).alertsNote).toBeNull();
+  });
+
+  it('alertsRule is null when not checked, else uses the view numbers', () => {
+    expect(campaignsModel(withAlerts({ checked: false }), DEFAULT_SORT).alertsRule).toBeNull();
+    const rule = campaignsModel(withAlerts({}), DEFAULT_SORT).alertsRule!;
+    expect(rule).toContain('fewer than 20 calls across both periods');
+    expect(rule).toContain('reaches 3 in either direction');
+    const other = campaignsModel(withAlerts({ minCalls: 25, z: 4 }), DEFAULT_SORT).alertsRule!;
+    expect(other).toContain('fewer than 25 calls');
+    expect(other).toContain('reaches 4 in');
+    expect(other).not.toContain('20');
+  });
+
+  it('passes a 300-character name through whole', () => {
+    const long = 'x'.repeat(300);
+    const view = { ...server, rows: [row('a', { name: long, previousCalls: 1, callsChange: { kind: 'new' } as const })] };
+    expect(campaignsModel(view, DEFAULT_SORT).rows[0]!.name).toBe(long);
   });
 });

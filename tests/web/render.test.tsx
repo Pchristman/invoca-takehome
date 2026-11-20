@@ -980,3 +980,31 @@ describe('no placeholder remains', () => {
     for (const html of htmls) expect(html).not.toContain('Not built yet');
   });
 });
+
+describe('OverviewView with an alert entry', () => {
+  const real = overviewFor('range=last7');
+  const alertText = 'Calls dropped for 2 campaigns.';
+  const [campaigns, ...rest] = real.topActions;
+  const withAlert: OverviewData = {
+    ...real,
+    notes: { ...real.notes, incompleteCurrent: { ...real.notes.incompleteCurrent, includesLastDay: true } },
+    topActions: [
+      campaigns!,
+      { ...campaigns!, action: { ...campaigns!.action, kind: 'review_call_changes', text: alertText, actionable: true } },
+      ...rest,
+    ],
+  };
+  const html = renderToStaticMarkup(<OverviewView view={withAlert} state={parseUrlState('?range=last7')} span={span} />);
+
+  it('lists the alert once with an Open Campaigns link', () => {
+    expect(count(html, alertText)).toBe(1);
+    const items = html.slice(html.indexOf('<h2>Top actions</h2>')).match(/<li[ >].*?<\/li>/g) ?? [];
+    expect(items).toHaveLength(4);
+    expect(items[1]).toContain(alertText);
+    expect(items[1]).toContain('Open Campaigns');
+  });
+
+  it('carries the incomplete-day caveat that qualifies it', () => {
+    expect(html).toContain('the last day in the data, may be incomplete.');
+  });
+});

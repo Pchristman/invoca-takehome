@@ -1,4 +1,6 @@
-import type { Cell, CampaignRowModel, CampaignSort, CampaignsModel, SortKey } from '../models/campaignsModel';
+import type { Cell, Mark, CampaignRowModel, CampaignSort, CampaignsModel, SortKey } from '../models/campaignsModel';
+
+const MARK_LABELS: Record<Mark, string> = { best: 'Best', worst: 'Worst', jump: 'Calls jumped', drop: 'Calls dropped' };
 
 function CellText({ cell }: { cell: Cell }) {
   if (cell.note === undefined) return <>{cell.text}</>;
@@ -32,7 +34,7 @@ function Row({
             {row.marks.map((mark) => (
               <span key={mark}>
                 {' '}
-                <span className={`badge badge-${mark}`}>{mark === 'best' ? 'Best' : 'Worst'}</span>
+                <span className={`badge badge-${mark}`}>{MARK_LABELS[mark]}</span>
               </span>
             ))}
             {trackingNumbers && trackingNumbers.length > 0 && (
@@ -92,6 +94,7 @@ export function CampaignTable({
           </tbody>
         </table>
       </div>
+      {model.alertsNote !== null && <p className="muted small">{model.alertsNote}</p>}
     </>
   );
 }

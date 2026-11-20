@@ -532,6 +532,12 @@ th .badge {
   border-color: var(--color-up);
 }
 
+.badge-jump {
+  color: var(--color-up);
+  border-color: var(--color-up);
+}
+
+.badge-drop,
 .badge-worst {
   color: var(--color-down);
   border-color: var(--color-down);
