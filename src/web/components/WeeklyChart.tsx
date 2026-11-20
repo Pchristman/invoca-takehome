@@ -1,6 +1,8 @@
 import { Bar, BarChart, Cell, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatCount } from '../../core/views/format';
 import type { WeeklyChartModel } from '../models/weeklyChart';
+import { chartAnimation } from '../models/motionVariants';
+import { useMotion } from '../useMotion';
 
 type WeekBar = WeeklyChartModel['bars'][number];
 
@@ -21,6 +23,7 @@ function BarTooltip({ active, payload }: { active?: boolean; payload?: readonly 
 }
 
 export function WeeklyChart({ model }: { model: WeeklyChartModel }) {
+  const motion = useMotion();
   return (
     <figure className="chart">
       <figcaption>
@@ -46,7 +49,7 @@ export function WeeklyChart({ model }: { model: WeeklyChartModel }) {
               tickFormatter={(value: number) => formatCount(value)}
             />
             <Tooltip content={BarTooltip} cursor={false} />
-            <Bar dataKey="calls" isAnimationActive={false} radius={[4, 4, 0, 0]}>
+            <Bar dataKey="calls" {...chartAnimation(motion)} radius={[4, 4, 0, 0]}>
               {model.bars.map((bar) => (
                 <Cell key={bar.range} fill={bar.partial ? BAR_FILL_PARTIAL : BAR_FILL} />
               ))}
