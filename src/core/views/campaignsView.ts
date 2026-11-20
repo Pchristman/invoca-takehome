@@ -51,7 +51,7 @@ export interface CampaignsView extends ViewBase {
   view: 'campaigns';
   /** Every store campaign, calls desc, ties by campaign id. */
   rows: CampaignRow[];
-  /** null when no unattributed call is in range. */
+  /** null when no unattributed call is in range or in the previous period; a row of 0 calls shows a drop to none. */
   unattributed: UnattributedRow | null;
   /** `reason` is set only when nothing is marked. */
   bestWorst: { eligible: number; reason: string | null };
@@ -168,7 +168,7 @@ export function buildCampaigns(
   }
 
   let fixAttribution: Action | null = null;
-  if (unattributed) {
+  if (unattributed && unattributed.calls > 0) {
     // Calls with a blank tracking number are their own clause, so the count of numbers never reads as 0.
     const named = unattributed.trackingNumbers.length;
     const blank = unattributed.calls - unattributed.trackingNumbers.reduce((sum, n) => sum + n.calls, 0);
@@ -255,10 +255,10 @@ export function buildCampaigns(
   };
 }
 
-/** The calls with no campaign, as one row; null when there are none. */
+/** The calls with no campaign, as one row; null when there are none now or in the previous period. */
 function buildUnattributed(calls: readonly CleanCall[], previousCalls: number | null): UnattributedRow | null {
   const lost = calls.filter((call) => call.campaignId === null);
-  if (lost.length === 0) return null;
+  if (lost.length === 0 && !previousCalls) return null; // nothing now and nothing before: no row
 
   const t = tally(lost);
   const perNumber = new Map<string, number>();

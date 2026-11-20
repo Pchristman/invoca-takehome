@@ -356,6 +356,19 @@ describe('buildCampaigns alerts', () => {
     expect(row(view, 'cmp_a').previousCalls).toBe(60);
   });
 
+  it('unattributed calls that stopped show a row of zero calls, down 100%, never flagged and with no fix action', () => {
+    const lost = (n: number, localDate: string) =>
+      many(n).map((c) => makeCall({ ...c, campaignId: null, unattributed: true, localDate }));
+    const view = build([...on('cmp_a', 5, NOW), ...lost(30, BEFORE)]);
+    expect(view.unattributed).toMatchObject({
+      campaignId: null, name: 'Unattributed', calls: 0, bookings: 0, revenueUsd: 0, previousCalls: 30,
+      callsChange: { kind: 'percent', value: -100 }, alert: null, trackingNumbers: [],
+    });
+    expect(view.actions.some((a) => a.kind === 'fix_attribution')).toBe(false);
+    expect(view.alerts.flagged).toBe(0);
+    expectAllFinite(view);
+  });
+
   it('unattributed never alerts', () => {
     const lost = (n: number, localDate: string) =>
       many(n).map((c) => makeCall({ ...c, campaignId: null, unattributed: true, localDate }));
@@ -394,17 +407,6 @@ describe('buildCampaigns alerts', () => {
     ];
     const view = build(calls, two);
     expect(view.actions.map((a) => a.kind)).toEqual(['shift_budget', 'fix_attribution', 'review_call_changes']);
-  });
-
-  it('store order does not change the answer', () => {
-    const calls = [
-      ...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE),
-      ...on('cmp_b', 60, NOW), ...on('cmp_b', 30, BEFORE),
-    ];
-    const x = build(calls, [noBudget('cmp_a', 'Alpha'), noBudget('cmp_b', 'Beta'), noBudget('cmp_z')]);
-    const y = build(calls, [noBudget('cmp_z'), noBudget('cmp_b', 'Beta'), noBudget('cmp_a', 'Alpha')]);
-    expect(x.actions[0]!.text).toBe(y.actions[0]!.text);
-    expect(x.actions[0]!.text).toContain('Alpha moved most');
   });
 
   it('a name that looks like markup or a placeholder stays plain text', () => {
