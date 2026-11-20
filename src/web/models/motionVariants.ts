@@ -8,7 +8,7 @@ export type RevealKind = 'view' | 'panel' | 'takeaway';
 export interface Reveal {
   initial: { opacity: number; y: number };
   animate: { opacity: 1; y: 0 };
-  exit: { opacity: number; y: number };
+  exit: { opacity: number; y: number; transition: { duration: number; ease: Ease } };
   transition: { duration: number; ease: Ease };
 }
 
@@ -23,14 +23,15 @@ export function revealFor(settings: MotionSettings, kind: RevealKind): Reveal {
     return {
       initial: { ...AT_REST },
       animate: { ...AT_REST },
-      exit: { ...AT_REST },
+      exit: { ...AT_REST, transition: { duration: 0, ease: settings.ease } },
       transition: { duration: 0, ease: settings.ease },
     };
   }
   return {
     initial: { opacity: 0, y: RISE_PX },
     animate: { ...AT_REST },
-    exit: { opacity: 0, y: 0 },
+    // Leaving is quicker than arriving.
+    exit: { opacity: 0, y: 0, transition: { duration: settings.fast, ease: settings.ease } },
     transition: { duration: kind === 'takeaway' ? settings.fast : settings.base, ease: settings.ease },
   };
 }

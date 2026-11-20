@@ -23,11 +23,21 @@ describe('revealFor', () => {
     expect(revealFor(ON, 'takeaway').transition.duration).toBe(ON.fast);
   });
 
+  it.each(KINDS)('%s: exit runs over fast, with the same ease', (kind) => {
+    const reveal = revealFor(ON, kind);
+    expect(reveal.exit.transition.duration).toBe(ON.fast);
+    expect(reveal.exit.transition.ease).toEqual(ON.ease);
+  });
+
+  it.each(KINDS)('%s: with motion off the exit takes no time', (kind) => {
+    expect(revealFor(MOTION_OFF, kind).exit.transition.duration).toBe(0);
+  });
+
   it.each(KINDS)('%s: with motion off nothing can stick at opacity 0', (kind) => {
     const reveal = revealFor(MOTION_OFF, kind);
     expect(reveal.initial).toEqual({ opacity: 1, y: 0 });
     expect(reveal.animate).toEqual(reveal.initial);
-    expect(reveal.exit).toEqual(reveal.initial);
+    expect({ opacity: reveal.exit.opacity, y: reveal.exit.y }).toEqual(reveal.initial);
     expect(reveal.transition.duration).toBe(0);
   });
 });
