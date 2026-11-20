@@ -189,3 +189,39 @@ describe('Campaigns screen in an outage (calls before, none now)', () => {
     expect(html).toContain('How alerts are decided');
   });
 });
+
+describe('Campaigns screen when unattributed calls stopped', () => {
+  it('shows the Unattributed row with 0 calls and the drop, no badge, no NaN or undefined', () => {
+    const store = storeOverDates('2026-09-01', '2026-09-10');
+    const view = campaignsFor('range=all', store);
+    const stopped = {
+      ...view,
+      unattributed: {
+        campaignId: null,
+        name: 'Unattributed',
+        channel: null,
+        calls: 0,
+        bookings: 0,
+        bookingRate: null,
+        revenueUsd: 0,
+        estimatedSpendUsd: null,
+        estimatedCostPerBookingUsd: null,
+        revenuePerBudgetDollar: null,
+        isBest: false,
+        isWorst: false,
+        previousCalls: 30,
+        callsChange: { kind: 'percent' as const, value: -100 },
+        alert: null,
+        trackingNumbers: [],
+      },
+    };
+    const html = renderToStaticMarkup(
+      <CampaignsScreen view={stopped} state={parseUrlState('')} span={dataSpan(store.calls)!} onSelectCampaign={noop} />,
+    );
+    expect(html).toContain('Unattributed');
+    expect(html).toContain('(was 30)');
+    expect(html).not.toContain('NaN');
+    expect(html).not.toContain('undefined');
+    expect(html).not.toContain('Infinity');
+  });
+});

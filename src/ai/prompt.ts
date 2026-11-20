@@ -2,7 +2,7 @@
 // values and writes a takeaway with {placeholders}. Code checks it, then fills in the numbers and names.
 import { formatFact, type FactSheet, type ViewName } from '../core/views/facts';
 
-export const PROMPT_VERSION = '2'; // bump on any change to the prompt text
+export const PROMPT_VERSION = '3'; // bump on any change to the prompt text
 
 const MAX_NAME_CHARS = 80; // names are cut in the prompt only, never in the data
 
@@ -14,7 +14,8 @@ export const REPLY_SCHEMA = {
 };
 
 const ALERT_SENTENCE =
-  'If calls to a campaign jumped or dropped by more than chance explains, name that campaign and suggest finding out what changed.';
+  'If calls to a campaign jumped or dropped by more than chance explains, name that campaign and suggest finding out what changed. ' +
+  'Write whether it jumped or dropped as the {alert.top.direction} placeholder, never as a word of your own.';
 
 const VIEW_PARAGRAPHS: Record<ViewName, string> = {
   overview:

@@ -20,7 +20,7 @@ function dataBlock(user: string): { view: string; facts: Record<string, { kind: 
 
 describe('buildPrompt', () => {
   it('has a version', () => {
-    expect(PROMPT_VERSION).toBe('2');
+    expect(PROMPT_VERSION).toBe('3');
   });
 
   it('tells overview and campaigns about jumped or dropped calls, and no other view', () => {
@@ -29,9 +29,11 @@ describe('buildPrompt', () => {
       const { system } = buildPrompt(sheet(BASIC, view));
       expect(system).toContain('jumped or dropped');
       expect(system).toContain(sentence);
+      expect(system).toContain('{alert.top.direction}');
     }
     for (const view of ['locations', 'missed-calls'] as ViewName[]) {
       expect(buildPrompt(sheet(BASIC, view)).system).not.toContain('jumped or dropped');
+      expect(buildPrompt(sheet(BASIC, view)).system).not.toContain('{alert.top.direction}');
     }
   });
 
