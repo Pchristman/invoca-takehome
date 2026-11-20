@@ -11,7 +11,8 @@
     "start": "vite build && tsx src/server/cli.ts",
     "dev": "node scripts/dev.ts",
     "generate:extended": "node scripts/generate-extended.ts",
-    "ai:try": "tsx scripts/ai-try.ts"
+    "ai:try": "tsx scripts/ai-try.ts",
+    "seed": "tsx scripts/seed.ts"
   },
   "devDependencies": {
     "@fontsource/ibm-plex-sans": "^5.3.0",
