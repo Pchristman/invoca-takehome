@@ -20,7 +20,7 @@ function dataBlock(user: string): { view: string; facts: Record<string, { kind: 
 
 describe('buildPrompt', () => {
   it('has a version', () => {
-    expect(PROMPT_VERSION).toBe('3');
+    expect(PROMPT_VERSION).toBe('5');
   });
 
   it('tells overview and campaigns about jumped or dropped calls, and no other view', () => {

@@ -78,8 +78,8 @@
   --radius-sm: 4px;
 
   /* motion */
-  --motion-fast: 150ms;
-  --motion-base: 200ms;
+  --motion-fast: 200ms;
+  --motion-base: 300ms;
   --motion-slow: 300ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
