@@ -104,6 +104,28 @@ describe('checkTakeaway', () => {
     expect(reasonOf(`Look at ${odd}.`, sheetWith([odd]), k)).toBe('ok');
   });
 
+  it('rejects an off-sheet name that contains an on-sheet name', () => {
+    const s = sheetWith(['Display', 'North']);
+    const k: KnownNames = { campaigns: ['Display', 'Display - Retargeting'], offices: ['North', 'North Austin'], channels: [] };
+    expect(reasonOf('Move budget to Display - Retargeting.', s, k)).toBe('off_sheet_name');
+    expect(reasonOf('Call North Austin back.', s, k)).toBe('off_sheet_name');
+    expect(reasonOf('Move budget to Display and call North.', s, k)).toBe('ok');
+  });
+
+  it('rejects text that becomes an off-sheet name once placeholders are filled', () => {
+    const s = sheetWith(['Display']);
+    const k: KnownNames = { campaigns: ['Display', 'Display - Retargeting'], offices: [], channels: [] };
+    expect(reasonOf('{shift.worst.name} - Retargeting', s, k)).toBe('off_sheet_name');
+    expect(reasonOf('{shift.worst.name} is weak', s, k)).toBe('ok');
+  });
+
+  it('rejects quantity words that are not plain numbers', () => {
+    const texts = ['Calls doubled and revenue halved; hundreds of callers', 'Calls tripled', 'A quarter of calls',
+      'dozens more calls', 'up by a per cent', 'a tenfold jump'];
+    for (const text of texts) expect(reasonOf(text), text).toBe('number_word');
+    for (const text of ['Up a lot ％', 'Costs €', 'Costs £', 'Costs ¥']) expect(reasonOf(text), text).toBe('symbol');
+  });
+
   it('reports the first failing check: digit before number word', () => {
     expect(reasonOf('3 calls, one office')).toBe('digit');
   });
