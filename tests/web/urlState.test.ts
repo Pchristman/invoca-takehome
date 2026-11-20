@@ -20,6 +20,8 @@ import {
   appHref,
   printParams,
   printRequests,
+  answerParams,
+  answerHref,
   type UrlState,
 } from '../../src/web/urlState';
 
@@ -31,6 +33,7 @@ const DEFAULTS: UrlState = {
   location: null,
   dev: false,
   print: false,
+  answer: null,
 };
 
 function state(changes: Partial<UrlState>): UrlState {
@@ -520,5 +523,71 @@ describe('the print flag', () => {
     expect(withCompare(printing, COMPARE).print).toBe(true);
     expect(withView(printing, 'campaigns').print).toBe(true);
     expect(csvHref(printing)).toBe(csvHref(state({ range: LAST7 })));
+  });
+});
+
+describe('answer state (S4)', () => {
+  const URL_TEXT =
+    '?answer&view=missed-calls&f_office=a&f_office=b&f_weekday=4&f_hour=9&f_hour=10&f_unattributed=1&range=last7';
+
+  it('parses the filter lists; no answer parameter is null; malformed values are dropped', () => {
+    expect(parseUrlState(URL_TEXT).answer).toEqual({
+      offices: ['a', 'b'],
+      campaigns: [],
+      unattributed: true,
+      weekdays: [4],
+      hours: [9, 10],
+    });
+    expect(parseUrlState('?view=missed-calls&f_office=a').answer).toBeNull();
+    const dropped = parseUrlState('?answer&f_weekday=abc&f_hour=&f_hour=x1&f_office=');
+    expect(dropped.answer).toEqual({ offices: [], campaigns: [], unattributed: false, weekdays: [], hours: [] });
+    expect(parseUrlState('?answer').answer).toEqual({
+      offices: [], campaigns: [], unattributed: false, weekdays: [], hours: [],
+    });
+  });
+
+  it('toSearch writes view, range, filter, answer, print, dev, and round-trips', () => {
+    const parsed = parseUrlState(`${URL_TEXT}&print&dev`);
+    expect(toSearch(parsed)).toBe(
+      '?view=missed-calls&range=last7&f_office=a&f_office=b&f_unattributed=1&f_weekday=4&f_hour=9&f_hour=10&answer&print&dev',
+    );
+    expect(parseUrlState(toSearch(parsed))).toEqual(parsed);
+  });
+
+  it('answerParams holds view, range and f_ values, not the comparison or dev', () => {
+    const parsed = parseUrlState(`${URL_TEXT}&compareStart=2026-09-01&compareEnd=2026-09-07&dev`);
+    const params = answerParams(parsed);
+    expect(params.toString()).toBe(
+      'view=missed-calls&range=last7&f_office=a&f_office=b&f_unattributed=1&f_weekday=4&f_hour=9&f_hour=10',
+    );
+    expect(params.has('compareStart')).toBe(false);
+    expect(params.has('dev')).toBe(false);
+  });
+
+  it('answerHref keeps the range unless the query has one; drops comparison, campaign and location; keeps dev', () => {
+    const current = state({
+      range: { kind: 'preset', preset: 'last28' },
+      compare: { start: '2026-09-01', end: '2026-09-07' },
+      campaign: 'c1',
+      location: 'l1',
+      dev: true,
+    });
+    expect(answerHref(current, 'view=missed-calls&f_weekday=4')).toBe(
+      '/?view=missed-calls&range=last28&f_weekday=4&answer&dev',
+    );
+    expect(answerHref(current, 'view=missed-calls&f_weekday=4&range=last7')).toBe(
+      '/?view=missed-calls&range=last7&f_weekday=4&answer&dev',
+    );
+    expect(answerHref(current, 'view=locations&start=2026-09-01&end=2026-09-05')).toBe(
+      '/?view=locations&start=2026-09-01&end=2026-09-05&answer&dev',
+    );
+  });
+
+  it('print and navigation links leave the answer page', () => {
+    const asked = parseUrlState(URL_TEXT);
+    expect(printHref(asked)).toBe('/?view=missed-calls&range=last7&print');
+    expect(defaultsHref(asked)).toBe('/?view=missed-calls');
+    expect(withView(asked, 'campaigns').answer).toBeNull();
+    expect(actionHref(asked, { view: 'locations' } as never)).not.toContain('answer');
   });
 });

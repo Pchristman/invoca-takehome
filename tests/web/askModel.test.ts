@@ -1,0 +1,71 @@
+import { describe, it, expect } from 'vitest';
+import type { QuestionReason } from '../../src/ai/types';
+import type { QuestionResponse } from '../../src/server/api';
+import { AI_OFF_NOTE, EXAMPLE_QUESTIONS, askModel } from '../../src/web/models/askModel';
+import type { RequestState } from '../../src/web/requestState';
+import { metaFor } from './fixtures';
+import { serverFixture } from '../server/helpers';
+
+function failed(reason: QuestionReason, message = ''): RequestState<QuestionResponse> {
+  return { status: 'ready', key: 'k', data: { ok: false, reason, message } };
+}
+
+describe('askModel', () => {
+  it('hides the box with a note when AI is off, shows it when on or budget reached', () => {
+    expect(askModel({ aiStatus: 'off' }, null)).toEqual({ box: 'hidden', note: AI_OFF_NOTE });
+    expect(AI_OFF_NOTE).toBe('Ask a question needs an AI key. Set ANTHROPIC_API_KEY and restart.');
+    for (const aiStatus of ['on', 'budget_reached'] as const) {
+      expect(askModel({ aiStatus }, null)).toEqual({ box: 'shown', busy: false, message: null, examples: null });
+    }
+  });
+
+  it('each failure reason has the server message; examples only for the four rewording reasons', () => {
+    const expected: Record<Exclude<QuestionReason, 'invalid_filter'>, string> = {
+      ai_off: 'Questions need an AI key.',
+      budget_reached: 'The AI budget for this app is used up.',
+      timeout: "The AI service didn't answer. Try again.",
+      api_error: "The AI service didn't answer. Try again.",
+      refusal: "Couldn't turn that into a filter. Try rewording it.",
+      malformed: "Couldn't turn that into a filter. Try rewording it.",
+      unanswerable: "That isn't a question about these calls.",
+      log_unavailable: 'AI is off for this session.',
+    };
+    const withExamples = ['invalid_filter', 'malformed', 'refusal', 'unanswerable'];
+    for (const [reason, message] of Object.entries(expected)) {
+      const show = askModel({ aiStatus: 'on' }, failed(reason as QuestionReason, message));
+      expect(show).toMatchObject({ box: 'shown', busy: false, message });
+      expect('examples' in show && show.examples !== null).toBe(withExamples.includes(reason));
+    }
+    const detail = `Couldn't turn that into a filter: No office is called "X".`;
+    expect(askModel({ aiStatus: 'on' }, failed('invalid_filter', detail))).toMatchObject({
+      message: detail,
+      examples: EXAMPLE_QUESTIONS,
+    });
+  });
+
+  it('a client-side failure keeps its own sentence; a success shows nothing', () => {
+    expect(askModel({ aiStatus: 'on' }, failed('api_error', "Can't reach the data."))).toMatchObject({
+      message: "Can't reach the data.",
+    });
+    const ok: RequestState<QuestionResponse> = {
+      status: 'ready',
+      key: 'k',
+      data: { ok: true, source: 'ai', cached: false, query: 'view=overview' },
+    };
+    expect(askModel({ aiStatus: 'on' }, ok)).toMatchObject({ message: null, busy: false });
+  });
+
+  it('loading is busy', () => {
+    expect(askModel({ aiStatus: 'on' }, { status: 'loading', key: 'k' })).toMatchObject({ busy: true });
+  });
+
+  it('examples carry no digits and none of the data names', () => {
+    expect(EXAMPLE_QUESTIONS).toHaveLength(3);
+    const meta = metaFor(serverFixture());
+    const names = [...meta.locations, ...meta.campaigns].map((x) => x.name.toLowerCase());
+    for (const example of EXAMPLE_QUESTIONS) {
+      expect(example).not.toMatch(/\d/);
+      for (const name of names) expect(example.toLowerCase()).not.toContain(name);
+    }
+  });
+});

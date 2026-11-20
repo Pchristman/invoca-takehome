@@ -1,4 +1,4 @@
-import type { ApiErrorCode } from '../server/api';
+import type { ApiErrorCode, QuestionResponse } from '../server/api';
 
 /** The server's own codes, plus two the browser adds when there is no usable server reply. */
 export type ClientErrorCode = ApiErrorCode | 'network' | 'bad_response';
@@ -70,4 +70,25 @@ export async function fetchApi<T>(
   const serverError = readServerError(body);
   if (serverError) return { ok: false, error: { ...serverError, status: response.status } };
   return { ok: false, error: { code: 'network', message: NETWORK_MESSAGE, status: response.status } };
+}
+
+/** Ask a question in plain English. Never throws: a dead server or a non-JSON reply is an api_error. */
+export async function askQuestion(
+  question: string,
+  signal?: AbortSignal,
+  fetchFn: typeof fetch = fetch,
+): Promise<QuestionResponse> {
+  const failure: QuestionResponse = { ok: false, reason: 'api_error', message: "Can't reach the data." };
+  try {
+    const response = await fetchFn(`/api/question?${new URLSearchParams({ q: question }).toString()}`, { signal });
+    const body = await readJson(response);
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) return failure;
+    const reply = body as { ok?: unknown };
+    if (response.ok && (reply.ok === true || reply.ok === false)) return body as QuestionResponse;
+    // A 400 or 409 from the server carries { error: { message } }: show that sentence.
+    const serverError = readServerError(body);
+    return serverError ? { ok: false, reason: 'api_error', message: serverError.message } : failure;
+  } catch {
+    return failure;
+  }
 }
