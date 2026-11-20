@@ -3,7 +3,7 @@
 // call gets an environment built by `dockerEnv` below, which sets or removes the key and the other settings.
 // Nothing here reads `.env`, prints the environment, or requests /api/takeaway/* while a key is set.
 import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, connect } from 'node:net';
 import { networkInterfaces, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -16,7 +16,8 @@ import { EXTENDED_TOTALS } from '../snapshot/extendedTotals';
 const PROJECT = 'invoca-test';
 const SECRET_IMAGE = 'invoca-secret-test';
 const NO_KEY = 'tests/docker/fixtures/no-key.env';
-const FAKE_KEY = 'tests/docker/fixtures/fake-key.env';
+const EXTENDED_ENV = 'tests/docker/fixtures/extended.env'; // DATA_DIR=data/extended (relative), HOST, PORT lines
+const FAKE_KEY ='tests/docker/fixtures/fake-key.env';
 const TZ_OVERRIDE = 'tests/docker/fixtures/tz.override.yml';
 const FAKE_KEY_VALUE = 'sk-ant-test-not-a-real-key-0000'; // the same text as in fake-key.env, minus its quotes
 const ORIGINAL = 'tests/fixtures/original-export';
@@ -128,18 +129,27 @@ function dockerRunning(): boolean {
 /** Streams `docker save` and reports whether `needle` appears anywhere in the image archive. */
 function archiveContains(image: string, needle: string): Promise<boolean> {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn('docker', ['save', image], { env: dockerEnv({ key: '' }), stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn('docker', ['save', image], { env: dockerEnv({ key: '' }), stdio: ['ignore', 'pipe', 'pipe'] });
     const wanted = Buffer.from(needle);
     let tail: Buffer = Buffer.alloc(0);
     let found = false;
+    let scanned = 0;
+    let errors = '';
     child.stdout.on('data', (chunk: Buffer) => {
+      scanned += chunk.length;
       if (found) return;
       const window = Buffer.concat([tail, chunk]);
       if (window.includes(wanted)) found = true;
       tail = window.subarray(Math.max(0, window.length - wanted.length));
     });
+    child.stderr.on('data', (chunk: Buffer) => (errors += chunk.toString()));
     child.on('error', reject);
-    child.on('close', () => resolvePromise(found));
+    child.on('close', (code) => {
+      // A failed or empty save must not look like "the key is not in the image".
+      if (code !== 0) reject(new Error(`docker save exited ${code}: ${errors.trim()}`));
+      else if (scanned === 0) reject(new Error('docker save produced no bytes to scan'));
+      else resolvePromise(found);
+    });
   });
 }
 
@@ -219,6 +229,36 @@ describe.skipIf(import.meta.env.MODE !== 'docker')('real container', () => {
     expect(result.stderr).not.toContain('is not set');
     expect(JSON.parse(result.stdout).services.app.environment.ANTHROPIC_API_KEY === '').toBe(true);
   });
+
+  it('no .env at all: compose up starts the app with AI off', async () => {
+    // A project folder with no .env: the compose file (its build pointed at this repo) and a copy of the shipped export.
+    const dir = tempDir();
+    const repo = resolve('.').replace(/\\/g, '/');
+    const text = readFileSync('docker-compose.yml', 'utf8').replace(/^(\s*)build: \.\s*$/m, `$1build: "${repo}"`);
+    expect(text).toContain(`build: "${repo}"`);
+    writeFileSync(join(dir, 'docker-compose.yml'), text);
+    cpSync(ORIGINAL, dir, { recursive: true });
+    expect(existsSync(join(dir, '.env'))).toBe(false);
+
+    const port = freePort();
+    const env = { ...dockerEnv({ key: '' }), PORT: String(port) };
+    const up = spawnSync('docker', ['compose', '-p', PROJECT, '--project-directory', dir, '-f', join(dir, 'docker-compose.yml'), 'up', '-d'], {
+      encoding: 'utf8',
+      env,
+      timeout: 300_000,
+    });
+    expect(up.status).toBe(0);
+    await waitFor200(`${base(port)}/api/meta`);
+    expect((await getJson(`${base(port)}/api/meta`)).body.callCount).toBe(5000);
+    expect((await getJson(`${base(port)}/api/data-notes`)).body.ai.status).toBe('off');
+  }, 300_000);
+
+  it('a relative DATA_DIR in the env file is read from the project folder', async () => {
+    const { run, port } = up({ envFile: EXTENDED_ENV });
+    expect(run.status).toBe(0);
+    await waitFor200(`${base(port)}/api/meta`);
+    expect((await getJson(`${base(port)}/api/meta`)).body.callCount).toBe(EXTENDED_TOTALS.calls);
+  }, 180_000);
 
   it('publishes only on the host loopback; the container listens on 0.0.0.0', async () => {
     const config = compose(['config', '--format', 'json'], { envFile: NO_KEY });
@@ -387,6 +427,8 @@ describe.skipIf(import.meta.env.MODE !== 'docker')('real container', () => {
     ]);
     expect(check.status).toBe(0);
     const history = docker(['history', '--no-trunc', SECRET_IMAGE]);
+    expect(history.status).toBe(0);
+    expect(history.stdout).toContain('COPY'); // history really listed the layers
     expect(history.stdout + history.stderr).not.toContain('SENTINEL_KEY_9f3a');
     expect(await archiveContains(SECRET_IMAGE, 'SENTINEL_KEY_9f3a')).toBe(false);
   }, 600_000);
