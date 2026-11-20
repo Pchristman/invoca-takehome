@@ -103,6 +103,17 @@ The URL holds the screen, so a link, a refresh or the back button reproduces it:
 
 To open the extended export: `DATA_DIR=data/extended npm start`. There, Locations flags four offices, two of them "better" than the rest, because each office is tested against all others pooled and the two planted weak offices pull that pool down.
 
+## Compare any two ranges
+
+By default the comparison is the same number of days just before the selected range. To choose it yourself, use the "Comparison range" dates in the range control and press Compare; "Use previous period" clears it. Changing the selected range also clears it.
+
+- **In the URL.** The second range is `compareStart` and `compareEnd`, next to `start` and `end`, so a link, refresh, back and forward all keep it.
+- **Anywhere in the data.** It may be before, after, inside or overlapping the selected range, or the same range. It must lie inside the data; otherwise no change is shown and the page says why. An overlap is allowed, with a note, and call-change alerts are not tested.
+- **Another length is compared per day.** Calls, bookings and revenue compare per-day figures and the page says "per day" with both lengths. Answer rate is a rate, so length does not matter. Unique callers are not compared across lengths, because repeat callers count once and the figure does not grow with days. Call-change alerts are not tested either; they need equal lengths.
+- **The page names both ranges** ("Comparing ... with ..."), so "was 587" is never ambiguous.
+- **Locations and Missed calls** ignore the second range.
+- **Known limits:** a very short second range gives a noisy per-day figure; a range that is not whole weeks mixes weekdays unevenly.
+
 ## Alerts
 
 A campaign is flagged when its calls jumped or dropped against the previous period by more than chance explains.
@@ -110,7 +121,7 @@ A campaign is flagged when its calls jumped or dropped against the previous peri
 - **Where:** the Campaigns table has a "Calls vs previous" column (change and "was N") and a "Calls jumped" or "Calls dropped" badge on flagged rows. Overview's top actions gain one extra entry, right after the Campaigns entry, naming the biggest mover and how many campaigns changed. However many campaigns are flagged, there is one entry.
 - **The test:** `score = (calls now - calls before) / sqrt(calls now + calls before)`; a campaign is flagged when the score reaches 3 in either direction. A campaign is tested only when its calls across both periods add up to at least 20, so a drop to zero or a jump from zero is caught and a handful of calls is never flagged.
 - **Settings:** `ALERT_Z` (3) and `MIN_CALLS_ALERT` (20) in `src/core/thresholds.ts`. 3 rather than the 2.5 used for offices because about a dozen campaigns are tested at once: at 2.5 some campaign is flagged by luck about 1 time in 7, at 3 about 1 in 30. On the shipped export no campaign is flagged; on the extended export the planted jump and drop are.
-- **Needs a full, equal-length previous period.** Over "All data", or with a custom comparison of another length, nothing is tested and the page says why. A comparison that overlaps the selected range is not tested either (the two periods must be independent); the change column still shows.
+- **Needs a full previous period of equal length.** Over "All data", or with a comparison of another length (compared per day, see Compare any two ranges), nothing is tested and the page says why. A comparison that overlaps the selected range is not tested either (the two periods must be independent); the change column still shows.
 - **Unattributed is never flagged.** It is a bucket, not a campaign; "Fix attribution" covers it. Its row still shows its change.
 - **Known limits:** repeat callers make counts clumpier than the test assumes, so it is somewhat optimistic; a range that is not a whole number of weeks compares unequal weekday mixes; a partly complete first or last day is noted, not corrected.
 
