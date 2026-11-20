@@ -24,7 +24,7 @@ import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
 import { useApi } from './useApi';
 import { useUrlState } from './useUrlState';
-import { apiParams, defaultsHref, takeawayParams, withCampaign, withLocation, withRange } from './urlState';
+import { apiParams, defaultsHref, takeawayParams, withCampaign, withCompare, withLocation, withRange } from './urlState';
 import type { UrlState } from './urlState';
 
 const NO_PARAMS = new URLSearchParams();
@@ -100,7 +100,7 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
       <Header meta={meta} dev={state.dev} dataNotesOpen={dataNotesOpen} onToggleDataNotes={() => setDataNotesToggled((open) => !open)} />
       {dataNotesOpen && <DataNotes resetHref={resetHref} onClose={closeDataNotes} />}
       <Nav state={state} />
-      <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} />
+      <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} onCompare={(compare) => navigate(withCompare(state, compare))} />
       {!hasSpan ? (
         <EmptyScreen notes={meta.notes} />
       ) : (

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Meta } from '../../server/api';
 import type { ClientError } from '../api';
 import { isIsoDate } from '../format';
-import { customRange, presetOf } from '../urlState';
+import { customCompare, customRange, presetOf } from '../urlState';
 import type { RangeChoice, UrlState } from '../urlState';
 
 const PRESET_LABELS: Record<string, string> = {
@@ -24,11 +24,13 @@ export function RangeControl({
   meta,
   error,
   onChange,
+  onCompare,
 }: {
   state: UrlState;
   meta: Meta;
   error: ClientError | null;
   onChange(range: RangeChoice | null): void;
+  onCompare(compare: { start: string; end: string } | null): void;
 }) {
   const fromUrl = state.range?.kind === 'custom' ? state.range : null;
   const [start, setStart] = useState(validOrBlank(fromUrl?.start));
@@ -38,6 +40,15 @@ export function RangeControl({
     setStart(validOrBlank(fromUrl?.start));
     setEnd(validOrBlank(fromUrl?.end));
   }, [fromUrl?.start, fromUrl?.end]);
+
+  const compareFromUrl = state.compare;
+  const [compareStart, setCompareStart] = useState(validOrBlank(compareFromUrl?.start));
+  const [compareEnd, setCompareEnd] = useState(validOrBlank(compareFromUrl?.end));
+  useEffect(() => {
+    setCompareStart(validOrBlank(compareFromUrl?.start));
+    setCompareEnd(validOrBlank(compareFromUrl?.end));
+  }, [compareFromUrl?.start, compareFromUrl?.end]);
+  const comparing = isIsoDate(compareStart) && isIsoDate(compareEnd) ? customCompare(compareStart, compareEnd) : null;
 
   const active = presetOf(state, meta.defaultPreset);
   const applied = isIsoDate(start) && isIsoDate(end) ? customRange(start, end) : null;
@@ -69,6 +80,24 @@ export function RangeControl({
       <button type="button" className="button" disabled={applied === null} onClick={() => onChange(applied)}>
         Apply
       </button>
+      <div className="row" role="group" aria-label="Comparison range">
+        <label>
+          Compare start date
+          <input type="date" value={compareStart} min={meta.span?.start} max={meta.span?.end} onChange={(e) => setCompareStart(e.target.value)} />
+        </label>
+        <label>
+          Compare end date
+          <input type="date" value={compareEnd} min={meta.span?.start} max={meta.span?.end} onChange={(e) => setCompareEnd(e.target.value)} />
+        </label>
+        <button type="button" className="button" disabled={comparing === null} onClick={() => onCompare(comparing)}>
+          Compare
+        </button>
+        {state.compare !== null && (
+          <button type="button" className="button" onClick={() => onCompare(null)}>
+            Use previous period
+          </button>
+        )}
+      </div>
       {/* Plain text on purpose: the request frame below already announces this same error as an alert. */}
       {showError && (
         <p className="range-error">

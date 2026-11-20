@@ -102,6 +102,11 @@ export function withRange(state: UrlState, range: RangeChoice | null): UrlState 
   return { ...state, range, compare: null };
 }
 
+// Sets or clears only the second range; the selected range stays.
+export function withCompare(state: UrlState, compare: { start: string; end: string } | null): UrlState {
+  return { ...state, compare };
+}
+
 export function withCampaign(state: UrlState, id: string | null): UrlState {
   return { ...state, campaign: id };
 }
@@ -122,6 +127,13 @@ export function customRange(start: string, end: string): RangeChoice | null {
   const trimmedEnd = end.trim();
   if (trimmedStart === '' || trimmedEnd === '') return null;
   return { kind: 'custom', start: trimmedStart, end: trimmedEnd };
+}
+
+export function customCompare(start: string, end: string): { start: string; end: string } | null {
+  const trimmedStart = start.trim();
+  const trimmedEnd = end.trim();
+  if (trimmedStart === '' || trimmedEnd === '') return null;
+  return { start: trimmedStart, end: trimmedEnd };
 }
 
 // Which preset button is active; null when the range is custom.

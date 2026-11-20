@@ -7,6 +7,8 @@ import {
   takeawayParams,
   withView,
   withRange,
+  withCompare,
+  customCompare,
   withCampaign,
   withLocation,
   csvHref,
@@ -357,5 +359,65 @@ describe('takeawayParams', () => {
     expect(key({ ...base, range: { kind: 'preset', preset: 'last28' } })).not.toBe(key(base));
     expect(key({ ...base, compare: { start: '2024-01-01', end: '2024-01-07' } })).not.toBe(key(base));
     expect(key({ ...missed, location: 'l1' })).not.toBe(key(missed));
+  });
+});
+
+describe('withCompare', () => {
+  const base = state({
+    view: 'campaigns',
+    range: { kind: 'custom', start: '2026-09-08', end: '2026-09-14' },
+    campaign: 'camp_a',
+    location: 'loc_a',
+    dev: true,
+  });
+
+  it('sets only the comparison', () => {
+    const compare = { start: '2026-09-01', end: '2026-09-07' };
+    expect(withCompare(base, compare)).toEqual({ ...base, compare });
+  });
+
+  it('null clears only the comparison', () => {
+    const withIt = withCompare(base, { start: '2026-09-01', end: '2026-09-07' });
+    expect(withCompare(withIt, null)).toEqual(base);
+  });
+});
+
+describe('customCompare', () => {
+  it('trims', () => {
+    expect(customCompare(' 2026-09-01 ', '2026-09-07')).toEqual({ start: '2026-09-01', end: '2026-09-07' });
+  });
+
+  it('is null when either is blank', () => {
+    expect(customCompare('2026-09-01', '')).toBeNull();
+    expect(customCompare('', '2026-09-07')).toBeNull();
+    expect(customCompare('', '')).toBeNull();
+  });
+});
+
+describe('a comparison range in the URL', () => {
+  const s = state({
+    range: { kind: 'custom', start: '2026-09-08', end: '2026-09-14' },
+    compare: { start: '2026-09-01', end: '2026-09-05' },
+  });
+  const SEARCH = '?start=2026-09-08&end=2026-09-14&compareStart=2026-09-01&compareEnd=2026-09-05';
+
+  it('round-trips through toSearch and parseUrlState', () => {
+    expect(toSearch(s)).toBe(SEARCH);
+    expect(parseUrlState(SEARCH)).toEqual(s);
+  });
+
+  it('is carried to the API by every view and by takeawayParams', () => {
+    for (const view of VIEW_ORDER) {
+      const params = apiParams({ ...s, view }, view);
+      expect(params.get('compareStart')).toBe('2026-09-01');
+      expect(params.get('compareEnd')).toBe('2026-09-05');
+      const takeaway = takeawayParams({ ...s, view }, view);
+      expect(takeaway.get('compareStart')).toBe('2026-09-01');
+      expect(takeaway.get('compareEnd')).toBe('2026-09-05');
+    }
+  });
+
+  it('is dropped by csvHref', () => {
+    expect(csvHref(s)).toBe('/api/missed-calls/callbacks.csv?start=2026-09-08&end=2026-09-14');
   });
 });

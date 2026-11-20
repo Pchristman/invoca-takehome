@@ -167,7 +167,7 @@ describe('RequestFrame', () => {
 
 describe('RangeControl', () => {
   const render = (search: string, error: ClientError | null = null, m: Meta = meta) =>
-    renderToStaticMarkup(<RangeControl state={parseUrlState(search)} meta={m} error={error} onChange={noop} />);
+    renderToStaticMarkup(<RangeControl state={parseUrlState(search)} meta={m} error={error} onChange={noop} onCompare={noop} />);
 
   it('marks the default preset pressed and the others not', () => {
     const html = render('');
@@ -184,9 +184,9 @@ describe('RangeControl', () => {
     expect(count(html, 'aria-pressed="true"')).toBe(1);
   });
 
-  it('carries min and max from the data span on both date inputs', () => {
+  it('carries min and max from the data span on every date input', () => {
     const inputs = render('').match(/<input[^>]*>/g) ?? [];
-    expect(inputs).toHaveLength(2);
+    expect(inputs).toHaveLength(4);
     for (const input of inputs) {
       expect(input).toContain(`min="${meta.span!.start}"`);
       expect(input).toContain(`max="${meta.span!.end}"`);
@@ -214,6 +214,62 @@ describe('RangeControl', () => {
     expect(html).not.toContain('nope');
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Apply</);
     expect(render('?start=2026-02-30&end=2026-09-05')).toMatch(/<button[^>]*disabled=""[^>]*>Apply</);
+  });
+});
+
+describe('RangeControl comparison range', () => {
+  const render = (search: string, error: ClientError | null = null) =>
+    renderToStaticMarkup(<RangeControl state={parseUrlState(search)} meta={meta} error={error} onChange={noop} onCompare={noop} />);
+  const COMPARE = '?start=2026-09-08&end=2026-09-14&compareStart=2026-09-01&compareEnd=2026-09-07';
+  const groupOf = (html: string) => html.slice(html.indexOf('aria-label="Comparison range"'));
+
+  it('has the group label, both labelled inputs with min and max from the span, and the Compare button', () => {
+    const html = render('');
+    expect(html).toContain('aria-label="Comparison range"');
+    expect(html).toContain('Compare start date');
+    expect(html).toContain('Compare end date');
+    expect(html).toMatch(/<button[^>]*>Compare</);
+    const inputs = groupOf(html).match(/<input[^>]*>/g) ?? [];
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) {
+      expect(input).toContain(`min="${meta.span!.start}"`);
+      expect(input).toContain(`max="${meta.span!.end}"`);
+    }
+  });
+
+  it('shows Use previous period only when a second range is set', () => {
+    expect(render('')).not.toContain('Use previous period');
+    expect(render(COMPARE)).toMatch(/<button[^>]*>Use previous period</);
+  });
+
+  it('fills the inputs from the URL', () => {
+    const inputs = groupOf(render(COMPARE));
+    expect(inputs).toContain('value="2026-09-01"');
+    expect(inputs).toContain('value="2026-09-07"');
+  });
+
+  it('a garbage second range shows blank inputs and never the raw text', () => {
+    const html = render('?compareStart=banana');
+    expect(html).not.toContain('banana');
+    expect(groupOf(html)).not.toContain('value="2');
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Compare</);
+  });
+
+  it('disables Compare until both inputs hold real dates', () => {
+    expect(render('')).toMatch(/<button[^>]*disabled=""[^>]*>Compare</);
+    expect(render(COMPARE)).toMatch(/<button(?![^>]*disabled)[^>]*>Compare</);
+  });
+
+  it('shows the server message once for a compare field, not for another field', () => {
+    const message = 'Comparison range: the start date is after the end date.';
+    const html = render(COMPARE, { code: 'bad_date', message, field: 'compareEnd' });
+    expect(count(html, message)).toBe(1);
+    const other = render(COMPARE, { code: 'unknown_campaign', message, field: 'campaign' });
+    expect(other).not.toContain(message);
+  });
+
+  it('has no dev-only content', () => {
+    expect(render(`${COMPARE}&dev`)).toBe(render(COMPARE));
   });
 });
 
