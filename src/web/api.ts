@@ -1,4 +1,4 @@
-import type { ApiErrorCode, QuestionResponse } from '../server/api';
+import type { ApiErrorCode, QuestionResponse, UploadCommitResponse, UploadPreviewResponse } from '../server/api';
 
 /** The server's own codes, plus two the browser adds when there is no usable server reply. */
 export type ClientErrorCode = ApiErrorCode | 'network' | 'bad_response';
@@ -49,10 +49,14 @@ export async function fetchApi<T>(
 ): Promise<ApiResult<T>> {
   const query = params ? params.toString() : '';
   const url = query === '' ? path : `${path}?${query}`;
+  return requestApi<T>(url, { signal }, fetchFn);
+}
 
+/** Send a request and read the reply the same way for every call. Never throws. */
+async function requestApi<T>(url: string, init: RequestInit, fetchFn: typeof fetch): Promise<ApiResult<T>> {
   let response: Response;
   try {
-    response = await fetchFn(url, { signal });
+    response = await fetchFn(url, init);
   } catch {
     // Server down, DNS, or aborted.
     return { ok: false, error: { code: 'network', message: NETWORK_MESSAGE } };
@@ -70,6 +74,18 @@ export async function fetchApi<T>(
   const serverError = readServerError(body);
   if (serverError) return { ok: false, error: { ...serverError, status: response.status } };
   return { ok: false, error: { code: 'network', message: NETWORK_MESSAGE, status: response.status } };
+}
+
+/** Send one CSV to be previewed or written. Never throws: the server's own messages come back as they are. */
+export function postUpload(
+  mode: 'preview' | 'commit',
+  file: File,
+  signal?: AbortSignal,
+  fetchFn: typeof fetch = fetch,
+): Promise<ApiResult<UploadPreviewResponse | UploadCommitResponse>> {
+  const body = new FormData();
+  body.append('file', file);
+  return requestApi<UploadPreviewResponse | UploadCommitResponse>(`/api/upload/${mode}`, { method: 'POST', body, signal }, fetchFn);
 }
 
 /** Ask a question in plain English. Never throws: a dead server or a non-JSON reply is an api_error. */

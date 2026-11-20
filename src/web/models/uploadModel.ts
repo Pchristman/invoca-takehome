@@ -1,0 +1,145 @@
+// What the upload panel draws, and the steps it goes through. Pure: no React, no File.
+// Every count comes from the server's preview; this file only formats it.
+
+import type { RowClass, UploadKind, UploadPreview } from '../../db/upload/types';
+import { formatCount } from '../../core/views/format';
+
+export type UploadState =
+  | { step: 'choose' }
+  | { step: 'checking'; fileName: string }
+  | { step: 'preview'; fileName: string; preview: UploadPreview }
+  | { step: 'saving'; fileName: string; preview: UploadPreview }
+  | { step: 'done'; fileName: string; preview: UploadPreview; written: number }
+  | { step: 'error'; fileName: string | null; message: string };
+
+export type UploadAction =
+  | { type: 'choose'; fileName: string }
+  | { type: 'previewed'; preview: UploadPreview }
+  | { type: 'confirm' }
+  | { type: 'committed'; written: number }
+  | { type: 'failed'; message: string }
+  | { type: 'reset' };
+
+export const INITIAL_UPLOAD: UploadState = { step: 'choose' };
+
+/** The next state. An action that makes no sense in the current step returns the same state, so a double click or a late reply does nothing. */
+export function uploadReducer(state: UploadState, action: UploadAction): UploadState {
+  switch (action.type) {
+    case 'choose':
+      // A reply is on its way and the file is being written: do not let a new choice replace it.
+      if (state.step === 'saving') return state;
+      return { step: 'checking', fileName: action.fileName };
+    case 'previewed':
+      return state.step === 'checking' ? { step: 'preview', fileName: state.fileName, preview: action.preview } : state;
+    case 'confirm':
+      return state.step === 'preview' ? { step: 'saving', fileName: state.fileName, preview: state.preview } : state;
+    case 'committed':
+      return state.step === 'saving' ? { step: 'done', fileName: state.fileName, preview: state.preview, written: action.written } : state;
+    case 'failed':
+      return { step: 'error', fileName: state.step === 'choose' ? null : state.fileName, message: action.message };
+    case 'reset':
+      return INITIAL_UPLOAD;
+  }
+}
+
+export interface UploadRow {
+  label: string;
+  count: string;
+  examples: string[];
+}
+
+export interface UploadView {
+  title: string;
+  /** Shown while the server is working; null otherwise. */
+  busy: string | null;
+  /** Shown in an alert; null unless the step is error. */
+  error: string | null;
+  rows: UploadRow[];
+  hints: string[];
+  badReasons: string[];
+  canConfirm: boolean;
+  confirmLabel: string | null;
+  emptyMessage: string | null;
+  done: string | null;
+  seeNewDataHref: string;
+}
+
+const NOUNS: Record<UploadKind, readonly [string, string]> = {
+  calls: ['call', 'calls'],
+  campaigns: ['campaign', 'campaigns'],
+  locations: ['location', 'locations'],
+};
+
+const MAX_TEXT = 40;
+
+/** Long file names and ids are cut so one cannot stretch the panel. */
+export function shorten(text: string): string {
+  const chars = Array.from(text);
+  return chars.length <= MAX_TEXT ? text : `${chars.slice(0, MAX_TEXT - 1).join('')}…`;
+}
+
+function exampleLine(example: { row: number; id: string; note: string }): string {
+  return `row ${formatCount(example.row)}: ${shorten(example.id)} (${example.note})`;
+}
+
+function rowFor(preview: UploadPreview, label: string, cls: RowClass, n: number): UploadRow {
+  return { label, count: formatCount(n), examples: preview.examples[cls].map(exampleLine) };
+}
+
+function rowsFor(preview: UploadPreview): UploadRow[] {
+  const { kind, counts } = preview;
+  const rows = [rowFor(preview, `New ${NOUNS[kind][1]}`, 'new', counts.newRows)];
+  if (kind === 'calls') rows.push(rowFor(preview, 'New versions', 'new_version', counts.newVersions));
+  rows.push(rowFor(preview, 'Already stored', 'duplicate', counts.duplicates));
+  if (kind !== 'calls') rows.push(rowFor(preview, 'Conflicts', 'conflict', counts.conflicts));
+  rows.push(rowFor(preview, 'Bad rows', 'bad', counts.bad));
+  return rows;
+}
+
+function badReasonsFor(preview: UploadPreview): string[] {
+  return Object.entries(preview.badByReason)
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([reason, n]) => `${reason}: ${formatCount(n)}`);
+}
+
+function emptyMessageFor(preview: UploadPreview): string {
+  const { rowsRead, duplicates } = preview.counts;
+  if (rowsRead === 0) return 'This file has no rows.';
+  if (duplicates === rowsRead) return 'Nothing to add: every row is already stored.';
+  return 'Nothing to add: no row in this file can be stored.';
+}
+
+/** What to draw for this state. `seeNewDataHref` is defaultsHref of the current page, passed in. */
+export function uploadModel(state: UploadState, seeNewDataHref: string): UploadView {
+  const view: UploadView = {
+    title: 'Upload data',
+    busy: null,
+    error: null,
+    rows: [],
+    hints: [],
+    badReasons: [],
+    canConfirm: false,
+    confirmLabel: null,
+    emptyMessage: null,
+    done: null,
+    seeNewDataHref,
+  };
+  if (state.step === 'choose') return view;
+  if (state.step === 'checking') return { ...view, busy: `Checking ${shorten(state.fileName)}...` };
+  if (state.step === 'error') return { ...view, error: state.message };
+
+  const { preview } = state;
+  const addable = preview.counts.newRows + preview.counts.newVersions;
+  const noun = NOUNS[preview.kind];
+  const shown: UploadView = {
+    ...view,
+    title: `${shorten(state.fileName)}`,
+    rows: rowsFor(preview),
+    hints: preview.hints,
+    badReasons: badReasonsFor(preview),
+  };
+  if (state.step === 'done') return { ...shown, done: `Added ${formatCount(state.written, [`new ${noun[0]}`, `new ${noun[1]}`])} to the database.` };
+  if (state.step === 'saving') return { ...shown, busy: 'Saving...' };
+  if (addable === 0) return { ...shown, emptyMessage: emptyMessageFor(preview) };
+  return { ...shown, canConfirm: true, confirmLabel: `Add ${formatCount(addable, noun)}` };
+}

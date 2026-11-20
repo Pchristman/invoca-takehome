@@ -13,7 +13,8 @@ import { LocationsView } from './components/LocationsView';
 import { MissedCallsView } from './components/MissedCallsView';
 import { DataNotesPanel } from './components/DataNotesPanel';
 import { OverviewView } from './components/OverviewView';
-import { DATA_NOTES_BUTTON_ID, Header } from './components/Header';
+import { DATA_NOTES_BUTTON_ID, Header, UPLOAD_BUTTON_ID } from './components/Header';
+import { UploadPanel } from './components/UploadPanel';
 import { Nav } from './components/Nav';
 import { RangeControl } from './components/RangeControl';
 import { RequestFrame } from './components/RequestFrame';
@@ -75,6 +76,7 @@ export function EmptyScreen({ notes }: { notes: string[] }) {
 function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; resetHref: string }) {
   const { navigate } = useUrlState();
   const [dataNotesToggled, setDataNotesToggled] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false); // not in the URL: a half-chosen file is not a screen to link to
   const dataNotesOpen = state.dev && dataNotesToggled; // without ?dev there is no panel, whatever the state says
   const answering = state.answer !== null; // the answer page makes its own request, not the view's
   const view = useApi<unknown>(answering ? null : `/api/${state.view}`, apiParams(state, state.view));
@@ -85,6 +87,10 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   if (view.state?.status === 'ready') lastReady.current = { key: view.state.key, data: view.state.data };
   else if (view.state?.status === 'failed' || view.state === null) lastReady.current = null;
   const shown = displayState(lastReady.current, view.state);
+  const closeUpload = () => {
+    setUploadOpen(false);
+    document.getElementById(UPLOAD_BUTTON_ID)?.focus();
+  };
   const closeDataNotes = () => {
     setDataNotesToggled(false);
     document.getElementById(DATA_NOTES_BUTTON_ID)?.focus();
@@ -109,8 +115,21 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
 
   return (
     <>
-      <Header meta={meta} dev={state.dev} dataNotesOpen={dataNotesOpen} onToggleDataNotes={() => setDataNotesToggled((open) => !open)} printLink={printHref(state)} />
+      <Header
+        meta={meta}
+        dev={state.dev}
+        dataNotesOpen={dataNotesOpen}
+        onToggleDataNotes={() => setDataNotesToggled((open) => !open)}
+        printLink={printHref(state)}
+        uploadOpen={uploadOpen}
+        onToggleUpload={() => setUploadOpen((open) => !open)}
+      />
       <RevealPresence>
+        {uploadOpen && (
+          <Reveal key="upload" kind="panel" id="upload">
+            <UploadPanel resetHref={resetHref} onClose={closeUpload} />
+          </Reveal>
+        )}
         {dataNotesOpen && (
           <Reveal key="data-notes" kind="panel" id="data-notes">
             <DataNotes resetHref={resetHref} onClose={closeDataNotes} />

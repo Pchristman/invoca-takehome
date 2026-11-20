@@ -3,6 +3,8 @@ import { formatLongDate, formatSkippedRows } from '../format';
 
 /** The id App focuses when the data notes panel closes. */
 export const DATA_NOTES_BUTTON_ID = 'data-notes-button';
+/** The id App focuses when the upload panel closes. */
+export const UPLOAD_BUTTON_ID = 'upload-button';
 
 export function Header({
   meta,
@@ -10,12 +12,17 @@ export function Header({
   dataNotesOpen,
   onToggleDataNotes,
   printLink,
+  uploadOpen = false,
+  onToggleUpload,
 }: {
   meta: Meta;
   dev: boolean;
   dataNotesOpen: boolean;
   onToggleDataNotes(): void;
   printLink: string;
+  uploadOpen?: boolean;
+  /** Without it there is no upload button. */
+  onToggleUpload?: () => void;
 }) {
   const skipped = formatSkippedRows(meta.skippedRows);
   return (
@@ -28,6 +35,11 @@ export function Header({
         <a href={printLink} target="_blank" rel="noopener">
           Print summary
         </a>
+        {onToggleUpload && (
+          <button id={UPLOAD_BUTTON_ID} type="button" className="button" aria-pressed={uploadOpen} onClick={onToggleUpload}>
+            Upload data
+          </button>
+        )}
         {dev && (
           <button id={DATA_NOTES_BUTTON_ID} type="button" className="button" aria-pressed={dataNotesOpen} onClick={onToggleDataNotes}>
             Data notes
