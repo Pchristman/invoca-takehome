@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DataNotesResponse, Meta } from '../server/api';
+import type { DataNotesResponse, Meta, TakeawayResponse } from '../server/api';
 import type { DateRange } from '../core/ranges';
 import type {
   CampaignsView as CampaignsData,
@@ -16,7 +16,9 @@ import { DATA_NOTES_BUTTON_ID, Header } from './components/Header';
 import { Nav } from './components/Nav';
 import { RangeControl } from './components/RangeControl';
 import { RequestFrame } from './components/RequestFrame';
+import { Takeaway } from './components/Takeaway';
 import { dataNotesModel } from './models/dataNotesModel';
+import { takeawayModel } from './models/takeawayModel';
 import { shouldCloseDataNotes } from './models/escapeKey';
 import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
@@ -65,6 +67,8 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   const [dataNotesToggled, setDataNotesToggled] = useState(false);
   const dataNotesOpen = state.dev && dataNotesToggled; // without ?dev there is no panel, whatever the state says
   const view = useApi<unknown>(`/api/${state.view}`, apiParams(state, state.view));
+  // Its own request, so the view never waits on the takeaway. No data span, no request.
+  const takeaway = useApi<TakeawayResponse>(meta.span === null ? null : `/api/takeaway/${state.view}`, apiParams(state, state.view));
   // The last reply that was ready, kept so a change of the chart's campaign does not unmount the screen.
   const lastReady = useRef<{ key: string; data: unknown } | null>(null);
   if (view.state?.status === 'ready') lastReady.current = { key: view.state.key, data: view.state.data };
@@ -100,6 +104,8 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
       {!hasSpan ? (
         <EmptyScreen notes={meta.notes} />
       ) : (
+        <>
+        <Takeaway show={takeawayModel(takeaway.state, { dev: state.dev })} />
         <RequestFrame state={shown.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
           {(data) =>
             state.view === 'overview' ? (
@@ -126,6 +132,7 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
             )
           }
         </RequestFrame>
+        </>
       )}
     </>
   );

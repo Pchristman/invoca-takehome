@@ -1,0 +1,20 @@
+import type { TakeawayShow } from '../models/takeawayModel';
+
+/** One sentence about the view, marked AI or template. An add-on: the view is complete without it. */
+export function Takeaway({ show }: { show: TakeawayShow }) {
+  if (show.kind === 'hidden') return null;
+  if (show.kind === 'loading') {
+    return (
+      <p className="takeaway loading" role="status">
+        {show.label}
+      </p>
+    );
+  }
+  return (
+    <section className="takeaway" aria-label="Takeaway">
+      <span className="badge takeaway-marker">{show.marker}</span>
+      <p className="takeaway-text">{show.text}</p>
+      {show.note !== null && <p className="takeaway-note small muted">{show.note}</p>}
+    </section>
+  );
+}
