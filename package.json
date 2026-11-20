@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
+    "test:docker": "vitest run tests/docker/docker.integration.test.ts --mode docker",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "start": "vite build && tsx src/server/cli.ts",
