@@ -3,6 +3,8 @@ import { LoadError } from './errors';
 
 export interface Table {
   file: string;
+  /** The trimmed header names, in file order. Empty for a zero-byte file. */
+  header: string[];
   /** One record per data row, keyed by trimmed header name. Missing cells are "". */
   rows: Record<string, string>[];
   /** True when there are no data rows (zero-byte file, or header only). */
@@ -15,7 +17,7 @@ export interface Table {
  */
 export function readTable(text: string, file: string, required: readonly string[]): Table {
   // Nothing to read, and no header to check columns against.
-  if (text.trim() === '') return { file, rows: [], isEmpty: true };
+  if (text.trim() === '') return { file, header: [], rows: [], isEmpty: true };
 
   let records: string[][];
   try {
@@ -47,5 +49,5 @@ export function readTable(text: string, file: string, required: readonly string[
     });
     return row;
   });
-  return { file, rows, isEmpty: rows.length === 0 };
+  return { file, header, rows, isEmpty: rows.length === 0 };
 }

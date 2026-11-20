@@ -5,6 +5,7 @@ import type { Table } from '../../src/core/csv';
 const table = (file: string, rows: Record<string, string>[]): Table => ({
   file,
   rows,
+  header: [],
   isEmpty: rows.length === 0,
 });
 

@@ -72,19 +72,29 @@ function emptyNotes(calls: number, campaigns: number, locations: number, issues:
   return notes;
 }
 
-function readTables(db: DatabaseSync): LoadedExport {
-  const campaigns: Campaign[] = selectAll(db, 'SELECT * FROM campaigns ORDER BY rowid').map((r) => ({
+/** The stored campaigns, in the order they were first stored. */
+export function readCampaigns(db: DatabaseSync): Campaign[] {
+  return selectAll(db, 'SELECT * FROM campaigns ORDER BY rowid').map((r) => ({
     id: text(r.id),
     name: text(r.name),
     channel: r.channel as Channel,
     dailyBudgetUsd: r.daily_budget_usd as number,
   }));
-  const locations: Location[] = selectAll(db, 'SELECT * FROM locations ORDER BY rowid').map((r) => ({
+}
+
+/** The stored locations, in the order they were first stored. */
+export function readLocations(db: DatabaseSync): Location[] {
+  return selectAll(db, 'SELECT * FROM locations ORDER BY rowid').map((r) => ({
     id: text(r.id),
     name: text(r.name),
     timezone: text(r.timezone),
     timezoneValid: r.timezone_valid === 1,
   }));
+}
+
+function readTables(db: DatabaseSync): LoadedExport {
+  const campaigns = readCampaigns(db);
+  const locations = readLocations(db);
   const referenceIssues: ReferenceIssue[] = selectAll(db, 'SELECT * FROM reference_issues ORDER BY id').map((r) => ({
     file: r.file as ReferenceIssue['file'],
     rowNumber: r.row_number as number,

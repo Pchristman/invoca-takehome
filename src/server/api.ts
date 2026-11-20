@@ -1,3 +1,4 @@
+import type { UploadPreview } from '../db/upload/types';
 import type { DateRange, RangeErrorCode } from '../core/ranges';
 import type { DataNotes } from '../core/types';
 import type { ViewName } from '../core/views';
@@ -63,6 +64,10 @@ export type ApiErrorCode =
   | 'unknown_view'
   | 'not_found'
   | 'forbidden'
+  | 'bad_upload'
+  | 'too_large'
+  | 'upload_unavailable'
+  | 'upload_failed'
   | 'internal';
 
 /** The body of every error response is `{ error: ApiError }`. */
@@ -73,16 +78,29 @@ export interface ApiError {
   field?: string;
 }
 
-/** no_data is 409, forbidden 403, not_found 404, internal 500; every other code is the caller's mistake: 400. */
-export function statusFor(code: ApiErrorCode): 400 | 403 | 404 | 409 | 500 {
+/** no_data and upload_unavailable are 409, forbidden 403, not_found 404, too_large 413, internal and upload_failed 500; every other code is the caller's mistake: 400. */
+export function statusFor(code: ApiErrorCode): 400 | 403 | 404 | 409 | 413 | 500 {
   if (code === 'forbidden') return 403;
-  if (code === 'no_data') return 409;
+  if (code === 'no_data' || code === 'upload_unavailable') return 409;
   if (code === 'not_found') return 404;
-  if (code === 'internal') return 500;
+  if (code === 'too_large') return 413;
+  if (code === 'internal' || code === 'upload_failed') return 500;
   return 400;
 }
 
 /** Keep text that came from a URL short in a message: over 40 characters, the first 40 plus "...". Same rule as checkDates. */
 export function shorten(text: string): string {
   return text.length > 40 ? `${text.slice(0, 40)}...` : text;
+}
+
+/** The body of POST /api/upload/preview. */
+export interface UploadPreviewResponse {
+  preview: UploadPreview;
+}
+
+/** The body of POST /api/upload/commit. `meta` is the fresh /api/meta body, so the page can show the new span without a second request. */
+export interface UploadCommitResponse {
+  preview: UploadPreview;
+  written: number;
+  meta: Meta;
 }

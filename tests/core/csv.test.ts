@@ -101,3 +101,10 @@ describe('readTable', () => {
     expect(() => readTable('a,b\n"oops,2\n', file, required)).toThrow(/calls\.csv/);
   });
 });
+
+describe('readTable header', () => {
+  test('exposes the trimmed header, in file order', () => {
+    expect(readTable('b, a\n2,1', file, required).header).toEqual(['b', 'a']);
+    expect(readTable('', file, required).header).toEqual([]);
+  });
+});
