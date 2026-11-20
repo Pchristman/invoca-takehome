@@ -52,6 +52,14 @@ describe('print stylesheet', () => {
     expect(rule?.[1]).toContain('overflow-wrap: anywhere');
   });
 
+  it('shows the final state of anything animated, whatever the animation was doing', () => {
+    const media = block(print, print.indexOf('@media print'));
+    const rule = /\[data-motion\][^{]*\{([^}]*)\}/.exec(media);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toMatch(/opacity:\s*1\s*!important/);
+    expect(rule![1]).toMatch(/transform:\s*none\s*!important/);
+  });
+
   it('hides no-print parts in @media print', () => {
     const media = block(print, print.indexOf('@media print'));
     expect(media).toMatch(/\.no-print[^{]*\{[^}]*display:\s*none/);

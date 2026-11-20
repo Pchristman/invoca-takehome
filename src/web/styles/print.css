@@ -127,4 +127,10 @@
   .print-takeaway {
     break-inside: avoid;
   }
+
+  /* Printing mid-animation shows the final state. */
+  [data-motion] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

@@ -1,3 +1,4 @@
+import { Reveal, RevealPresence } from './Reveal';
 import type { HeatLevel, HeatmapMode, HeatmapModel } from '../models/heatmapModel';
 
 const MODES: { mode: HeatmapMode; label: string }[] = [
@@ -31,6 +32,8 @@ export function Heatmap({
           </button>
         ))}
       </div>
+      <RevealPresence wait>
+      <Reveal key={mode} kind="panel" id={mode}>
       <div className="table-wrap heatmap-wrap">
         <table className="heatmap">
           <caption className="visually-hidden">
@@ -72,6 +75,8 @@ export function Heatmap({
           </tbody>
         </table>
       </div>
+      </Reveal>
+      </RevealPresence>
       <div className="heat-legend small muted">
         <span>Fewer</span>
         {LEVELS.map((level) => (

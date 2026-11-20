@@ -25,6 +25,9 @@ import { dataNotesModel } from './models/dataNotesModel';
 import { canPrint, printModel } from './models/printModel';
 import type { PrintTakeaways } from './models/printModel';
 import { takeawayModel } from './models/takeawayModel';
+import { Reveal, RevealPresence } from './components/Reveal';
+import { ViewTransition } from './components/ViewTransition';
+import { transitionKey } from './models/motionVariants';
 import { shouldCloseDataNotes } from './models/escapeKey';
 import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
@@ -102,53 +105,58 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
 
   const rangeError = view.state?.status === 'failed' ? view.state.error : null;
   const hasSpan = meta.span !== null;
+  const showAnswer = answering && hasSpan;
 
   return (
     <>
       <Header meta={meta} dev={state.dev} dataNotesOpen={dataNotesOpen} onToggleDataNotes={() => setDataNotesToggled((open) => !open)} printLink={printHref(state)} />
-      {dataNotesOpen && <DataNotes resetHref={resetHref} onClose={closeDataNotes} />}
+      <RevealPresence>
+        {dataNotesOpen && (
+          <Reveal key="data-notes" kind="panel" id="data-notes">
+            <DataNotes resetHref={resetHref} onClose={closeDataNotes} />
+          </Reveal>
+        )}
+      </RevealPresence>
       <Nav state={state} />
       <AskBox meta={meta} state={state} onNavigate={(href) => pushUrl(href)} />
-      {answering && hasSpan ? (
-        <AnswerView state={state} span={meta.span as DateRange} resetHref={resetHref} />
-      ) : (
-      <>
-      <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} onCompare={(compare) => navigate(withCompare(state, compare))} />
-      {!hasSpan ? (
-        <EmptyScreen notes={meta.notes} />
-      ) : (
-        <>
-        <Takeaway show={takeawayModel(takeaway.state, { dev: state.dev })} />
-        <RequestFrame state={shown.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
-          {(data) =>
-            state.view === 'overview' ? (
-              <OverviewView view={data as OverviewData} state={state} span={meta.span as DateRange} />
-            ) : state.view === 'campaigns' ? (
-              <CampaignsView
-                view={data as CampaignsData}
-                state={state}
-                span={meta.span as DateRange}
-                chartBusy={shown.busy}
-                onSelectCampaign={(id) => navigate(withCampaign(state, id))}
-              />
-            ) : state.view === 'locations' ? (
-              <LocationsView view={data as LocationsData} state={state} span={meta.span as DateRange} />
-            ) : (
-              <MissedCallsView
-                view={data as MissedCallsData}
-                state={state}
-                span={meta.span as DateRange}
-                offices={meta.locations}
-                busy={shown.busy}
-                onSelectOffice={(id) => navigate(withLocation(state, id))}
-              />
-            )
-          }
-        </RequestFrame>
-        </>
-      )}
-      </>
-      )}
+      {!showAnswer && <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} onCompare={(compare) => navigate(withCompare(state, compare))} />}
+      <ViewTransition id={transitionKey(state)}>
+        {showAnswer ? (
+          <AnswerView state={state} span={meta.span as DateRange} resetHref={resetHref} />
+        ) : !hasSpan ? (
+          <EmptyScreen notes={meta.notes} />
+        ) : (
+          <>
+            <Takeaway show={takeawayModel(takeaway.state, { dev: state.dev })} />
+            <RequestFrame state={shown.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
+              {(data) =>
+                state.view === 'overview' ? (
+                  <OverviewView view={data as OverviewData} state={state} span={meta.span as DateRange} />
+                ) : state.view === 'campaigns' ? (
+                  <CampaignsView
+                    view={data as CampaignsData}
+                    state={state}
+                    span={meta.span as DateRange}
+                    chartBusy={shown.busy}
+                    onSelectCampaign={(id) => navigate(withCampaign(state, id))}
+                  />
+                ) : state.view === 'locations' ? (
+                  <LocationsView view={data as LocationsData} state={state} span={meta.span as DateRange} />
+                ) : (
+                  <MissedCallsView
+                    view={data as MissedCallsData}
+                    state={state}
+                    span={meta.span as DateRange}
+                    offices={meta.locations}
+                    busy={shown.busy}
+                    onSelectOffice={(id) => navigate(withLocation(state, id))}
+                  />
+                )
+              }
+            </RequestFrame>
+          </>
+        )}
+      </ViewTransition>
     </>
   );
 }
