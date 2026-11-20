@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MODEL_ID, worstCaseNanoUsd } from '../../src/ai/pricing';
@@ -134,6 +134,77 @@ describe('interpret', () => {
     expect(model.calls).toBe(1);
     await service.interpret('A different question', CONTEXT, reject);
     expect(model.calls).toBe(2);
+  });
+
+  it('an unanswerable reply is cached as a fixed empty reply: no words from the model reach the file', async () => {
+    const model = new FakeModel(jsonReply({ ...UNANSWERABLE, offices: ['secret words from the question'], campaigns: ['more secret words'] }));
+    const service = make(model);
+    expect(await service.interpret(QUESTION, CONTEXT, accept)).toMatchObject({ ok: false, reason: 'unanswerable' });
+    const file = readFileSync(paths().cachePath, 'utf8');
+    expect(file).not.toContain('secret');
+    const entries = Object.values(JSON.parse(file) as Record<string, { text: string }>);
+    expect(entries).toHaveLength(1);
+    expect(JSON.parse(entries[0]!.text)).toEqual({
+      answerable: false, view: 'overview', offices: [], campaigns: [], includeUnattributed: false, weekdays: [], hours: [], range: null,
+    });
+    const again = await service.interpret(QUESTION, CONTEXT, accept);
+    expect(again).toMatchObject({ ok: false, reason: 'unanswerable' });
+    expect(model.calls).toBe(1);
+    expect(logLines()[1]).toMatchObject({ cached: true, checkPassed: true });
+  });
+
+  describe('a validator that throws', () => {
+    const boom = () => { throw new Error('validator blew up with Secret Name'); };
+
+    it('is invalid_filter, logged with the paid usage, counted in spend and remembered', async () => {
+      const model = new FakeModel(jsonReply(REPLY));
+      const service = make(model);
+      expect(await service.interpret(QUESTION, CONTEXT, boom)).toMatchObject({ ok: false, reason: 'invalid_filter' });
+      const lines = logLines();
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatchObject({
+        purpose: 'question', inputTokens: 1500, outputTokens: 300, costUsd: 0.0003, cached: false, checkPassed: false, failure: 'invalid_filter',
+      });
+      expect(readFileSync(paths().logPath, 'utf8')).not.toContain('Secret Name');
+      expect(service.status().spendUsd).toBe(0.0003);
+      expect(service.status().checkerFailures).toBe(1);
+      expect(await service.interpret(QUESTION, CONTEXT, accept)).toMatchObject({ ok: false, reason: 'invalid_filter' });
+      expect(model.calls).toBe(1);
+    });
+
+    it('a throwing validator on a cached reply is dropped and remembered as invalid_filter', async () => {
+      const service = make(new FakeModel(jsonReply(REPLY)));
+      await service.interpret(QUESTION, CONTEXT, accept);
+      expect(await service.interpret(QUESTION, CONTEXT, boom)).toMatchObject({ ok: false, reason: 'invalid_filter' });
+      expect(logLines()[1]).toMatchObject({ cached: false, costUsd: 0, checkPassed: false, failure: 'invalid_filter' });
+    });
+  });
+
+  describe('a corrupt cached entry', () => {
+    function corrupt(text: string) {
+      const file = JSON.parse(readFileSync(paths().cachePath, 'utf8')) as Record<string, { text: string }>;
+      for (const entry of Object.values(file)) entry.text = text;
+      writeFileSync(paths().cachePath, JSON.stringify(file));
+    }
+
+    it('that no longer parses is malformed, deleted, remembered and logged as a failure', async () => {
+      await make(new FakeModel(jsonReply(REPLY))).interpret(QUESTION, CONTEXT, accept);
+      corrupt('this is not json');
+      const model = new FakeModel(jsonReply(REPLY));
+      const service = make(model);
+      expect(await service.interpret(QUESTION, CONTEXT, accept)).toMatchObject({ ok: false, reason: 'malformed' });
+      expect(logLines().at(-1)).toMatchObject({ cached: false, costUsd: 0, checkPassed: false, failure: 'malformed' });
+      expect(JSON.parse(readFileSync(paths().cachePath, 'utf8'))).toEqual({});
+      expect(await service.interpret(QUESTION, CONTEXT, accept)).toMatchObject({ ok: false, reason: 'malformed' });
+      expect(model.calls).toBe(0);
+    });
+
+    it('that parses but no longer validates stays invalid_filter', async () => {
+      await make(new FakeModel(jsonReply(REPLY))).interpret(QUESTION, CONTEXT, accept);
+      const service = make(new FakeModel(jsonReply(REPLY)));
+      expect(await service.interpret(QUESTION, CONTEXT, reject)).toMatchObject({ ok: false, reason: 'invalid_filter' });
+      expect(logLines().at(-1)).toMatchObject({ failure: 'invalid_filter' });
+    });
   });
 
   describe('failures', () => {

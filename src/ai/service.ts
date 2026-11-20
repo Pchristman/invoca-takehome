@@ -37,6 +37,11 @@ export interface ServiceOptions {
   now?: () => Date;
 }
 
+/** What an unanswerable question is cached as: fixed, so nothing from the model's reply is ever saved. */
+const UNANSWERABLE_REPLY: FilterReply = {
+  answerable: false, view: 'overview', offices: [], campaigns: [], includeUnattributed: false, weekdays: [], hours: [], range: null,
+};
+
 const DEFAULT_TIMEOUT_MS = 8000;
 const TYPICAL_PROMPT_CHARS = 4000; // for status(): "is there room for one more call?"
 
@@ -196,15 +201,28 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
       return templateResult(template, 'refusal');
     }
 
+    // The call is paid for: whatever happens below, its line must be written. A throw counts as a failed check.
     const { paid } = outcome;
-    const text = parseReply(outcome.text);
-    if (text === null) {
+    let text: string | null;
+    let check: ReturnType<typeof checkTakeaway> | null = null;
+    let filled = '';
+    try {
+      text = parseReply(outcome.text);
+      if (text !== null) {
+        check = checkTakeaway(text, sheet, known);
+        if (check.ok) filled = fillPlaceholders(text, sheet.facts);
+      }
+    } catch {
+      record(logLine(sheet.view, { ...paid, checkPassed: false, failure: 'check_failed' }));
+      rememberedFailures.set(key, 'check_failed');
+      return templateResult(template, 'check_failed');
+    }
+
+    if (text === null || check === null) {
       record(logLine(sheet.view, { ...paid, checkPassed: false, failure: 'malformed' }));
       rememberedFailures.set(key, 'malformed');
       return templateResult(template, 'malformed');
     }
-
-    const check = checkTakeaway(text, sheet, known);
     if (!check.ok) {
       record(logLine(sheet.view, { ...paid, checkPassed: false, failure: check.reason }));
       rememberedFailures.set(key, 'check_failed');
@@ -213,7 +231,7 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
 
     record(logLine(sheet.view, { ...paid, checkPassed: true }));
     if (!cache.set(key, text)) warnCacheNotSaved();
-    return { text: fillPlaceholders(text, sheet.facts), source: 'ai', reason: null };
+    return { text: filled, source: 'ai', reason: null };
   }
 
   /** The model call for a question and the checks on its reply. The caller has already reserved the budget. */
@@ -229,8 +247,17 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
     if (outcome.kind === 'error') return { ok: false, reason: outcome.reason, detail: null };
     if (outcome.kind === 'refusal') return remember('refusal', null);
 
+    // The call is paid for: whatever happens below, its line must be written. A throw counts as an invalid filter.
     const { paid } = outcome;
-    const reply = parseFilterReply(outcome.text);
+    let reply: FilterReply | null;
+    let checked: Validation<T> | null = null;
+    try {
+      reply = parseFilterReply(outcome.text);
+      if (reply !== null && reply.answerable) checked = validate(reply);
+    } catch {
+      record(logLine('question', { ...paid, checkPassed: false, failure: 'invalid_filter' }));
+      return remember('invalid_filter', null);
+    }
     if (reply === null) {
       record(logLine('question', { ...paid, checkPassed: false, failure: 'malformed' }));
       return remember('malformed', null);
@@ -238,15 +265,15 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
 
     if (!reply.answerable) {
       record(logLine('question', { ...paid, checkPassed: true }));
-      if (!cache.set(key, JSON.stringify(reply))) warnCacheNotSaved();
+      // Fixed text, never the model's: its lists can hold words from the question.
+      if (!cache.set(key, JSON.stringify(UNANSWERABLE_REPLY))) warnCacheNotSaved();
       return { ok: false, reason: 'unanswerable', detail: null };
     }
 
-    const checked = validate(reply);
-    if (!checked.ok) {
+    if (checked === null || !checked.ok) {
       // The failure code is fixed: the detail can hold names from the reply and never goes in the log.
       record(logLine('question', { ...paid, checkPassed: false, failure: 'invalid_filter' }));
-      return remember('invalid_filter', checked.detail);
+      return remember('invalid_filter', checked === null ? null : checked.detail);
     }
 
     record(logLine('question', { ...paid, checkPassed: true }));
@@ -301,20 +328,28 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
     // A cached reply is parsed and validated on every hit: the file can be edited and the data can change.
     const cachedText = cache.get(key);
     if (cachedText !== undefined) {
-      const reply = parseFilterReply(cachedText);
-      if (reply !== null && !reply.answerable) {
-        record(logLine('question', { cached: true, checkPassed: true }));
-        return { ok: false, reason: 'unanswerable', detail: null };
+      let reply: FilterReply | null = null;
+      let checked: Validation<T> | null = null;
+      try {
+        reply = parseFilterReply(cachedText);
+        if (reply !== null && !reply.answerable) {
+          record(logLine('question', { cached: true, checkPassed: true }));
+          return { ok: false, reason: 'unanswerable', detail: null };
+        }
+        if (reply !== null) checked = validate(reply);
+      } catch {
+        checked = null; // a throwing parse or validator is an invalid filter
       }
-      const checked = reply === null ? null : validate(reply);
       if (reply !== null && checked !== null && checked.ok) {
         record(logLine('question', { cached: true, checkPassed: true }));
         return { ok: true, reply, value: checked.value, cached: true };
       }
       if (!cache.delete(key)) warnCacheNotSaved();
-      const failure = { reason: 'invalid_filter' as const, detail: checked !== null && !checked.ok ? checked.detail : null };
+      // Text that no longer parses is malformed; a reply that parses but is no longer valid is invalid_filter.
+      const reason = reply === null ? 'malformed' as const : 'invalid_filter' as const;
+      const failure = { reason, detail: checked !== null && !checked.ok ? checked.detail : null };
       rememberedQuestionFailures.set(key, failure);
-      record(logLine('question', { checkPassed: false, failure: 'invalid_filter' }));
+      record(logLine('question', { checkPassed: false, failure: reason }));
       return { ok: false, ...failure };
     }
 

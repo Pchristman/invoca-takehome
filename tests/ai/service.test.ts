@@ -467,6 +467,38 @@ describe('takeaway service', () => {
     });
   });
 
+  it('a check or fill that throws after the paid call: template, check_failed, paid line logged, remembered', async () => {
+    // The facts read fine until the model has answered, then every read throws.
+    let armed = false;
+    const base = sheet();
+    const exploding: FactSheet = {
+      ...base,
+      facts: new Proxy(base.facts, {
+        get(target, prop, receiver) {
+          if (armed) throw new Error('facts blew up');
+          return Reflect.get(target, prop, receiver) as unknown;
+        },
+      }),
+    };
+    const inner = new FakeModel(textReply(GOOD));
+    const model = Object.assign(Object.create(inner) as FakeModel, {
+      generate: async (request: Parameters<FakeModel['generate']>[0]) => {
+        const reply = await inner.generate(request);
+        armed = true;
+        return reply;
+      },
+    });
+    const service = make(model);
+    expect(await service.takeaway(exploding, TEMPLATE)).toEqual({ text: TEMPLATE, source: 'template', reason: 'check_failed' });
+    const lines = logLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ inputTokens: 1500, outputTokens: 300, costUsd: 0.0003, checkPassed: false, failure: 'check_failed' });
+    expect(service.status().spendUsd).toBe(0.0003);
+    armed = false;
+    expect(await service.takeaway(exploding, TEMPLATE)).toMatchObject({ reason: 'check_failed' });
+    expect(inner.calls).toBe(1);
+  });
+
   it('offService answers with the template and an off status', async () => {
     const service = offService();
     expect(await service.takeaway(sheet(), TEMPLATE)).toEqual({ text: TEMPLATE, source: 'template', reason: 'ai_off' });
