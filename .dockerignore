@@ -1,12 +1,15 @@
 node_modules
 .env
 .env.*
+**/.env
+**/.env.*
 .git
 dist
 .cache
 logs
 data
 *.csv
+**/*.csv
 tests
 docs
 .claude
