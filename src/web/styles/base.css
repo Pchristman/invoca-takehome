@@ -134,6 +134,10 @@ pre {
   color: var(--color-chrome-muted);
 }
 
+.app-header a {
+  color: var(--color-chrome-text);
+}
+
 .app-header .button {
   background: transparent;
   border-color: var(--color-chrome-muted);

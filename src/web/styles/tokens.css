@@ -82,6 +82,24 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* Print: a compact type and space scale so the summary fits one page. No colour is overridden. */
+@media print {
+  :root {
+    --text-xs: 7.5pt;
+    --text-sm: 8.5pt;
+    --text-md: 10pt;
+    --text-lg: 12pt;
+    --text-xl: 16pt;
+    --text-2xl: 15pt;
+    --space-1: 1pt;
+    --space-2: 3pt;
+    --space-3: 5pt;
+    --space-4: 8pt;
+    --space-5: 10pt;
+    --space-6: 12pt;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-fast: 0ms;

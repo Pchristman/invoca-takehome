@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DataNotesResponse, Meta, TakeawayResponse } from '../server/api';
+import type { ViewName } from '../core/views/facts';
 import type { DateRange } from '../core/ranges';
 import type {
   CampaignsView as CampaignsData,
@@ -16,15 +17,18 @@ import { DATA_NOTES_BUTTON_ID, Header } from './components/Header';
 import { Nav } from './components/Nav';
 import { RangeControl } from './components/RangeControl';
 import { RequestFrame } from './components/RequestFrame';
+import { PrintControls, PrintSummary } from './components/PrintSummary';
 import { Takeaway } from './components/Takeaway';
 import { dataNotesModel } from './models/dataNotesModel';
+import { canPrint, printModel } from './models/printModel';
+import type { PrintTakeaways } from './models/printModel';
 import { takeawayModel } from './models/takeawayModel';
 import { shouldCloseDataNotes } from './models/escapeKey';
 import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
 import { useApi } from './useApi';
 import { useUrlState } from './useUrlState';
-import { apiParams, defaultsHref, takeawayParams, withCampaign, withCompare, withLocation, withRange } from './urlState';
+import { apiParams, appHref, defaultsHref, printHref, printParams, takeawayParams, withCampaign, withCompare, withLocation, withRange } from './urlState';
 import type { UrlState } from './urlState';
 
 const NO_PARAMS = new URLSearchParams();
@@ -38,7 +42,8 @@ export function App() {
   return (
     <div className="page">
       {screen.screen === 'empty' && <EmptyScreen notes={screen.notes} />}
-      {screen.screen === 'ready' && <ReadyShell state={state} meta={screen.meta} resetHref={resetHref} />}
+      {screen.screen === 'ready' && !state.print && <ReadyShell state={state} meta={screen.meta} resetHref={resetHref} />}
+      {screen.screen === 'ready' && state.print && <PrintShell state={state} meta={screen.meta} resetHref={resetHref} />}
       {(screen.screen === 'loading' || screen.screen === 'error') && (
         // Prints the loading message or the error; it never has data to show on these two screens.
         <RequestFrame state={meta.state} loadingLabel="Loading the data..." resetHref={resetHref} onRetry={meta.retry}>
@@ -97,7 +102,7 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
 
   return (
     <>
-      <Header meta={meta} dev={state.dev} dataNotesOpen={dataNotesOpen} onToggleDataNotes={() => setDataNotesToggled((open) => !open)} />
+      <Header meta={meta} dev={state.dev} dataNotesOpen={dataNotesOpen} onToggleDataNotes={() => setDataNotesToggled((open) => !open)} printLink={printHref(state)} />
       {dataNotesOpen && <DataNotes resetHref={resetHref} onClose={closeDataNotes} />}
       <Nav state={state} />
       <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} onCompare={(compare) => navigate(withCompare(state, compare))} />
@@ -133,6 +138,35 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
           }
         </RequestFrame>
         </>
+      )}
+    </>
+  );
+}
+
+
+/**
+ * The one-page summary (?print): one overview and four takeaways, company-wide, never dev.
+ * It has no header, nav or range control. The takeaway requests use each view's own name, never state.view.
+ */
+function PrintShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; resetHref: string }) {
+  const hasSpan = meta.span !== null; // no data span, no requests
+  const overview = useApi<OverviewData>(hasSpan ? '/api/overview' : null, printParams(state, 'overview'));
+  const takeaways: PrintTakeaways = {
+    overview: useApi<TakeawayResponse>(hasSpan ? '/api/takeaway/overview' : null, printParams(state, 'overview')).state,
+    campaigns: useApi<TakeawayResponse>(hasSpan ? '/api/takeaway/campaigns' : null, printParams(state, 'campaigns')).state,
+    locations: useApi<TakeawayResponse>(hasSpan ? '/api/takeaway/locations' : null, printParams(state, 'locations')).state,
+    'missed-calls': useApi<TakeawayResponse>(hasSpan ? '/api/takeaway/missed-calls' : null, printParams(state, 'missed-calls')).state,
+  };
+  const span = meta.span;
+  return (
+    <>
+      <PrintControls canPrint={hasSpan && canPrint(overview.state, takeaways)} backHref={appHref(state)} />
+      {span === null ? (
+        <EmptyScreen notes={meta.notes} />
+      ) : (
+        <RequestFrame state={overview.state} loadingLabel="Loading the summary..." resetHref={resetHref} onRetry={overview.retry}>
+          {(data) => <PrintSummary model={printModel({ view: data, meta, span, takeaways })} />}
+        </RequestFrame>
       )}
     </>
   );

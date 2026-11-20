@@ -44,7 +44,7 @@ import { missedCallsModel } from '../../src/web/models/missedCallsModel';
 import { weeklyChartModel } from '../../src/web/models/weeklyChart';
 import { estimateFormulas } from '../../src/web/models/estimates';
 import type { RequestState } from '../../src/web/requestState';
-import { actionHref, csvHref, parseUrlState } from '../../src/web/urlState';
+import { actionHref, csvHref, parseUrlState, printHref } from '../../src/web/urlState';
 import {
   campaignsFor,
   idleOfficeStore,
@@ -81,7 +81,9 @@ const plainState = parseUrlState('');
 
 describe('Header', () => {
   const render = (m: Meta, dev: boolean) =>
-    renderToStaticMarkup(<Header meta={m} dev={dev} dataNotesOpen={false} onToggleDataNotes={noop} />);
+    renderToStaticMarkup(
+      <Header meta={m} dev={dev} dataNotesOpen={false} onToggleDataNotes={noop} printLink={printHref(parseUrlState(dev ? '?dev' : ''))} />,
+    );
   // Hand-edited copy of real meta: a span ending 2026-10-29.
   const october: Meta = { ...meta, span: { start: '2026-10-01', end: '2026-10-29' } };
 
@@ -92,6 +94,17 @@ describe('Header', () => {
     const on = render(meta, true);
     expect(on).toContain('<button');
     expect(on).toContain('Data notes');
+  });
+
+  it('has a Print summary link that opens a new tab, with or without dev, never carrying dev', () => {
+    for (const dev of [false, true]) {
+      const html = render(meta, dev);
+      const href = printHref(parseUrlState(dev ? '?dev' : ''));
+      expect(html).toContain(`href="${href}"`);
+      expect(html).toMatch(/<a [^>]*target="_blank"[^>]*>Print summary<\/a>/);
+      expect(html).toMatch(/rel="[^"]*noopener/);
+      expect(href).not.toContain('dev');
+    }
   });
 
   it('prints the as-of date from the end of the span', () => {
