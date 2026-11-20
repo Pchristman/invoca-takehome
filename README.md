@@ -94,3 +94,10 @@ Each view shows one short takeaway line under the date control, marked `AI` or `
 - **Cache:** results are kept in `.cache/ai-takeaways.json`, so a repeat costs nothing.
 - **Call log:** one line per call, cache hits included at zero cost, in `logs/ai-calls.jsonl` (time, model, view, tokens, cost). Both folders are gitignored.
 - **Try it by hand:** `npm run ai:try -- all` makes real calls (about $0.0005 a view); run it twice to see the cache hit.
+
+### Known limits of AI takeaways
+
+- **One process at a time.** Each running copy of the app (and `npm run ai:try`) reads the call log once at start and counts only its own calls after that, so two running at once each get the full spend limit. The log and cache paths are relative to the folder you start from (like `DATA_DIR`): start from the project folder, or spend will read as $0.
+- **The checker cannot see meaning.** It stops invented numbers and names, but not valid placeholders in the wrong place ("{worst.name} is the strongest"), and the model sees names cut to 80 characters, so it could write that cut-off form.
+- **Failed calls log $0.** A timeout or API error returns no token count, so it is logged at $0 and the real bill may be a little higher; the $5 default limit sits far below the $250 cap.
+- **Names are data, not trusted.** Campaign and office names reach the prompt, shortened and inside a JSON block; the checker is the hard limit, not the prompt.
