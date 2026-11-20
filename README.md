@@ -12,6 +12,7 @@ A small local web product that helps a marketing manager track inbound call perf
 | `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
 | `npm run build` | available; builds the web app into `dist/` |
 | `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (only this command does) (`PORT`, default 3000; `DATA_DIR`) |
+| `npm run ai:try -- <view|all>` | available; makes REAL API calls (needs a key); see AI takeaways below |
 | `npm run dev` | available; the server (restarting on change) and Vite with hot reload together, `/api` proxied to the server; the page is at the address Vite prints on start |
 
 Copy `.env.example` to `.env` to configure. Never commit `.env`.
@@ -83,3 +84,13 @@ The URL holds the screen, so a link, a refresh or the back button reproduces it:
 | `dev` | add `?dev` to the URL to open the Data notes panel |
 
 To open the extended export: `DATA_DIR=data/extended npm start`. There, Locations flags four offices, two of them "better" than the rest, because each office is tested against all others pooled and the two planted weak offices pull that pool down.
+
+## AI takeaways
+
+Each view shows one short takeaway line under the date control, marked `AI` or `template`. The template sentence is built in code from the view's computed facts. With `ANTHROPIC_API_KEY` set, Claude Haiku 5.5 writes the sentence instead, using `{placeholders}` for every number and name; code checks the text (no digits, no invented names) and fills in the values. If the check fails, the call fails, the budget is reached or there is no key, the template sentence is shown, and nothing else about the app changes. The views never wait on it.
+
+- **Off by default:** leave `ANTHROPIC_API_KEY` empty in `.env`. Add `?dev` to the URL to see why a takeaway is a template.
+- **Spend guard:** `AI_SPEND_LIMIT_USD` (default 5). Past it the app stops calling the model and shows template text.
+- **Cache:** results are kept in `.cache/ai-takeaways.json`, so a repeat costs nothing.
+- **Call log:** one line per call, cache hits included at zero cost, in `logs/ai-calls.jsonl` (time, model, view, tokens, cost). Both folders are gitignored.
+- **Try it by hand:** `npm run ai:try -- all` makes real calls (about $0.0005 a view); run it twice to see the cache hit.

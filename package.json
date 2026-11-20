@@ -9,7 +9,8 @@
     "build": "vite build",
     "start": "vite build && tsx src/server/cli.ts",
     "dev": "node scripts/dev.ts",
-    "generate:extended": "node scripts/generate-extended.ts"
+    "generate:extended": "node scripts/generate-extended.ts",
+    "ai:try": "tsx scripts/ai-try.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
