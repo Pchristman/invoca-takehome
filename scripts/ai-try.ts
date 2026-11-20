@@ -1,11 +1,15 @@
-// Manual check of the AI takeaways. Makes REAL API calls that cost real money (about $0.0005 a view).
-// Run by hand: npm run ai:try -- all   (a second run is the cache-hit check). Never run by a test.
+// Manual check of the AI takeaways and the question box. Makes REAL API calls that cost real money
+// (about $0.0005 a takeaway, about $0.0002 a question).
+// Run by hand: npm run ai:try -- all   or   npm run ai:try -- --question "..."
+// (a second run is the cache-hit check). Never run by a test.
 import { createAiFromEnv } from '../src/ai/fromEnv';
 import { cleanExport } from '../src/core/clean';
+import { dataSpan } from '../src/core/ranges';
 import { loadDotEnv } from '../src/node/env';
 import { readExportFromDir } from '../src/node/readDataDir';
 import { createApp } from '../src/server/app';
-import { formatTryResult, parseTryArgs } from './tryArgs';
+import { questionContext, replyToQuery } from '../src/server/questionQuery';
+import { formatQuestionResult, formatTryResult, parseTryArgs } from './tryArgs';
 
 async function main(): Promise<void> {
   loadDotEnv(); // the shell still wins
@@ -24,6 +28,25 @@ async function main(): Promise<void> {
   }
   const store = cleanExport(readExportFromDir());
   const ai = createAiFromEnv(store, process.env);
+  const span = dataSpan(store.calls);
+  if (args.questions.length > 0) {
+    if (span === null) {
+      console.error('The export has no calls: nothing was asked.');
+      process.exitCode = 1;
+      return;
+    }
+    // The same call the server makes for /api/question: cache, spend guard and call log all apply.
+    for (const [i, question] of args.questions.entries()) {
+      const before = ai.status().spendUsd;
+      const result = await ai.interpret(question, questionContext(store, span), (reply) => replyToQuery(store, span, reply));
+      const cost = ai.status().spendUsd - before;
+      const outcome = result.ok ? { ok: true as const, cached: result.cached, value: result.value } : result;
+      console.log(formatQuestionResult(i + 1, outcome, cost));
+      if (!result.ok && result.reason !== 'unanswerable') process.exitCode = 1;
+    }
+    console.log(`  spend so far: ${ai.status().spendUsd.toFixed(6)}`);
+    return;
+  }
   const app = createApp(store, { ai });
   for (const view of args.views) {
     const response = await app.request(`/api/takeaway/${view}?range=${encodeURIComponent(args.range)}`);

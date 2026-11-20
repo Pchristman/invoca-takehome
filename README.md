@@ -15,6 +15,7 @@ A small local web product that helps a marketing manager track inbound call perf
 | `docker compose up --build` | available; builds one image and serves the app at `http://localhost:3000`; see Docker below |
 | `npm run test:docker` | available; real Docker checks (needs Docker running; builds the image, starts containers, makes no real API call) |
 | `npm run ai:try -- <view|all>` | available; makes REAL API calls (needs a key); see AI takeaways below |
+| `npm run ai:try -- --question "..."` | available; one REAL call per question (needs a key); see Ask a question below |
 | `npm run dev` | available; the server (restarting on change) and Vite with hot reload together, `/api` proxied to the server; the page is at the address Vite prints on start |
 
 Copy `.env.example` to `.env` to configure. Never commit `.env`.
@@ -73,6 +74,8 @@ The default stays the shipped export. To use the extended one, set `DATA_DIR=dat
 | `/api/missed-calls` | range, compare, `location` | missed-calls view |
 | `/api/missed-calls/callbacks.csv` | range, compare, `location` | CSV file |
 | `/api/takeaway/:view` | as that view | template takeaway text |
+| `/api/answer` | range, `view`, `f_*` filter | answer panel: totals and a table for the filter (code only) |
+| `/api/question` | `q` (at most 300 characters) | a validated filter as a query string (the only AI step; needs a key) |
 | `/api/data-notes` | none | data notes (always available) |
 
 - **Range:** `range=last7|last28|all`, or `start=YYYY-MM-DD&end=YYYY-MM-DD`. Neither given means `last28`.
@@ -101,8 +104,32 @@ The URL holds the screen, so a link, a refresh or the back button reproduces it:
 | `location` | the office Missed calls is filtered to |
 | `dev` | add `?dev` to the URL to open the Data notes panel |
 | `print` | add `?print` for the one-page print summary |
+| `answer` | bare parameter: show the answer panel for the filter in the `f_` parameters |
+| `f_office`, `f_campaign` | repeatable; office or campaign ids the answer is limited to |
+| `f_unattributed` | `1` adds calls with no campaign to the campaign filter |
+| `f_weekday` | repeatable, 0 (Monday) to 6 (Sunday), in the office's local time |
+| `f_hour` | repeatable, 0 to 23, in the office's local time |
 
 To open the extended export: `DATA_DIR=data/extended npm start`. There, Locations flags four offices, two of them "better" than the rest, because each office is tested against all others pooled and the two planted weak offices pull that pool down.
+
+## Ask a question
+
+A box under the nav takes a question in plain English ("Which office misses the most calls on Fridays?"). The model turns it into a fixed filter made of office and campaign names, weekdays, hours and a date range. It never sees calls and never writes a number or a sentence you read. Code checks every value against the loaded data (the same check the URL uses), applies the filter to the calls, and shows the answer page: one line saying how the question was read, one sentence, and a table. Every figure on it comes from code.
+
+- **Needs a key.** Without `ANTHROPIC_API_KEY` the box is hidden and says why; the answer page and the `f_` links still work, because they never call the model.
+- **In the URL.** The checked filter goes in the URL (`?answer&view=missed-calls&f_weekday=4&range=last28`), so a refresh or a shared link re-runs only code and costs nothing. The question text is not stored.
+- **Views:** `view` picks the grouping: `campaigns` by campaign, `locations` and `missed-calls` by office (`missed-calls` sorts by unanswered calls), `overview` totals only. The page links to the real view with the range kept.
+- **Glossary** (fixed in the prompt): weekend = Saturday and Sunday; weekdays = Monday to Friday; morning = 6 to 11; afternoon = 12 to 16; evening = 17 to 20; overnight = 21 to 23 and 0 to 5; business hours = 9 to 16; "9 to 5" and "between 9 and noon" run to the hour before the end. Any other vague phrase ("busy times", "late", "recently") gets "That isn't a question about these calls." Hours are the office's local hours; "Friday" means Friday at the call's office.
+- **Limits:** a question is at most 300 characters; each filter list holds at most 50 values. A name that matches no office or campaign, or matches two, rejects the whole question and the message names it.
+- **Same cache, guard and log as takeaways.** A repeat question costs nothing; the spend limit is shared; each call is one line in `logs/ai-calls.jsonl` with `purpose: question` (the question and the reply are never logged).
+- **Try it by hand:** `DATA_DIR=data/extended npm run ai:try -- --question "Which office misses the most calls on Fridays?"` makes one real call (about $0.0002) and prints the validated query and the cost; the question is not echoed.
+
+### Known limits of the question box
+
+- **The model's reading can be wrong.** The page always prints how the question was read, so a wrong reading is visible; accuracy on real questions is judged by hand with `ai:try`, not by a test.
+- **One slice, no comparison.** An answer is about one filter over one range; it shows no change against a previous period.
+- **A name hidden in a question can only become a filter.** Anything the model returns outside the fixed shape is refused, and every value is checked before use.
+- **Cost:** one cost line per question, about 1.2K input tokens (the name lists).
 
 ## Compare any two ranges
 

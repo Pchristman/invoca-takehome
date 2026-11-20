@@ -10,7 +10,11 @@ import type { RangeSpec } from '../../src/core/ranges';
 import { callsPerWeek } from '../../src/core/weeks';
 import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../../src/core/views';
 import { readExportFromDir } from '../../src/node/readDataDir';
+import { buildAnswer } from '../../src/core/answer';
+import type { AnswerFilter } from '../../src/core/answer';
 import { createApp } from '../../src/server/app';
+import { parseAnswerQuery } from '../../src/server/params';
+import { replyToQuery } from '../../src/server/questionQuery';
 import { formatLongDate } from '../../src/web/format';
 import { printModel } from '../../src/web/models/printModel';
 import type { PrintTakeaways } from '../../src/web/models/printModel';
@@ -215,6 +219,62 @@ describe('the print summary on a different export', () => {
   });
 });
 
+describe('the answer on a different export', () => {
+  const days = ['2031-05-05', '2031-05-07', '2031-05-12', '2031-05-18'];
+  const store = cleanExport(
+    loadFixture(
+      [
+        ...days.flatMap((day, i) => [
+          row({ call_id: `p${i}`, caller_number_hash: `hp${i}`, started_at: `${day}T12:00:00Z`, outcome: 'booked', revenue_usd: '100' }),
+          row({ call_id: `q${i}`, caller_number_hash: `hq${i}`, started_at: `${day}T13:00:00Z`, location_id: 'zz_lon', answered: 'false', outcome: 'missed', revenue_usd: '' }),
+        ]),
+        row({ call_id: 'u1', caller_number_hash: 'hu1', campaign_id: '', marketing_channel: 'direct', location_id: 'zz_lon', started_at: '2031-05-18T09:00:00Z', answered: 'false', outcome: 'missed', revenue_usd: '' }),
+      ],
+      CAMPAIGNS,
+      LOCATIONS,
+    ),
+  );
+  const span = dataSpan(store.calls)!;
+  const resolved = resolveRange(span, { kind: 'preset', preset: 'all' });
+  if (!resolved.ok) throw new Error(resolved.error.message);
+  const all = resolved.range;
+  const open: AnswerFilter = { view: 'missed-calls', officeIds: [], campaignIds: [], includeUnattributed: false, weekdays: [], hours: [] };
+
+  test('builds with its own names, zones and dates', () => {
+    // Monday 2031-05-05 13:00 UTC is 14:00 in London (UTC+1); the 12th is a Monday too, so two calls match.
+    const view = buildAnswer(store, all, { ...open, officeIds: ['zz_lon'], weekdays: [0], hours: [14] });
+    expect(view.rows.map((r) => [r.name, r.calls, r.unanswered])).toEqual([['London Desk', 2, 2]]);
+    expect(view.sentence).toBe('London Desk had the most unanswered calls: 2 of 2.');
+    expectAllFinite(view);
+    const campaigns = buildAnswer(store, all, { ...open, view: 'campaigns', includeUnattributed: true });
+    expect(campaigns.rows.map((r) => r.name)).toEqual(['Unattributed']);
+  });
+
+  test('the URL validator parses its ids and rejects the shipped ones', () => {
+    const parsed = parseAnswerQuery(store, span, { view: ['missed-calls'], f_office: ['zz_lon'], f_weekday: ['0'], range: ['all'] });
+    expect(parsed.ok && parsed.value.filter).toMatchObject({ officeIds: ['zz_lon'], weekdays: [0] });
+    expect(parseAnswerQuery(store, span, { f_office: ['loc_06'] }).ok).toBe(false);
+  });
+
+  test('a model reply names this export, not the shipped one', () => {
+    const reply = {
+      answerable: true,
+      view: 'missed-calls' as const,
+      offices: ['london desk'],
+      campaigns: ['Quokka Promo'],
+      includeUnattributed: false,
+      weekdays: ['monday' as const],
+      hours: [14],
+      range: { preset: 'all' as const },
+    };
+    expect(replyToQuery(store, span, reply)).toEqual({
+      ok: true,
+      value: 'view=missed-calls&f_office=zz_lon&f_campaign=zz_c1&f_weekday=0&f_hour=14&range=all',
+    });
+    expect(replyToQuery(store, span, { ...reply, offices: ['Canyon Office'] }).ok).toBe(false);
+  });
+});
+
 describe('call-change alerts on a different export', () => {
   // zz_c1 gets 25 calls in the seven days before the last seven and 60 in the last seven; one early call makes the data span reach back far enough.
   const many = (prefix: string, day: string, n: number) =>
@@ -312,6 +372,17 @@ describe('nothing in src/ is tied to the shipped dataset', () => {
 
   test.each([...new Set(needles)])('no source file contains "%s"', (needle) => {
     expect(sourceFiles.filter((f) => f.text.includes(needle)).map((f) => f.file)).toEqual([]);
+  });
+
+  test('the answer code is part of the scan and holds no dataset name', () => {
+    const files = sourceFiles.map((f) => f.file.replace(/\\/g, '/'));
+    expect(files.filter((f) => f.startsWith('core/answer/')).length).toBe(3);
+    expect(files).toContain('server/questionQuery.ts');
+    const answerText = sourceFiles
+      .filter((f) => /core[\\/]answer[\\/]|questionQuery\.ts$/.test(f.file))
+      .map((f) => f.text)
+      .join('\n');
+    expect([...new Set(needles)].filter((needle) => answerText.includes(needle))).toEqual([]);
   });
 
   test('no source file contains a literal year-month such as 2026-10', () => {
