@@ -1086,3 +1086,27 @@ describe('OverviewView with an alert entry', () => {
     expect(html).toContain('the last day in the data, may be incomplete.');
   });
 });
+
+describe('a later equal-length second range', () => {
+  // Sep 1-3 against Sep 12-14: same length, but the second range comes after the selected one.
+  const SEARCH = 'start=2026-09-01&end=2026-09-03&compareStart=2026-09-12&compareEnd=2026-09-14';
+  const LINE = 'Comparing Sep 1 – Sep 3, 2026 with Sep 12 – Sep 14, 2026.';
+
+  it('Overview names both ranges, with no per-day caveat', () => {
+    const html = renderToStaticMarkup(<OverviewView view={overviewFor(SEARCH)} state={plainState} span={span} />);
+    expect(count(html, LINE)).toBe(1);
+    expect(html).not.toContain('compare per day.');
+  });
+
+  it('Campaigns names both ranges and shows no jump or drop badges, with the reason', () => {
+    const view = campaignsFor(SEARCH);
+    const html = renderToStaticMarkup(
+      <CampaignsScreen view={view} state={parseUrlState('?view=campaigns')} span={span} onSelectCampaign={noop} />,
+    );
+    expect(count(html, LINE)).toBe(1);
+    expect(html).not.toContain('badge-jump');
+    expect(html).not.toContain('badge-drop');
+    expect(view.alerts.reason).toBe('Call-change alerts need the comparison period to come before the selected range.');
+    expect(html).toContain(esc(view.alerts.reason!));
+  });
+});

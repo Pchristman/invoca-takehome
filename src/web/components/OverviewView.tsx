@@ -14,7 +14,7 @@ const TONE_WORD: Record<Tone, string> = { up: 'up', down: 'down', flat: 'no chan
 
 export function OverviewView({ view, state, span }: { view: OverviewData; state: UrlState; span: DateRange }) {
   const model = overviewModel(view);
-  const caveats = caveatsFor(view.notes, span, { comparing: true, range: view.range });
+  const caveats = caveatsFor(view.notes, span, { comparing: true, range: view.range, view: 'overview' });
   const line = comparisonLine(view.notes, view.range);
 
   return (

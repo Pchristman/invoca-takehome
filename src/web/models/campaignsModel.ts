@@ -64,7 +64,7 @@ const COLUMNS: CampaignsModel['columns'] = [
   { key: 'name', label: 'Campaign', numeric: false, estimate: false },
   { key: 'channel', label: 'Channel', numeric: false, estimate: false },
   { key: 'calls', label: 'Calls', numeric: true, estimate: false },
-  { key: 'callsChange', label: 'Calls vs previous', numeric: true, estimate: false },
+  { key: 'callsChange', label: 'Calls vs comparison', numeric: true, estimate: false },
   { key: 'bookings', label: 'Bookings', numeric: true, estimate: false },
   { key: 'bookingRate', label: 'Booking rate', numeric: true, estimate: false },
   { key: 'revenueUsd', label: 'Revenue', numeric: true, estimate: false },
@@ -84,9 +84,9 @@ function numberCell(value: number | null, format: (n: number) => string, note: s
   return note === null ? { text: BLANK } : { text: BLANK, note };
 }
 
-/** "+54.1% (was 218)", "+54.1% per day (was 218)" across lengths,, "new (was 0)", or a blank that says why. */
+/** "+54.1% (was 218)", "+54.1% per day (was 218)" across lengths, "new (was 0)", or a blank that says why. */
 function callsChangeCell(row: CampaignRow, noPreviousReason: string | null, perDay: boolean): Cell {
-  if (row.previousCalls === null) return { text: BLANK, note: noPreviousReason ?? 'No previous period.' };
+  if (row.previousCalls === null) return { text: BLANK, note: noPreviousReason ?? 'No comparison period.' };
   const change = changeModel(row.callsChange);
   if (change === null) return { text: BLANK, note: 'No calls in either period.' };
   // 'new' has no rate to name, so only a percentage gets "per day".
@@ -156,7 +156,7 @@ const ALL_CLEAR = "No campaign's calls changed by more than chance explains.";
 
 function alertsRuleText({ minCalls, z }: CampaignsView['alerts']): string {
   return (
-    'A campaign is marked when its calls differ from the previous period by more than chance explains. ' +
+    'A campaign is marked when its calls differ from the comparison period by more than chance explains. ' +
     `Campaigns with fewer than ${formatCount(minCalls)} calls across both periods are not tested. ` +
     `Score = (calls now − calls before) ÷ √(calls now + calls before); marked when the score reaches ${formatThreshold(z)} in either direction.`
   );

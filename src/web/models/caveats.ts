@@ -5,7 +5,7 @@ import { formatCount } from '../../core/views/format';
 import { formatDateSpan, formatLongDate } from '../format';
 
 export interface Caveat {
-  id: 'clamped' | 'first_day' | 'last_day' | 'previous_first_day' | 'previous_last_day' | 'outcome_lag' | 'overlap' | 'per_day';
+  id: 'clamped' | 'first_day' | 'last_day' | 'previous_first_day' | 'previous_last_day' | 'outcome_lag' | 'overlap' | 'per_day' | 'outcome_lag_previous';
   text: string;
 }
 
@@ -17,7 +17,7 @@ export interface Caveat {
 export function caveatsFor(
   notes: ViewNotes,
   span: DateRange,
-  options: { comparing: boolean; range: DateRange },
+  options: { comparing: boolean; range: DateRange; view?: 'overview' | 'campaigns' },
 ): Caveat[] {
   const found: Caveat[] = [];
   const add = (id: Caveat['id'], text: string) => found.push({ id, text });
@@ -51,12 +51,23 @@ export function caveatsFor(
   if (showPrevious && notes.comparison.overlaps) {
     add('overlap', 'The comparison period overlaps the selected range.');
   }
-  if (showPrevious && notes.comparison.perDay) {
-    const { currentDays, previousDays } = notes.comparison;
-    const lengths = `${formatCount(currentDays, ['day', 'days'])} and ${formatCount(previousDays ?? 0, ['day', 'days'])}`;
+  const { perDay, currentDays, previousDays } = notes.comparison;
+  // perDay always comes with previousDays; the null check skips the text rather than print "0 days".
+  if (showPrevious && perDay && previousDays !== null) {
+    const lengths = `${formatCount(currentDays, ['day', 'days'])} and ${formatCount(previousDays, ['day', 'days'])}`;
+    // Only the Overview has a unique-callers figure to say is not compared.
+    const callers = options.view === 'overview' ? ' Unique callers are not compared.' : '';
     add(
       'per_day',
-      `The two ranges are different lengths (${lengths}), so changes in calls, bookings and revenue compare per day. Unique callers are not compared.`,
+      `The two ranges are different lengths (${lengths}), so changes in calls, bookings and revenue compare per day.${callers}`,
+    );
+  }
+  // Both outcome-lag sentences can show: one is about the selected range, this one about the comparison period.
+  if (showPrevious && notes.comparison.outcomeLagPrevious) {
+    const days = formatCount(notes.outcomeLag.days, ['day', 'days']);
+    add(
+      'outcome_lag_previous',
+      `Bookings and revenue in the comparison period may still rise: in this export an outcome can be recorded up to ${days} after the call.`,
     );
   }
   return found;

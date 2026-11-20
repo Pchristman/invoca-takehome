@@ -46,3 +46,12 @@ describe('comparisonLine', () => {
     expect(comparisonLine(notes, view.range)).toBeNull();
   });
 });
+
+describe('comparisonLine for a later second range', () => {
+  it('names both ranges, selected first', () => {
+    const view = overviewFor('start=2026-09-01&end=2026-09-03&compareStart=2026-09-12&compareEnd=2026-09-14');
+    expect(comparisonLine(view.notes, view.range)).toBe(
+      `Comparing ${formatDateSpan('2026-09-01', '2026-09-03')} with ${formatDateSpan('2026-09-12', '2026-09-14')}.`,
+    );
+  });
+});

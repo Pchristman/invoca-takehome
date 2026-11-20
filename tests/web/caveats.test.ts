@@ -5,13 +5,14 @@ import type { ViewNotes } from '../../src/core/views';
 import { caveatsFor } from '../../src/web/models/caveats';
 import { estimateFormulas } from '../../src/web/models/estimates';
 import { callAt, campaign, makeStore, office } from '../core/views/fixtures';
+import { serverFixture } from '../server/helpers';
 import { overviewFor, toJson } from './fixtures';
 
 // The server fixture's data runs 2026-09-01 to 2026-09-14.
 const SPAN = { start: '2026-09-01', end: '2026-09-14' };
-const ids = (notes: ViewNotes, comparing = true) => caveatsFor(notes, SPAN, { comparing, range: SPAN }).map((c) => c.id);
+const ids = (notes: ViewNotes, comparing = true) => caveatsFor(notes, SPAN, { comparing, range: SPAN, view: 'overview' }).map((c) => c.id);
 const textOf = (notes: ViewNotes, id: string, comparing = true) =>
-  caveatsFor(notes, SPAN, { comparing, range: SPAN }).find((c) => c.id === id)?.text;
+  caveatsFor(notes, SPAN, { comparing, range: SPAN, view: 'overview' }).find((c) => c.id === id)?.text;
 
 /** Real notes for a range in the middle of a 30-day store. */
 function middleNotes(start: string, end: string): { notes: ViewNotes; span: { start: string; end: string } } {
@@ -41,6 +42,7 @@ function everything(): ViewNotes {
       reason: null,
       overlaps: true,
       perDay: false,
+      outcomeLagPrevious: false,
       currentDays: 7,
       previousDays: 7,
     },
@@ -61,6 +63,7 @@ function quiet(): ViewNotes {
       reason: null,
       overlaps: false,
       perDay: false,
+      outcomeLagPrevious: false,
       currentDays: 7,
       previousDays: 7,
     },
@@ -174,6 +177,7 @@ describe('caveatsFor', () => {
         reason: null,
         overlaps: true,
         perDay: false,
+        outcomeLagPrevious: false,
         currentDays: 7,
         previousDays: 7,
       },
@@ -201,6 +205,48 @@ describe('caveatsFor', () => {
   });
 });
 
+describe('outcome_lag_previous caveat', () => {
+  const lagged = (): ViewNotes => ({
+    ...quiet(),
+    outcomeLag: { days: 3, applies: false },
+    comparison: { ...quiet().comparison, outcomeLagPrevious: true },
+  });
+
+  it('says the comparison period may still gain bookings and revenue', () => {
+    expect(textOf(lagged(), 'outcome_lag_previous')).toBe(
+      'Bookings and revenue in the comparison period may still rise: in this export an outcome can be recorded up to 3 days after the call.',
+    );
+  });
+
+  it('needs a shown, usable comparison, and uses the lag days from the notes', () => {
+    const one: ViewNotes = { ...lagged(), outcomeLag: { days: 1, applies: false } };
+    expect(textOf(one, 'outcome_lag_previous')).toContain('up to 1 day after');
+    expect(ids(lagged(), false)).not.toContain('outcome_lag_previous');
+    const unavailable: ViewNotes = { ...lagged(), comparison: { ...lagged().comparison, available: false, reason: 'x' } };
+    expect(ids(unavailable)).not.toContain('outcome_lag_previous');
+    expect(ids(quiet())).not.toContain('outcome_lag_previous');
+  });
+
+  it('shows next to the range own outcome_lag when both apply, and comes last of all', () => {
+    const base = everything();
+    const both: ViewNotes = { ...base, comparison: { ...base.comparison, outcomeLagPrevious: true, perDay: true, previousDays: 3 } };
+    const found = ids(both);
+    expect(found).toContain('outcome_lag');
+    expect(found.at(-1)).toBe('outcome_lag_previous');
+  });
+
+  it('a later second range ending on the as-of date shows it (real notes)', () => {
+    // The fixture export records outcomes at once, so give it a 3-day lag.
+    const base = serverFixture();
+    const lagStore = { ...base, dataNotes: { ...base.dataNotes, outcomeLagDays: 3 } };
+    const view = overviewFor('start=2026-09-01&end=2026-09-03&compareStart=2026-09-12&compareEnd=2026-09-14', lagStore);
+    expect(view.notes.comparison.outcomeLagPrevious).toBe(true);
+    const found = caveatsFor(view.notes, SPAN, { comparing: true, range: view.range }).map((c) => c.id);
+    expect(found).toContain('outcome_lag_previous');
+    expect(found).not.toContain('outcome_lag');
+  });
+});
+
 describe('per_day caveat', () => {
   const perDayNotes = (currentDays: number, previousDays: number): ViewNotes => ({
     ...quiet(),
@@ -211,6 +257,20 @@ describe('per_day caveat', () => {
     expect(textOf(perDayNotes(28, 7), 'per_day')).toBe(
       'The two ranges are different lengths (28 days and 7 days), so changes in calls, bookings and revenue compare per day. Unique callers are not compared.',
     );
+  });
+
+  it('leaves out the unique-callers sentence on a view with no unique-callers figure', () => {
+    const text = caveatsFor(perDayNotes(28, 7), SPAN, { comparing: true, range: SPAN, view: 'campaigns' }).find(
+      (c) => c.id === 'per_day',
+    )?.text;
+    expect(text).toBe(
+      'The two ranges are different lengths (28 days and 7 days), so changes in calls, bookings and revenue compare per day.',
+    );
+  });
+
+  it('is skipped, not printed as 0 days, when previousDays is missing', () => {
+    const notes = perDayNotes(7, 3);
+    expect(ids({ ...notes, comparison: { ...notes.comparison, previousDays: null } })).not.toContain('per_day');
   });
 
   it('says "1 day", not "1 days", for a one-day second range', () => {

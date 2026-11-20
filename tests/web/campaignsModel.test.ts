@@ -38,7 +38,7 @@ describe('columns', () => {
       'Campaign',
       'Channel',
       'Calls',
-      'Calls vs previous',
+      'Calls vs comparison',
       'Bookings',
       'Booking rate',
       'Revenue',
@@ -273,7 +273,7 @@ describe('empty campaigns range', () => {
   });
 });
 
-describe('calls vs previous column', () => {
+describe('calls vs comparison column', () => {
   const cell = (r: CampaignRow, view: CampaignsView = server) =>
     campaignsModel({ ...view, rows: [r] }, DEFAULT_SORT).rows[0]!.cells.callsChange;
 
@@ -294,7 +294,7 @@ describe('calls vs previous column', () => {
     const noPrevious = { ...server, alerts: { ...server.alerts, reason: 'No full previous period: x.' } };
     expect(cell(row('a'), noPrevious)).toEqual({ text: BLANK, note: 'No full previous period: x.' });
     const noReason = { ...server, alerts: { ...server.alerts, reason: null } };
-    expect(cell(row('a'), noReason)).toEqual({ text: BLANK, note: 'No previous period.' });
+    expect(cell(row('a'), noReason)).toEqual({ text: BLANK, note: 'No comparison period.' });
     expect(cell(row('a', { previousCalls: 0, callsChange: { kind: 'none' } }))).toEqual({
       text: BLANK,
       note: 'No calls in either period.',
@@ -400,7 +400,7 @@ describe('per-day comparison', () => {
   // Sep 8-10 against Sep 1-2: different lengths, so the change is per day.
   const perDay = campaignsFor('start=2026-09-08&end=2026-09-10&compareStart=2026-09-01&compareEnd=2026-09-02');
 
-  it('the Calls vs previous cell says per day, with the total it was', () => {
+  it('the Calls vs comparison cell says per day, with the total it was', () => {
     expect(perDay.notes.comparison.perDay).toBe(true);
     const id = perDay.rows[0]!.campaignId!;
     const cell = modelRow(campaignsModel(perDay, DEFAULT_SORT).rows, id).cells.callsChange;
@@ -430,5 +430,28 @@ describe('per-day comparison', () => {
     expect(perDay.alerts.checked).toBe(false);
     expect(perDay.alerts.reason).toContain('same length');
     expect(campaignsModel(perDay, DEFAULT_SORT).alertsNote).toBe(perDay.alerts.reason);
+  });
+});
+
+describe('a later equal-length second range', () => {
+  const later = campaignsFor('start=2026-09-01&end=2026-09-03&compareStart=2026-09-12&compareEnd=2026-09-14');
+
+  it('marks no row with a jump or a drop, and says why in alertsNote', () => {
+    const model = campaignsModel(later, DEFAULT_SORT);
+    for (const r of [...model.rows, ...(model.unattributed ? [model.unattributed] : [])]) {
+      expect(r.marks).not.toContain('jump');
+      expect(r.marks).not.toContain('drop');
+    }
+    expect(model.alertsNote).toBe('Call-change alerts need the comparison period to come before the selected range.');
+    expect(model.alertsRule).toBeNull();
+  });
+});
+
+describe('copy that does not assume the second range is earlier', () => {
+  it('the alert rule says comparison period, not previous period', () => {
+    const checked = { ...server, alerts: { checked: true, reason: null, flagged: 0, z: 3, minCalls: 20 } };
+    const rule = campaignsModel(checked, DEFAULT_SORT).alertsRule!;
+    expect(rule).toContain('differ from the comparison period');
+    expect(rule).not.toContain('previous');
   });
 });

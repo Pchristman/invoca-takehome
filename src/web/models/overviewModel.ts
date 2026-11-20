@@ -50,7 +50,8 @@ export function overviewModel(view: OverviewView): OverviewModel {
   const tiles = TILES.map(({ key, label, format }): TileModel => {
     const tile: Tile = view.tiles[key];
     // Calls, bookings and revenue change per day across lengths; the answer rate is a rate and never does.
-    const countsPerDay = perDay && key !== 'answerRate';
+    const days = perDay && key !== 'answerRate' ? previousDays : null; // null: not per day, or no length to name
+    const countsPerDay = days !== null;
     const change = changeModel(tile.change);
     return {
       key,
@@ -60,7 +61,7 @@ export function overviewModel(view: OverviewView): OverviewModel {
         tile.previous === null
           ? null
           : countsPerDay
-            ? `was ${format(tile.previous)} in ${formatCount(previousDays ?? 0, ['day', 'days'])}`
+            ? `was ${format(tile.previous)} in ${formatCount(days, ['day', 'days'])}`
             : `was ${format(tile.previous)}`,
       // 'new' and 'none' have no rate to name, so only a percentage gets the suffix.
       change: change !== null && countsPerDay && tile.change.kind === 'percent' ? { ...change, text: `${change.text} per day` } : change,

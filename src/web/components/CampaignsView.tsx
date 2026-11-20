@@ -27,7 +27,7 @@ export function CampaignsView({
   const model = campaignsModel(view, sort);
   const chart = weeklyChartModel(view.weekly);
   // caveatsFor shows the previous-period notes only when notes.comparison.available, so true is enough here.
-  const caveats = caveatsFor(view.notes, span, { comparing: true, range: view.range });
+  const caveats = caveatsFor(view.notes, span, { comparing: true, range: view.range, view: 'campaigns' });
   const line = comparisonLine(view.notes, view.range);
   const trackingNumbers = model.unattributed?.trackingNumbers ?? [];
 
