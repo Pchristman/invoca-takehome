@@ -47,6 +47,25 @@ function rowFields(row: RowResult): unknown[] {
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 
+/** The SHA-256 part of a row's row_key (the key is this hash, then # and the occurrence in the file). */
+export function rowHash(row: RowResult): string {
+  return sha256(JSON.stringify(rowFields(row)));
+}
+
+/** The two statements that store a row, each skipping a row_key that is already there. */
+export function prepareRowInserts(db: DatabaseSync): { insertGood: StatementSync; insertBad: StatementSync } {
+  const insertGood = db.prepare(
+    `INSERT INTO raw_calls (seq, row_key, seed_id, row_number, call_id, started_at, ended_at, duration_seconds, caller_hash, tracking_number,
+       campaign_id, channel, location_id, answered, outcome, revenue_usd, agent_id, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(row_key) DO NOTHING`,
+  );
+  const insertBad = db.prepare(
+    `INSERT INTO bad_rows (seq, row_key, seed_id, row_number, call_id, updated_at, reason, detail)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(row_key) DO NOTHING`,
+  );
+  return { insertGood, insertBad };
+}
+
 /**
  * Write one export into the database in a single transaction. Identical rows are stored once per
  * occurrence in the file, so seeding the same export again adds nothing, while a file that really
@@ -89,15 +108,7 @@ function writeSeed(db: DatabaseSync, loaded: LoadedExport, source: SeedSource, n
   const insertIssue = db.prepare('INSERT OR IGNORE INTO reference_issues (seed_id, file, row_number, reason, detail) VALUES (?, ?, ?, ?, ?)');
   for (const i of loaded.referenceIssues) insertIssue.run(seedId, i.file, i.rowNumber, i.reason, i.detail);
 
-  const insertGood = db.prepare(
-    `INSERT INTO raw_calls (seq, row_key, seed_id, row_number, call_id, started_at, ended_at, duration_seconds, caller_hash, tracking_number,
-       campaign_id, channel, location_id, answered, outcome, revenue_usd, agent_id, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(row_key) DO NOTHING`,
-  );
-  const insertBad = db.prepare(
-    `INSERT INTO bad_rows (seq, row_key, seed_id, row_number, call_id, updated_at, reason, detail)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(row_key) DO NOTHING`,
-  );
+  const { insertGood, insertBad } = prepareRowInserts(db);
   const hadCall = db.prepare('SELECT 1 FROM raw_calls WHERE call_id = ? AND seq <= ? UNION ALL SELECT 1 FROM bad_rows WHERE call_id = ? AND seq <= ?');
 
   const maxBefore = (
@@ -108,7 +119,7 @@ function writeSeed(db: DatabaseSync, loaded: LoadedExport, source: SeedSource, n
   const report: SeedReport = { seedId, rowsRead: loaded.rowsRead, newRows: 0, duplicateRows: 0, newVersions: 0, badRowsNew: 0, callsAfter: 0 };
 
   for (const row of loaded.rows) {
-    const hash = sha256(JSON.stringify(rowFields(row)));
+    const hash = rowHash(row);
     const occurrence = seen.get(hash) ?? 0;
     seen.set(hash, occurrence + 1);
     const rowKey = `${hash}#${occurrence}`;
