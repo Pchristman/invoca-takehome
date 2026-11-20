@@ -153,3 +153,8 @@ export function defaultsHref(state: UrlState): string {
   };
   return `/${toSearch(target)}`;
 }
+
+// The query for a takeaway: what changes its fact sheet. The campaign only picks the weekly chart, so it is left out.
+export function takeawayParams(state: UrlState, view: ViewName): URLSearchParams {
+  return apiParams({ ...state, campaign: null }, view);
+}

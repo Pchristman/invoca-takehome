@@ -5,8 +5,7 @@ import { cleanExport } from '../src/core/clean';
 import { loadDotEnv } from '../src/node/env';
 import { readExportFromDir } from '../src/node/readDataDir';
 import { createApp } from '../src/server/app';
-import type { TakeawayResponse } from '../src/server/api';
-import { parseTryArgs } from './tryArgs';
+import { formatTryResult, parseTryArgs } from './tryArgs';
 
 async function main(): Promise<void> {
   loadDotEnv(); // the shell still wins
@@ -28,8 +27,12 @@ async function main(): Promise<void> {
   const app = createApp(store, { ai });
   for (const view of args.views) {
     const response = await app.request(`/api/takeaway/${view}?range=${encodeURIComponent(args.range)}`);
-    const body = (await response.json()) as TakeawayResponse;
-    console.log(`\n${view}: source=${body.source} reason=${body.reason ?? '-'}\n${body.text}`);
+    const result = formatTryResult(view, response.status, await response.json());
+    console.log(result.text);
+    if (!result.ok) {
+      process.exitCode = 1;
+      return; // a bad range fails every view the same way
+    }
     console.log(`  spend so far: $${ai.status().spendUsd.toFixed(6)}`);
   }
 }

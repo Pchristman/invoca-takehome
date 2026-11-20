@@ -35,6 +35,7 @@ function exportDir(callsCsv: string | null): string {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const server of running.splice(0)) await server.close().catch(() => undefined);
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
@@ -184,6 +185,5 @@ describe('start() and the takeaway service', () => {
     expect(body).toMatchObject({ source: 'template', reason: 'ai_off' });
     const notes = (await (await fetch(`${server.url}/api/data-notes`)).json()) as { ai: { status: string } };
     expect(notes.ai.status).toBe('off');
-    vi.unstubAllEnvs();
   });
 });

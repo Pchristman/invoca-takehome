@@ -12,3 +12,13 @@ export function parseTryArgs(argv: string[]): { views: ViewName[]; range: string
   if (!view) throw new Error(`Unknown view "${target.slice(0, 40)}". Use one of: ${TRY_VIEWS.join(', ')}, all.`);
   return { views: [view], range };
 }
+
+/** One takeaway reply as text to print. ok is false for an error reply (the caller sets the exit code). */
+export function formatTryResult(view: string, status: number, body: unknown): { ok: boolean; text: string } {
+  const b = (body ?? {}) as { text?: string; source?: string; reason?: string | null; error?: { message?: string } };
+  if (status !== 200 || typeof b.source !== 'string') {
+    const message = b.error?.message ?? 'No error message in the reply.';
+    return { ok: false, text: `\n${view}: HTTP ${status}\n${message}` };
+  }
+  return { ok: true, text: `\n${view}: source=${b.source} reason=${b.reason ?? '-'}\n${b.text ?? ''}` };
+}

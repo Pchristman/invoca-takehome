@@ -4,6 +4,7 @@ import {
   parseUrlState,
   toSearch,
   apiParams,
+  takeawayParams,
   withView,
   withRange,
   withCampaign,
@@ -339,5 +340,22 @@ describe('hrefs', () => {
 describe('VIEW_ORDER', () => {
   it('lists the four views in nav order', () => {
     expect(VIEW_ORDER).toEqual(['overview', 'campaigns', 'locations', 'missed-calls']);
+  });
+});
+
+describe('takeawayParams', () => {
+  const base = state({ view: 'campaigns', range: { kind: 'preset', preset: 'last7' } });
+  it('a different chart campaign gives the same takeaway params', () => {
+    const a = takeawayParams({ ...base, campaign: 'c1' }, 'campaigns').toString();
+    const b = takeawayParams({ ...base, campaign: 'c2' }, 'campaigns').toString();
+    expect(a).toBe(b);
+    expect(a).not.toContain('campaign=');
+  });
+  it('range, compare and location changes give different params', () => {
+    const missed = state({ view: 'missed-calls' });
+    const key = (s: UrlState) => takeawayParams(s, s.view).toString();
+    expect(key({ ...base, range: { kind: 'preset', preset: 'last28' } })).not.toBe(key(base));
+    expect(key({ ...base, compare: { start: '2024-01-01', end: '2024-01-07' } })).not.toBe(key(base));
+    expect(key({ ...missed, location: 'l1' })).not.toBe(key(missed));
   });
 });

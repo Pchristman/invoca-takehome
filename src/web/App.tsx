@@ -24,7 +24,7 @@ import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
 import { useApi } from './useApi';
 import { useUrlState } from './useUrlState';
-import { apiParams, defaultsHref, withCampaign, withLocation, withRange } from './urlState';
+import { apiParams, defaultsHref, takeawayParams, withCampaign, withLocation, withRange } from './urlState';
 import type { UrlState } from './urlState';
 
 const NO_PARAMS = new URLSearchParams();
@@ -68,7 +68,7 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   const dataNotesOpen = state.dev && dataNotesToggled; // without ?dev there is no panel, whatever the state says
   const view = useApi<unknown>(`/api/${state.view}`, apiParams(state, state.view));
   // Its own request, so the view never waits on the takeaway. No data span, no request.
-  const takeaway = useApi<TakeawayResponse>(meta.span === null ? null : `/api/takeaway/${state.view}`, apiParams(state, state.view));
+  const takeaway = useApi<TakeawayResponse>(meta.span === null ? null : `/api/takeaway/${state.view}`, takeawayParams(state, state.view));
   // The last reply that was ready, kept so a change of the chart's campaign does not unmount the screen.
   const lastReady = useRef<{ key: string; data: unknown } | null>(null);
   if (view.state?.status === 'ready') lastReady.current = { key: view.state.key, data: view.state.data };

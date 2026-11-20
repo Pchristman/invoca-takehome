@@ -105,7 +105,10 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
       console.error('The takeaway service failed; sending the template text.');
       result = { text: view.templateSentence, source: 'template', reason: 'api_error' };
     }
-    const response = { view: name, text: result.text, source: result.source, reason: result.reason } as TakeawayResponse;
+    const response: TakeawayResponse =
+      result.source === 'ai'
+        ? { view: name, text: result.text, source: 'ai', reason: null }
+        : { view: name, text: result.text, source: 'template', reason: result.reason ?? 'api_error' };
     return c.json(response);
   });
 
