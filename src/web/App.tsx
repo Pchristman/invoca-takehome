@@ -29,8 +29,7 @@ import type { PrintTakeaways } from './models/printModel';
 import { takeawayModel } from './models/takeawayModel';
 import { Reveal, RevealPresence } from './components/Reveal';
 import { ViewTransition } from './components/ViewTransition';
-import { settleAnimation, transitionKey } from './models/motionVariants';
-import { useMotion } from './useMotion';
+import { transitionKey } from './models/motionVariants';
 import { shouldCloseDataNotes } from './models/escapeKey';
 import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
@@ -140,23 +139,6 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   if (view.state?.status === 'ready') lastReady.current = { key: view.state.key, data: view.state.data };
   else if (view.state?.status === 'failed' || view.state === null) lastReady.current = null;
   const shown = displayState(lastReady.current, view.state);
-  // When a new reply replaces the dimmed old content, it settles in instead of snapping.
-  const motion = useMotion();
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const settledKey = useRef<string | null>(null);
-  const readyKey = shown.state?.status === 'ready' && !shown.busy ? shown.state.key : null;
-  useEffect(() => {
-    if (readyKey === null) return;
-    const previous = settledKey.current;
-    if (previous === readyKey) return;
-    settledKey.current = readyKey;
-    const settle = settleAnimation(motion);
-    const body = bodyRef.current;
-    // Not on the first load (the content already fades in) and only for a reply to a change on the same view.
-    if (previous === null || settle === null || body === null || typeof body.animate !== 'function') return;
-    if (previous.split('?')[0] !== readyKey.split('?')[0]) return;
-    body.animate(settle.keyframes, settle.options);
-  }, [readyKey, motion]);
   const closeDataNotes = () => {
     setDataNotesToggled(false);
     document.getElementById(DATA_NOTES_BUTTON_ID)?.focus();
@@ -209,7 +191,7 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
         ) : (
           <>
             <Takeaway show={takeawayModel(takeaway.state, { dev: state.dev })} />
-            <div ref={bodyRef} className="view-body" aria-busy={shown.busy ? 'true' : undefined} inert={shown.busy ? true : undefined}>
+            <div className="view-body" aria-busy={shown.busy ? 'true' : undefined} inert={shown.busy ? true : undefined}>
             <RequestFrame state={shown.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
               {(data) =>
                 state.view === 'overview' ? (
