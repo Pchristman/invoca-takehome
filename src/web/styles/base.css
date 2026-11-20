@@ -860,8 +860,8 @@ th .badge {
   min-height: 60vh;
 }
 
-/* Content that replaces "Loading..." fades in instead of popping in. It is not touched on a range change: the old content stays and updates in place. */
-.view-body > :not(.loading) {
+/* Anything that mounts inside a view (data replacing "Loading...", the takeaway) fades in instead of popping in. */
+[data-motion="view"] > :not(.loading):not([data-motion]) {
   animation: view-content-in var(--motion-base) var(--ease-standard) backwards;
 }
 
@@ -870,13 +870,4 @@ th .badge {
     opacity: 0;
     transform: translateY(6px);
   }
-}
-
-/* While a new range loads the old content stays, dimmed and not clickable, so the page never blanks. */
-.view-body {
-  transition: opacity var(--motion-fast) var(--ease-standard);
-}
-
-.view-body[aria-busy="true"] {
-  opacity: 0.55;
 }

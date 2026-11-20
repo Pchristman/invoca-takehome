@@ -15,12 +15,12 @@ describe('keepPreviousFor', () => {
     expect(keepPreviousFor('/api/campaigns?range=last28#0', B)).toBe(true); // from "all" to a pick
   });
   it('drops on first load', () => expect(keepPreviousFor(null, A)).toBe(false));
-  it('keeps when the range changes, so the page does not blank and flash', () => {
-    expect(keepPreviousFor(A, '/api/campaigns?range=last7&campaign=b#0')).toBe(true);
-    expect(keepPreviousFor(A, '/api/campaigns?start=2026-01-01&end=2026-01-07&campaign=b#0')).toBe(true);
+  it('drops when the range changes', () => {
+    expect(keepPreviousFor(A, '/api/campaigns?range=last7&campaign=b#0')).toBe(false);
+    expect(keepPreviousFor(A, '/api/campaigns?start=2026-01-01&end=2026-01-07&campaign=b#0')).toBe(false);
   });
-  it('keeps when the comparison changes', () => {
-    expect(keepPreviousFor(A, '/api/campaigns?range=last28&compareStart=2026-01-01&compareEnd=2026-01-28&campaign=b#0')).toBe(true);
+  it('drops when the comparison changes', () => {
+    expect(keepPreviousFor(A, '/api/campaigns?range=last28&compareStart=2026-01-01&compareEnd=2026-01-28&campaign=b#0')).toBe(false);
   });
   it('drops when the view changes', () => {
     expect(keepPreviousFor(A, '/api/overview?range=last28#0')).toBe(false);
@@ -38,9 +38,9 @@ describe('keepPreviousFor with an office', () => {
     expect(keepPreviousFor('/api/missed-calls?range=last28#0', LB)).toBe(true);
     expect(keepPreviousFor(LA, '/api/missed-calls?range=last28#0')).toBe(true);
   });
-  it('keeps for a range or comparison change; drops for a retry or another view', () => {
-    expect(keepPreviousFor(LA, '/api/missed-calls?range=last7&location=b#0')).toBe(true);
-    expect(keepPreviousFor(LA, '/api/missed-calls?range=last28&compareStart=2026-01-01&compareEnd=2026-01-28&location=b#0')).toBe(true);
+  it('drops for a range change, a comparison change, a retry or another view', () => {
+    expect(keepPreviousFor(LA, '/api/missed-calls?range=last7&location=b#0')).toBe(false);
+    expect(keepPreviousFor(LA, '/api/missed-calls?range=last28&compareStart=2026-01-01&compareEnd=2026-01-28&location=b#0')).toBe(false);
     expect(keepPreviousFor(LA, '/api/missed-calls?range=last28&location=a#1')).toBe(false);
     expect(keepPreviousFor(LA, '/api/overview?range=last28#0')).toBe(false);
   });
@@ -65,16 +65,10 @@ describe('displayState', () => {
       busy: true,
     });
   });
-  it('shows loading and no old data for another view or a retry', () => {
-    const next: RequestState<string> = { status: 'loading', key: '/api/overview?range=last28#0' };
+  it('shows loading and no old data for any other change', () => {
+    const next: RequestState<string> = { status: 'loading', key: '/api/campaigns?range=last7&campaign=b#0' };
     expect(displayState(ready, next)).toEqual({ state: next, busy: false });
-    const retry: RequestState<string> = { status: 'loading', key: '/api/campaigns?range=last28&campaign=a#1' };
-    expect(displayState(ready, retry)).toEqual({ state: retry, busy: false });
     expect(displayState(null, { status: 'loading', key: A })).toEqual({ state: { status: 'loading', key: A }, busy: false });
-  });
-  it('keeps the old data, marked busy, while a new range loads', () => {
-    const next: RequestState<string> = { status: 'loading', key: '/api/campaigns?range=last7&campaign=a#0' };
-    expect(displayState(ready, next)).toEqual({ state: { status: 'ready', key: next.key, data: 'old' }, busy: true });
   });
   it('shows the error, not stale data, when the new reply failed', () => {
     const next: RequestState<string> = { status: 'failed', key: B, error };

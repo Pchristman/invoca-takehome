@@ -43,8 +43,8 @@ describe('loading label', () => {
     const rule = /\n\.loading \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/animation: loading-in[^;]*var\(--motion-slow\)/);
   });
-  it('fades in only content that replaces the loading label', () => {
-    expect(css).toContain('.view-body > :not(.loading)');
+  it('does not double-fade content that already has its own motion wrapper', () => {
+    expect(css).toContain(':not(.loading):not([data-motion])');
   });
 });
 

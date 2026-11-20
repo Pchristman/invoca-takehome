@@ -191,7 +191,6 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
         ) : (
           <>
             <Takeaway show={takeawayModel(takeaway.state, { dev: state.dev })} />
-            <div className="view-body" aria-busy={shown.busy ? 'true' : undefined} inert={shown.busy ? true : undefined}>
             <RequestFrame state={shown.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
               {(data) =>
                 state.view === 'overview' ? (
@@ -218,7 +217,6 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
                 )
               }
             </RequestFrame>
-            </div>
           </>
         )}
       </ViewTransition>
