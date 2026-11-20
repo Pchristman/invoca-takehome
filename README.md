@@ -11,11 +11,26 @@ A small local web product that helps a marketing manager track inbound call perf
 | `npm run typecheck` | available |
 | `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
 | `npm run build` | available; builds the web app into `dist/` |
-| `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (only this command does) (`PORT`, default 3000; `DATA_DIR`) |
+| `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (only this command does) (`HOST`, default 127.0.0.1; `PORT`, default 3000; `DATA_DIR`) |
+| `docker compose up --build` | available; builds one image and serves the app at `http://localhost:3000`; see Docker below |
+| `npm run test:docker` | available; real Docker checks (needs Docker running; builds the image, starts containers, makes no real API call) |
 | `npm run ai:try -- <view|all>` | available; makes REAL API calls (needs a key); see AI takeaways below |
 | `npm run dev` | available; the server (restarting on change) and Vite with hot reload together, `/api` proxied to the server; the page is at the address Vite prints on start |
 
 Copy `.env.example` to `.env` to configure. Never commit `.env`.
+
+## Docker
+
+One command: `docker compose up --build`, then open `http://localhost:3000`. A `.env` is optional: with none, AI is off and every view uses template text. If a start fails, plain `docker compose up` may still exit 0, so read `docker compose logs`.
+
+- **Another host port:** `PORT=3001 docker compose up --build` (PowerShell: `$env:PORT=3001; docker compose up --build`), or set `PORT` in `.env`. `PORT` is only the host side; inside the container the server is always on 3000.
+- **Another export:** `DATA_DIR=data/extended docker compose up --build`. `DATA_DIR` chooses the folder mounted read-only at `/data`; use forward slashes on Windows. A mistyped folder is created empty by Docker, and the app then prints `Cannot start: ...` (see `docker compose logs`).
+- **The default mount shows the container the whole repo folder, read-only.** The app reads only the three CSV files.
+- **Not on the network:** the server listens on all interfaces inside the container, and Compose publishes it only on your machine's `127.0.0.1`, so the callback list is not exposed. Never change the port line in `docker-compose.yml` to `0.0.0.0`.
+- **New data:** run `docker compose restart`. The data is read once at start, like `npm start`.
+- **AI cache and call log** live on the volumes `ai-cache` and `ai-logs`. `docker compose down` keeps them. **`docker compose down -v` deletes the call log, so the spend guard counts from $0 again.** To read the log: `docker compose run --rm app cat logs/ai-calls.jsonl`.
+- **The key** comes from `.env` at run time and is never in the image. A shell `ANTHROPIC_API_KEY` wins over `.env`, as with `npm start`.
+- **`HOST` warning:** some shells (zsh) set `HOST` to the machine name. If it is exported, `npm start` will try to listen on that name and say so. Unset it, or set `HOST=127.0.0.1`. Inside Docker the image sets its own `HOST`, so this does not matter there.
 
 ## Data
 
