@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import type { LoadedExport, RowResult } from '../core/types';
+import { refreshCleanedCalls } from './cleaned';
 
 export interface SeedSource {
   /** The folder as shown to the user. */
@@ -19,6 +20,8 @@ export interface SeedReport {
   /** New rows whose call_id already had a stored row before this seed. */
   newVersions: number;
   badRowsNew: number;
+  /** Calls in cleaned_calls after this seed. */
+  callsAfter: number;
 }
 
 type GoodRow = Extract<RowResult, { ok: true }>;
@@ -53,6 +56,7 @@ export function seedExport(db: DatabaseSync, loaded: LoadedExport, source: SeedS
   db.exec('BEGIN IMMEDIATE');
   try {
     const report = writeSeed(db, loaded, source, now);
+    report.callsAfter = refreshCleanedCalls(db);
     db.exec('COMMIT');
     return report;
   } catch (error) {
@@ -99,7 +103,7 @@ function writeSeed(db: DatabaseSync, loaded: LoadedExport, source: SeedSource, n
   ).m;
   let nextSeq = maxBefore + 1;
   const seen = new Map<string, number>();
-  const report: SeedReport = { seedId, rowsRead: loaded.rowsRead, newRows: 0, duplicateRows: 0, newVersions: 0, badRowsNew: 0 };
+  const report: SeedReport = { seedId, rowsRead: loaded.rowsRead, newRows: 0, duplicateRows: 0, newVersions: 0, badRowsNew: 0, callsAfter: 0 };
 
   for (const row of loaded.rows) {
     const hash = sha256(JSON.stringify(rowFields(row)));
