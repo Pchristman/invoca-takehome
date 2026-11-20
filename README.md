@@ -103,6 +103,17 @@ The URL holds the screen, so a link, a refresh or the back button reproduces it:
 
 To open the extended export: `DATA_DIR=data/extended npm start`. There, Locations flags four offices, two of them "better" than the rest, because each office is tested against all others pooled and the two planted weak offices pull that pool down.
 
+## Alerts
+
+A campaign is flagged when its calls jumped or dropped against the previous period by more than chance explains.
+
+- **Where:** the Campaigns table has a "Calls vs previous" column (change and "was N") and a "Calls jumped" or "Calls dropped" badge on flagged rows. Overview's top actions gain one extra entry, right after the Campaigns entry, naming the biggest mover and how many campaigns changed. However many campaigns are flagged, there is one entry.
+- **The test:** `score = (calls now - calls before) / sqrt(calls now + calls before)`; a campaign is flagged when the score reaches 3 in either direction. A campaign is tested only when its calls across both periods add up to at least 20, so a drop to zero or a jump from zero is caught and a handful of calls is never flagged.
+- **Settings:** `ALERT_Z` (3) and `MIN_CALLS_ALERT` (20) in `src/core/thresholds.ts`. 3 rather than the 2.5 used for offices because about a dozen campaigns are tested at once: at 2.5 some campaign is flagged by luck about 1 time in 7, at 3 about 1 in 30. On the shipped export no campaign is flagged; on the extended export the planted jump and drop are.
+- **Needs a full, equal-length previous period.** Over "All data", or with a custom comparison of another length, nothing is tested and the page says why.
+- **Unattributed is never flagged.** It is a bucket, not a campaign; "Fix attribution" covers it. Its row still shows its change.
+- **Known limits:** repeat callers make counts clumpier than the test assumes, so it is somewhat optimistic; a range that is not a whole number of weeks compares unequal weekday mixes; a partly complete first or last day is noted, not corrected.
+
 ## AI takeaways
 
 Each view shows one short takeaway line under the date control, marked `AI` or `template`. The template sentence is built in code from the view's computed facts. With `ANTHROPIC_API_KEY` set, Claude Haiku 5.5 writes the sentence instead, using `{placeholders}` for every number and name; code checks the text (no digits, no invented names) and fills in the values. If the check fails, the call fails, the budget is reached or there is no key, the template sentence is shown, and nothing else about the app changes. The views never wait on it.
