@@ -1,6 +1,7 @@
 import type { DateRange, RangeErrorCode } from '../core/ranges';
 import type { DataNotes } from '../core/types';
 import type { ViewName } from '../core/views';
+import type { TakeawayReason } from '../ai/types';
 
 /** The range presets a URL may name, and the one used when none is given. */
 export const PRESETS = ['last7', 'last28', 'all'] as const;
@@ -36,13 +37,10 @@ export interface DataNotesResponse {
   ai: AiStatus;
 }
 
-/** The body of GET /api/takeaway/:view. Template text only until AI is added. */
-export interface TakeawayResponse {
-  view: ViewName;
-  text: string;
-  source: 'template';
-  reason: 'ai_off';
-}
+/** The body of GET /api/takeaway/:view. `reason` is null exactly when the text is AI-written and checked. */
+export type TakeawayResponse =
+  | { view: ViewName; text: string; source: 'ai'; reason: null }
+  | { view: ViewName; text: string; source: 'template'; reason: TakeawayReason };
 
 export type ApiErrorCode =
   | RangeErrorCode
