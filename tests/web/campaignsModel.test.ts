@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { THRESHOLDS } from '../../src/core/thresholds';
 import type { CampaignRow, CampaignsView } from '../../src/core/views';
 import { BLANK } from '../../src/web/format';
 import { campaignsModel, DEFAULT_SORT, nextSort, sortCampaignRows } from '../../src/web/models/campaignsModel';
@@ -159,6 +160,9 @@ describe('best and worst', () => {
     expect(modelRow(model.rows, view.rows[2]!.campaignId!).marks).toEqual(['worst']);
     expect(modelRow(model.rows, view.rows[1]!.campaignId!).marks).toEqual([]);
     expect(model.bestWorstNote).toBeNull();
+    expect(model.bestWorstRule).toBe(
+      `Best and worst: the highest and lowest est. revenue per budget $ among the ${view.bestWorst.eligible} campaigns with a budget above $0 and at least ${THRESHOLDS.MIN_BOOKINGS_TO_RANK} bookings in this range.`,
+    );
   });
 
   it('with fewer than two eligible, marks nothing and passes the reason', () => {
@@ -167,6 +171,7 @@ describe('best and worst', () => {
     const model = campaignsModel(view, DEFAULT_SORT);
     expect(model.rows.every((r) => r.marks.length === 0)).toBe(true);
     expect(model.bestWorstNote).toBe(view.bestWorst.reason);
+    expect(model.bestWorstRule).toBeNull();
   });
 });
 

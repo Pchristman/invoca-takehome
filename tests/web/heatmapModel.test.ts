@@ -65,8 +65,11 @@ describe('heatmapModel', () => {
     expect(m.rows.map((r) => r.label)).toEqual(['Office A', 'Office B']);
     expect(m.rows.every((r) => r.cells.length === 24)).toBe(true);
     expect(m.hourLabels).toHaveLength(24);
-    expect(m.hourLabels[0]).toBe('00');
-    expect(m.hourLabels[23]).toBe('23');
+    expect(m.hourLabels.slice(0, 3)).toEqual(['12am', '1am', '2am']);
+    expect(m.hourLabels[11]).toBe('11am');
+    expect(m.hourLabels[12]).toBe('12pm');
+    expect(m.hourLabels[13]).toBe('1pm');
+    expect(m.hourLabels[23]).toBe('11pm');
     expect(m.rows[0]!.total).toBe('1,200');
     expect(m.rows[0]!.cells[9]!.text).toBe('1,200');
   });

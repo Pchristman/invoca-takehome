@@ -37,7 +37,13 @@ interface SourceRow {
   total: number;
 }
 
-const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
+/** The column headings read as clock times: 12am, 1am ... 12pm ... 11pm. */
+export function hourHeading(hour: number): string {
+  const twelve = hour % 12 === 0 ? 12 : hour % 12;
+  return `${twelve}${hour < 12 ? 'am' : 'pm'}`;
+}
+
+const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => hourHeading(h));
 
 export function heatmapModel(heatmap: MissedCallsView['heatmap'], mode: HeatmapMode): HeatmapModel {
   const source: SourceRow[] =

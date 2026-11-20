@@ -3,6 +3,7 @@
 import type { ActionKind } from '../../core/views/facts';
 import type { CampaignRow, CampaignsView, UnattributedRow } from '../../core/views/campaignsView';
 import { formatCount, formatRate, formatUsd, formatUsdPerDollar } from '../../core/views/format';
+import { THRESHOLDS } from '../../core/thresholds';
 import { BLANK, formatThreshold, humanize } from '../format';
 import { changeModel } from './changeModel';
 import { compareSortValues } from './sorting';
@@ -53,6 +54,8 @@ export interface CampaignsModel {
   rows: CampaignRowModel[]; // sorted by `sort`; unattributed is NOT in here
   unattributed: (CampaignRowModel & { trackingNumbers: { text: string }[] }) | null; // pinned last, never sorted
   bestWorstNote: string | null; // bestWorst.reason, only when nothing is marked
+  /** How best and worst were chosen, shown when they are marked. */
+  bestWorstRule: string | null;
   alertsNote: string | null; // why no alerts, or the all-clear; null when something is flagged
   alertsRule: string | null; // how alerts are decided; null when no comparison was made
   actions: { kind: ActionKind; text: string; actionable: boolean }[];
@@ -162,6 +165,10 @@ function alertsRuleText({ minCalls, z }: CampaignsView['alerts']): string {
   );
 }
 
+function bestWorstRuleText(eligible: number): string {
+  return `Best and worst: the highest and lowest est. revenue per budget $ among the ${formatCount(eligible)} campaigns with a budget above $0 and at least ${formatCount(THRESHOLDS.MIN_BOOKINGS_TO_RANK)} bookings in this range.`;
+}
+
 export function campaignsModel(view: CampaignsView, sort: CampaignSort): CampaignsModel {
   const allRows = view.unattributed ? [...view.rows, view.unattributed] : view.rows;
   const { alerts } = view;
@@ -174,6 +181,7 @@ export function campaignsModel(view: CampaignsView, sort: CampaignSort): Campaig
     rows: sortCampaignRows(view.rows, sort).map((r) => rowModel(r, alerts.reason, perDay)),
     unattributed: view.unattributed ? unattributedModel(view.unattributed, alerts.reason, perDay) : null,
     bestWorstNote: marked ? null : view.bestWorst.reason,
+    bestWorstRule: marked ? bestWorstRuleText(view.bestWorst.eligible) : null,
     alertsNote: !alerts.checked ? alerts.reason : alerts.flagged === 0 ? ALL_CLEAR : null,
     alertsRule: alerts.checked ? alertsRuleText(alerts) : null,
     actions: view.actions.map((a) => ({ kind: a.kind, text: a.text, actionable: a.actionable })),

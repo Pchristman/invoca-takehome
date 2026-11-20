@@ -67,6 +67,7 @@ export function CampaignTable({
   return (
     <>
       {model.bestWorstNote !== null && <p className="muted small">No best or worst marked: {model.bestWorstNote}</p>}
+      {model.bestWorstRule !== null && <p className="muted small">{model.bestWorstRule}</p>}
       <div className="table-wrap">
         <table>
           <caption className="visually-hidden">Campaigns in the selected range</caption>
