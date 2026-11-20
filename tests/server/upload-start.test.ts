@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { offService, type TakeawayService } from '../../src/ai/service';
 import { CALL_COLUMNS } from '../../src/core/validate';
 import { start, type RunningServer } from '../../src/server/start';
 import type { Meta, UploadCommitResponse } from '../../src/server/api';
@@ -85,5 +86,15 @@ describe('start with uploads', () => {
     renameSync(file, moved); // fails on Windows while a connection is open
     renameSync(moved, file);
     expect((await upload(server, 'commit')).status).toBe(200);
+  });
+});
+
+describe('start with an injected AI service', () => {
+  it('keeps the injected service after an upload', async () => {
+    const injected: TakeawayService = { ...offService(), status: () => ({ status: 'on', spendUsd: 0, cacheHits: 0, checkerFailures: 0 }) };
+    const server = await begin({ dataDir: folder(), ai: injected });
+    expect((await meta(server)).aiStatus).toBe('on');
+    expect((await upload(server, 'commit')).status).toBe(200);
+    expect((await meta(server)).aiStatus).toBe('on');
   });
 });

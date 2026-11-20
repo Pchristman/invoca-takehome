@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { postUpload } from '../api';
+import { shouldCloseUpload } from '../models/escapeKey';
 import { INITIAL_UPLOAD, uploadModel, uploadReducer } from '../models/uploadModel';
 import type { UploadState } from '../models/uploadModel';
 import type { UploadCommitResponse } from '../../server/api';
@@ -28,7 +29,8 @@ export function UploadPanelView({
     <aside className="notes-panel" role="complementary" aria-label="Upload data">
       <div className="row">
         <h2>{view.title}</h2>
-        <button type="button" className="button" onClick={onClose}>
+        {/* While the file is being written the panel stays open, so the result is never lost. */}
+        <button type="button" className="button" disabled={state.step === 'saving'} onClick={onClose}>
           Close
         </button>
       </div>
@@ -94,7 +96,7 @@ export function UploadPanelView({
           <a href={view.seeNewDataHref}>See the new data</a>
         </>
       )}
-      {(state.step === 'preview' || state.step === 'error') && (
+      {(state.step === 'preview' || state.step === 'error' || state.step === 'done') && (
         <button type="button" className="button" onClick={onReset}>
           Choose another file
         </button>
@@ -104,12 +106,21 @@ export function UploadPanelView({
 }
 
 /** The panel with its steps: preview a chosen file, then post the same File again to confirm. */
-export function UploadPanel({ resetHref, onClose }: { resetHref: string; onClose(): void }) {
+export function UploadPanel({ resetHref, onClose, onWritten }: { resetHref: string; onClose(): void; onWritten(written: number): void }) {
   const [state, dispatch] = useReducer(uploadReducer, INITIAL_UPLOAD);
   const file = useRef<File | null>(null); // the chosen File, kept out of the URL and out of storage
   const previewing = useRef<AbortController | null>(null);
 
   useEffect(() => () => previewing.current?.abort(), []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const targetTag = event.target instanceof Element ? event.target.tagName : '';
+      if (shouldCloseUpload({ key: event.key, defaultPrevented: event.defaultPrevented, targetTag, step: state.step })) onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [state.step, onClose]);
 
   const choose = async (chosen: File) => {
     previewing.current?.abort();
@@ -128,7 +139,11 @@ export function UploadPanel({ resetHref, onClose }: { resetHref: string; onClose
     if (!chosen || state.step !== 'preview') return;
     dispatch({ type: 'confirm' });
     const result = await postUpload('commit', chosen);
-    if (result.ok) dispatch({ type: 'committed', written: (result.data as UploadCommitResponse).written });
+    if (result.ok) {
+      const commit = result.data as UploadCommitResponse;
+      onWritten(commit.written); // told even if the panel was closed meanwhile, so the page still reloads
+      dispatch({ type: 'committed', preview: commit.preview, written: commit.written, spanEnd: commit.meta.span?.end ?? null });
+    }
     else dispatch({ type: 'failed', message: result.error.message });
   };
 

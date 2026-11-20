@@ -6,6 +6,8 @@ import { readCampaigns, readLocations } from '../read';
 import type { ParsedUpload } from './detect';
 import {
   EXAMPLES_PER_CLASS,
+  NOTE_MAX,
+  shorten,
   type RowClass,
   type UploadCounts,
   type UploadExample,
@@ -53,10 +55,8 @@ const locationSpec: Spec<Location> = {
     ].filter((d) => d.stored !== d.incoming),
 };
 
-const shorten = (text: string) => (text.length > 40 ? `${text.slice(0, 40)}...` : text);
-
 /** Numbers are shown bare; names and zones in quotes so spaces are visible. */
-const show = (field: string, value: string) => (field === 'budget' ? value : `"${value}"`);
+const show = (field: string, value: string) => (field === 'budget' ? shorten(value, NOTE_MAX) : `"${shorten(value, NOTE_MAX)}"`);
 
 function describe(diffs: Diff[], storedPlace: string, incomingPlace: string): string {
   return diffs
@@ -78,7 +78,7 @@ function classify<T extends { id: string }>(
   const badByReason: Record<string, number> = {};
 
   const record = (cls: RowClass, row: number, id: string, note: string) => {
-    if (examples[cls].length < EXAMPLES_PER_CLASS) examples[cls].push({ row, id: shorten(id), note });
+    if (examples[cls].length < EXAMPLES_PER_CLASS) examples[cls].push({ row, id: shorten(id, 40), note });
   };
 
   upload.table.rows.forEach((raw, index) => {
@@ -95,7 +95,7 @@ function classify<T extends { id: string }>(
       counts.bad += 1;
       const reason = issue?.reason ?? 'invalid_row';
       badByReason[reason] = (badByReason[reason] ?? 0) + 1;
-      record('bad', row, (raw[spec.idColumn] ?? '').trim(), issue?.detail ?? 'row could not be read');
+      record('bad', row, (raw[spec.idColumn] ?? '').trim(), shorten(issue?.detail ?? 'row could not be read', NOTE_MAX));
       return;
     }
 
@@ -112,7 +112,6 @@ function classify<T extends { id: string }>(
         record('conflict', row, value.id, `differs from row ${earlier.row} in this file: ${describe(diffs, `in row ${earlier.row}`, 'in this row')}`);
       }
     } else if (known) {
-      seenInFile.set(value.id, { row, value: known });
       const diffs = spec.differences(known, value);
       if (diffs.length === 0) {
         counts.duplicates += 1;

@@ -27,6 +27,7 @@ function stub(result: TakeawayResult | Error) {
     },
     status: () => STATUS,
     interpret: async () => ({ ok: false, reason: 'ai_off', detail: null }),
+    withData: () => service,
   };
   return { service, calls };
 }

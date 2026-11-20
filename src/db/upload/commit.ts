@@ -1,6 +1,7 @@
+import { resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CallStore } from '../../core/types';
-import { refreshCleanedCalls } from '../cleaned';
+import { rebuildCleanedCalls } from '../cleaned';
 import { convertDatabaseError } from '../database';
 import { readStore } from '../read';
 import { prepareRowInserts, rowHash } from '../seed';
@@ -55,6 +56,14 @@ function writeRows(db: DatabaseSync, plan: UploadPlan, seedId: number): void {
   }
 }
 
+/** A database error message without the file's path: the message goes to the browser, which has no use for where the file lives. */
+export function withoutPath(message: string, path: string | null | undefined): string {
+  if (!path || path === ':memory:') return message;
+  let out = message;
+  for (const p of new Set([path, resolve(path)])) out = out.split(`the database ${p}`).join('the database').split(p).join('the database file');
+  return out;
+}
+
 /**
  * Write an upload in one transaction. The file is classified again inside the lock, so the rows written are always
  * the ones that are new right now. Anything that throws rolls everything back and becomes an UploadFailed.
@@ -70,13 +79,14 @@ export function commitUpload(db: DatabaseSync, upload: ParsedUpload, now: Date =
       return { preview: plan.preview, written: 0, store: null };
     }
     writeRows(db, plan, insertSeed(db, upload, counts.rowsRead, now));
-    if (plan.kind === 'calls') refreshCleanedCalls(db);
-    const store = readStore(db); // before COMMIT: a store that cannot be built undoes the write
+    // Built before COMMIT: a store that cannot be built undoes the write. Calls rebuild cleaned_calls from the same read.
+    const store = plan.kind === 'calls' ? rebuildCleanedCalls(db) : readStore(db);
     db.exec('COMMIT');
     return { preview: plan.preview, written, store };
   } catch (error) {
     if (db.isTransaction) db.exec('ROLLBACK'); // SQLite may already have rolled back
-    const detail = convertDatabaseError(db.location() ?? ':memory:', error).message;
+    const path = db.location() ?? ':memory:';
+    const detail = withoutPath(convertDatabaseError(path, error).message, path);
     throw new UploadFailed(`The upload failed and nothing was stored: ${detail}`);
   }
 }

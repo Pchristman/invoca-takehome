@@ -24,6 +24,8 @@ export interface TakeawayService {
   /** Turn a question into a validated filter. Never rejects. */
   interpret<T>(question: string, context: QuestionContext, validate: (reply: FilterReply) => Validation<T>): Promise<InterpretResult<T>>;
   status(): AiStatus;
+  /** A service for new data (an upload) that shares this one's spend, reservations and log state, so the cap holds across the swap. */
+  withData(known: KnownNames, snapshotId: string): TakeawayService;
 }
 
 export interface ServiceOptions {
@@ -50,58 +52,73 @@ function templateResult(template: string, reason: TakeawayReason): TakeawayResul
 }
 
 export function offService(): TakeawayService {
-  return {
+  const service: TakeawayService = {
     takeaway: async (_sheet, template) => templateResult(template, 'ai_off'),
     interpret: async () => ({ ok: false, reason: 'ai_off', detail: null }),
     status: () => ({ status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 }),
+    withData: () => service,
   };
+  return service;
+}
+
+/**
+ * What every service built for the same app shares, so a rebuild for new data cannot forget a call still
+ * running in the old service: the spend so far, the worst case of every call in flight, and whether the log works.
+ */
+interface Ledger {
+  summary: LogSummary;
+  reservedNano: number; // worst case of every call in flight
+  logUsable: boolean;
 }
 
 export function createTakeawayService(options: ServiceOptions): TakeawayService {
+  const { model, logPath } = options;
+  // Spend comes from the log, so a log we cannot read means unknown spend: fail closed.
+  const ledger: Ledger = { summary: { spendNanoUsd: 0, cacheHits: 0, checkerFailures: 0, skippedLines: 0 }, reservedNano: 0, logUsable: true };
+  // A log we can read but not write is just as bad: a paid call would go unrecorded. Check before any call.
+  if (logPath !== null) {
+    try {
+      ledger.summary = loadLog(logPath);
+    } catch {
+      ledger.logUsable = false;
+      console.error('AI is off for this session: the call log cannot be read.');
+    }
+    if (ledger.logUsable && model !== null) { // with AI off nothing is ever appended
+      try {
+        checkLogWritable(logPath);
+      } catch {
+        ledger.logUsable = false;
+        console.error('AI is off for this session: the call log cannot be written.');
+      }
+    }
+  }
+  if (ledger.summary.skippedLines > 0) console.error(`AI call log: ${ledger.summary.skippedLines} unreadable lines were skipped when adding up spend.`);
+  return buildService(options, ledger);
+}
+
+function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService {
   const { model, known, snapshotId, logPath } = options;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const now = options.now ?? (() => new Date());
   const limitNano = Math.round(options.limitUsd * 1e9);
   const cache = new TakeawayCache(options.cachePath);
 
-  // Spend comes from the log, so a log we cannot read means unknown spend: fail closed.
-  let summary: LogSummary = { spendNanoUsd: 0, cacheHits: 0, checkerFailures: 0, skippedLines: 0 };
-  let logUsable = true;
-  // A log we can read but not write is just as bad: a paid call would go unrecorded. Check before any call.
-  if (logPath !== null) {
-    try {
-      summary = loadLog(logPath);
-    } catch {
-      logUsable = false;
-      console.error('AI is off for this session: the call log cannot be read.');
-    }
-    if (logUsable && model !== null) { // with AI off nothing is ever appended
-      try {
-        checkLogWritable(logPath);
-      } catch {
-        logUsable = false;
-        console.error('AI is off for this session: the call log cannot be written.');
-      }
-    }
-  }
-
-  let reservedNano = 0; // worst case of every call in flight
   const inFlight = new Map<string, Promise<unknown>>(); // takeaway and question calls share it; their keys never collide
   const rememberedFailures = new Map<string, TakeawayReason>(); // this session only; never timeouts or API errors
   const rememberedQuestionFailures = new Map<string, { reason: QuestionReason; detail: string | null }>(); // same rule
 
   /** Record a log line and keep the in-memory summary in step. A log that cannot be written turns AI off. */
   function record(line: CallLogLine): void {
-    summary.spendNanoUsd += Math.round(line.costUsd * 1e9);
-    if (line.cached) summary.cacheHits++;
-    if (line.checkPassed === false) summary.checkerFailures++;
+    ledger.summary.spendNanoUsd += Math.round(line.costUsd * 1e9);
+    if (line.cached) ledger.summary.cacheHits++;
+    if (line.checkPassed === false) ledger.summary.checkerFailures++;
     if (logPath === null) return;
     try {
       appendLogLine(logPath, line);
     } catch {
       // Print on the change only: calls already in flight will also fail to write.
-      if (logUsable) console.error('AI is off for this session: the call log cannot be written.');
-      logUsable = false;
+      if (ledger.logUsable) console.error('AI is off for this session: the call log cannot be written.');
+      ledger.logUsable = false;
     }
   }
 
@@ -114,7 +131,6 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
 
   // Damage found at start-up: one line per kind, fixed text (counts only), never file contents.
   if (cache.loadProblem !== null) console.error(`AI cache problem: ${cache.loadProblem}`);
-  if (summary.skippedLines > 0) console.error(`AI call log: ${summary.skippedLines} unreadable lines were skipped when adding up spend.`);
 
   function logLine(purpose: CallLogLine['purpose'], fields: Partial<CallLogLine>): CallLogLine {
     return {
@@ -179,13 +195,13 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
     if (running) return running;
 
     const worstNano = worstCaseNanoUsd(model!.id, prompt.system.length + prompt.user.length);
-    if (summary.spendNanoUsd + reservedNano + worstNano > limitNano) return overBudget;
+    if (ledger.summary.spendNanoUsd + ledger.reservedNano + worstNano > limitNano) return overBudget;
 
-    reservedNano += worstNano;
+    ledger.reservedNano += worstNano;
     const call = run()
       .catch(() => crashed)
       .finally(() => {
-        reservedNano -= worstNano;
+        ledger.reservedNano -= worstNano;
         inFlight.delete(key);
       });
     inFlight.set(key, call);
@@ -285,7 +301,7 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
   function decide(sheet: FactSheet, template: string): TakeawayResult | Promise<TakeawayResult> {
     if (model === null) return templateResult(template, 'ai_off');
     if (Object.keys(sheet.facts).length === 0) return templateResult(template, 'no_facts');
-    if (!logUsable) return templateResult(template, 'log_unavailable');
+    if (!ledger.logUsable) return templateResult(template, 'log_unavailable');
 
     const key = cacheKey({ snapshotId, sheet, promptVersion: PROMPT_VERSION, model: model.id });
 
@@ -318,7 +334,7 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
     question: string, context: QuestionContext, validate: (reply: FilterReply) => Validation<T>,
   ): InterpretResult<T> | Promise<InterpretResult<T>> {
     if (model === null) return { ok: false, reason: 'ai_off', detail: null };
-    if (!logUsable) return { ok: false, reason: 'log_unavailable', detail: null };
+    if (!ledger.logUsable) return { ok: false, reason: 'log_unavailable', detail: null };
 
     const key = questionCacheKey({ snapshotId, question, promptVersion: QUESTION_PROMPT_VERSION, model: model.id });
 
@@ -379,11 +395,16 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
       }
     },
 
+    withData(newKnown, newSnapshotId) {
+      return buildService({ ...options, known: newKnown, snapshotId: newSnapshotId }, ledger);
+    },
+
     status(): AiStatus {
+      const { summary } = ledger;
       const counts = { spendUsd: nanoToUsd(summary.spendNanoUsd), cacheHits: summary.cacheHits, checkerFailures: summary.checkerFailures };
-      if (model === null || !logUsable) return { status: 'off', ...counts };
+      if (model === null || !ledger.logUsable) return { status: 'off', ...counts };
       const oneMore = worstCaseNanoUsd(model.id, TYPICAL_PROMPT_CHARS);
-      const reached = summary.spendNanoUsd + reservedNano + oneMore > limitNano;
+      const reached = summary.spendNanoUsd + ledger.reservedNano + oneMore > limitNano;
       return { status: reached ? 'budget_reached' : 'on', ...counts };
     },
   };

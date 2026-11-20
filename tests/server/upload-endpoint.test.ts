@@ -303,7 +303,7 @@ describe('the size limit', () => {
     const r = await get(app, '/api/upload/preview', {
       method: 'POST',
       body: 'tiny',
-      headers: { 'Content-Type': 'multipart/form-data; boundary=x', 'Content-Length': String(UPLOAD_MAX_BYTES + 1) },
+      headers: { 'Content-Type': 'multipart/form-data; boundary=x', 'Content-Length': String(UPLOAD_MAX_BYTES + 64 * 1024 + 1) },
     });
     expect(r.status).toBe(413);
     expect(errorOf(r.json).code).toBe('too_large');
@@ -353,5 +353,101 @@ describe('the rest of the API', () => {
     expect(r.status).toBe(404);
     expect(errorOf(r.json).code).toBe('not_found');
     expect((await get(app, '/api/upload/other', { method: 'POST' })).status).toBe(404);
+  });
+});
+
+describe('host and origin checks on the upload routes (DNS rebinding)', () => {
+  const paths = ['/api/upload/preview', '/api/upload/commit'];
+  const send = (app: Hono, path: string, headers: Record<string, string>) => post(app, path, { file: callsFile([later('c_a')]) }, headers);
+
+  it.each(paths)('%s refuses a foreign Host and writes nothing', async (path) => {
+    const { app, rows } = setup();
+    const r = await send(app, path, { Host: 'evil.example:3000' });
+    expect(r.status).toBe(403);
+    expect(errorOf(r.json).code).toBe('forbidden');
+    expect(rows()).toBe(1);
+    expect(rows('seeds')).toBe(1);
+  });
+
+  it.each(paths)('%s refuses a foreign Origin even with a local Host', async (path) => {
+    const { app, rows } = setup();
+    for (const origin of ['http://evil.example:3000', 'null', 'not a url']) {
+      const r = await send(app, path, { Host: 'localhost:3000', Origin: origin });
+      expect(r.status).toBe(403);
+      expect(errorOf(r.json).code).toBe('forbidden');
+    }
+    expect(rows()).toBe(1);
+  });
+
+  it.each(paths)('%s accepts local Hosts, a matching Origin, and no Origin', async (path) => {
+    const { app } = setup();
+    for (const host of ['localhost:3000', '127.0.0.1:3000', '[::1]:3000', 'localhost']) {
+      expect((await send(app, path, { Host: host })).status).toBe(200);
+    }
+    expect((await send(app, path, { Host: 'localhost:3000', Origin: 'http://localhost:3000' })).status).toBe(200);
+  });
+
+  it('a configured host is allowed too', async () => {
+    const root = tempDir();
+    dirs.push(root);
+    const dataDir = join(root, 'data');
+    mkdirSync(dataDir);
+    const texts = csvTexts({ calls: [callLine({ call_id: 'c_1' })] });
+    writeFileSync(join(dataDir, 'calls.csv'), texts.calls);
+    writeFileSync(join(dataDir, 'campaigns.csv'), texts.campaigns);
+    writeFileSync(join(dataDir, 'locations.csv'), texts.locations);
+    const l = loadStore({ dbPath: ':memory:', dataDir });
+    loaded.push(l);
+    const app = createApp(l.store, { uploads: createUploadService(l.database), allowedHosts: ['calls.lan'] });
+    expect((await send(app, paths[0]!, { Host: 'calls.lan:3000' })).status).toBe(200);
+    expect((await send(app, paths[0]!, { Host: 'other.lan:3000' })).status).toBe(403);
+  });
+});
+
+describe('the swap after a commit', () => {
+  it('a rebuildAi that throws still returns the written result (200 with a warning) and adopts the new data with AI off', async () => {
+    const on: TakeawayService = { ...offService(), status: () => ({ status: 'on', spendUsd: 0, cacheHits: 0, checkerFailures: 0 }) };
+    const { app, rows } = setup({ ai: on, rebuildAi: () => { throw new Error('boom'); } });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const r = await commit(app, { file: callsFile([later('c_a')]) });
+    expect(r.status).toBe(200);
+    const body = r.json as UploadCommitResponse;
+    expect(body.written).toBe(1);
+    expect(body.warning).toMatch(/AI/);
+    expect(rows()).toBe(2);
+    const m = await meta(app);
+    expect(m.callCount).toBe(2);
+    expect(m.aiStatus).toBe('off'); // never the old service answering about the new data
+  });
+
+  it('a commit with a working rebuild has no warning', async () => {
+    const { app } = setup({ rebuildAi: () => offService() });
+    const r = await commit(app, { file: callsFile([later('c_a')]) });
+    expect((r.json as UploadCommitResponse).warning).toBeUndefined();
+  });
+});
+
+describe('the size limit, file size exactly', () => {
+  const header = `${CALLS_HEADER}\n`;
+  const exact = (bytes: number) => {
+    const line = callLine({ call_id: 'c_1' }) + '\n';
+    const body = header + line;
+    // pad with a trailing comment-free run of newlines to reach the exact byte count
+    return body + '\n'.repeat(bytes - body.length);
+  };
+
+  it('a file of exactly UPLOAD_MAX_BYTES is accepted; one more byte is 413', async () => {
+    const { app } = setup();
+    const ok = await preview(app, { file: { name: 'a.csv', text: exact(UPLOAD_MAX_BYTES) } });
+    expect(ok.status).toBe(200);
+    const big = await preview(app, { file: { name: 'a.csv', text: exact(UPLOAD_MAX_BYTES + 1) } });
+    expect(big.status).toBe(413);
+    expect(errorOf(big.json).message).toBe('The file is larger than 10 MB.');
+  });
+
+  it('an enormous body is still refused by the body limit', async () => {
+    const { app } = setup();
+    const r = await preview(app, { file: { name: 'a.csv', text: 'x'.repeat(UPLOAD_MAX_BYTES + 200 * 1024) } });
+    expect(r.status).toBe(413);
   });
 });

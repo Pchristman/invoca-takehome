@@ -10,7 +10,7 @@ const labels = (state: UploadState) => uploadModel(state, '/').rows.map((r) => r
 
 describe('uploadModel rows', () => {
   it('has a fixed order per kind', () => {
-    expect(labels(preview(previewOf('calls')))).toEqual(['New calls', 'New versions', 'Already stored', 'Bad rows']);
+    expect(labels(preview(previewOf('calls')))).toEqual(['New calls', 'New versions', 'Already stored', 'Conflicts', 'Bad rows']);
     expect(labels(preview(previewOf('campaigns')))).toEqual(['New campaigns', 'Already stored', 'Conflicts', 'Bad rows']);
     expect(labels(preview(previewOf('locations')))).toEqual(['New locations', 'Already stored', 'Conflicts', 'Bad rows']);
   });
@@ -21,11 +21,20 @@ describe('uploadModel rows', () => {
     expect(view.rows[2]).toMatchObject({ label: 'Already stored', count: '12' });
   });
 
+  it('shows conflicts for calls too, with a count', () => {
+    const view = uploadModel(preview(previewOf('calls', { newRows: 1, conflicts: 2 })), '/');
+    expect(view.rows[3]).toMatchObject({ label: 'Conflicts', count: '2' });
+  });
+
+  it('says an upload of only conflicting calls cannot be stored', () => {
+    expect(uploadModel(preview(previewOf('calls', { conflicts: 2 })), '/').emptyMessage).toBe('Nothing to add: no row in this file can be stored.');
+  });
+
   it('passes hints through and sorts bad reasons by count then name', () => {
-    const p = previewOf('calls', { newRows: 1, bad: 15 }, { hints: ['one hint', 'two hint'], badByReason: { 'unknown office': 3, 'bad timestamp': 3, 'unknown campaign': 12 } });
+    const p = previewOf('calls', { newRows: 1, bad: 15 }, { hints: ['one hint', 'two hint'], badByReason: { unknown_location: 3, bad_timestamp: 3, unknown_campaign: 12 } });
     const view = uploadModel(preview(p), '/');
     expect(view.hints).toEqual(['one hint', 'two hint']);
-    expect(view.badReasons).toEqual(['unknown campaign: 12', 'bad timestamp: 3', 'unknown office: 3']);
+    expect(view.badReasons).toEqual(['unknown campaign: 12', 'bad timestamp: 3', 'unknown location: 3']);
   });
 
   it('writes example lines and shortens long ids', () => {
@@ -77,13 +86,24 @@ describe('uploadModel confirm', () => {
     expect(label('locations', 2)).toBe('Add 2 locations');
   });
 
-  it('says what was added once done, and links to the default view', () => {
-    const p = previewOf('calls', { newRows: 40 });
-    const done = (written: number, kind: UploadKind = 'calls'): UploadState => ({ step: 'done', fileName: 'f.csv', preview: previewOf(kind, { newRows: written }), written });
-    expect(uploadModel({ step: 'done', fileName: 'f.csv', preview: p, written: 40 }, '/?dev').done).toBe('Added 40 new calls to the database.');
-    expect(uploadModel(done(1), '/').done).toBe('Added 1 new call to the database.');
-    expect(uploadModel(done(3, 'campaigns'), '/').done).toBe('Added 3 new campaigns to the database.');
-    expect(uploadModel(done(1), '/campaigns?dev').seeNewDataHref).toBe('/campaigns?dev');
+  it('says what was added once done, from the commit own counts, and links to the default view', () => {
+    const done = (kind: UploadKind, counts: Partial<UploadPreview['counts']>, spanEnd: string | null = null): UploadState => ({
+      step: 'done', fileName: 'f.csv', preview: previewOf(kind, counts), written: (counts.newRows ?? 0) + (counts.newVersions ?? 0), spanEnd,
+    });
+    const text = (state: UploadState) => uploadModel(state, '/').done;
+    expect(text(done('calls', { newRows: 40 }))).toBe('Added 40 new calls.');
+    expect(text(done('calls', { newRows: 1 }))).toBe('Added 1 new call.');
+    expect(text(done('calls', { newRows: 38, newVersions: 2 }))).toBe('Added 38 new calls and 2 new versions of calls already stored.');
+    expect(text(done('calls', { newVersions: 1 }))).toBe('Added 1 new version of a call already stored.');
+    expect(text(done('campaigns', { newRows: 3 }))).toBe('Added 3 new campaigns.');
+    expect(text(done('calls', { duplicates: 4 }))).toBe('Nothing was added.');
+    expect(text(done('calls', { newRows: 2 }, '2026-09-30'))).toBe('Added 2 new calls. The data now runs to Sep 30, 2026.');
+    expect(uploadModel(done('calls', { newRows: 1 }), '/campaigns?dev').seeNewDataHref).toBe('/campaigns?dev');
+  });
+
+  it('shows the commit preview rows once done, not the earlier preview', () => {
+    const view = uploadModel({ step: 'done', fileName: 'f.csv', preview: previewOf('calls', { newRows: 1 }), written: 1, spanEnd: null }, '/');
+    expect(view.rows[0]).toMatchObject({ label: 'New calls', count: '1' });
   });
 
   it('has no confirm while checking or saving', () => {
@@ -105,8 +125,9 @@ describe('uploadReducer', () => {
     expect(s).toEqual({ step: 'preview', fileName: 'a.csv', preview: p });
     s = uploadReducer(s, { type: 'confirm' });
     expect(s).toEqual({ step: 'saving', fileName: 'a.csv', preview: p });
-    s = uploadReducer(s, { type: 'committed', written: 2 });
-    expect(s).toEqual({ step: 'done', fileName: 'a.csv', preview: p, written: 2 });
+    const fresh = previewOf('calls', { newRows: 1 });
+    s = uploadReducer(s, { type: 'committed', preview: fresh, written: 1, spanEnd: '2026-09-30' });
+    expect(s).toEqual({ step: 'done', fileName: 'a.csv', preview: fresh, written: 1, spanEnd: '2026-09-30' });
   });
 
   it('goes to error from every step, and reset goes back to choose', () => {
@@ -115,7 +136,7 @@ describe('uploadReducer', () => {
       { step: 'checking', fileName: 'a.csv' },
       { step: 'preview', fileName: 'a.csv', preview: p },
       { step: 'saving', fileName: 'a.csv', preview: p },
-      { step: 'done', fileName: 'a.csv', preview: p, written: 2 },
+      { step: 'done', fileName: 'a.csv', preview: p, written: 2, spanEnd: null },
     ];
     for (const step of steps) {
       const s = uploadReducer(step, { type: 'failed', message: 'Nope.' });
@@ -136,9 +157,14 @@ describe('uploadReducer', () => {
     expect(uploadReducer(saving, { type: 'choose', fileName: 'b.csv' })).toBe(saving);
   });
 
+  it('choose another file after done goes back to choose', () => {
+    const done: UploadState = { step: 'done', fileName: 'a.csv', preview: p, written: 2, spanEnd: null };
+    expect(uploadReducer(done, { type: 'reset' })).toEqual({ step: 'choose' });
+  });
+
   it('ignores a late reply after a reset', () => {
     expect(uploadReducer(INITIAL_UPLOAD, { type: 'previewed', preview: p })).toBe(INITIAL_UPLOAD);
-    expect(uploadReducer(INITIAL_UPLOAD, { type: 'committed', written: 2 })).toBe(INITIAL_UPLOAD);
+    expect(uploadReducer(INITIAL_UPLOAD, { type: 'committed', preview: p, written: 2, spanEnd: null })).toBe(INITIAL_UPLOAD);
     expect(uploadReducer(INITIAL_UPLOAD, { type: 'confirm' })).toBe(INITIAL_UPLOAD);
   });
 });

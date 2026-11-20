@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { CallStore } from '../core/types';
 import { loadStore } from '../db/prepare';
 import { createUploadService } from '../db/upload/service';
-import { createAiFromEnv } from '../ai/fromEnv';
+import { createAiFromEnv, knownNamesFrom, snapshotId } from '../ai/fromEnv';
 import type { TakeawayService } from '../ai/service';
 import { createApp } from './app';
 import { explainListenError, parseDbPath, parseHost, parsePort } from './config';
@@ -28,6 +28,7 @@ export interface RunningServer {
   host: string;
   port: number;
   url: string;
+  /** The store as loaded at start-up: it does not follow uploads (only cli.ts reads it, once, at start). */
   store: CallStore;
   /** One-line messages for the person starting the app: what was seeded, a data folder that is not what the database holds. */
   notices: string[];
@@ -48,11 +49,14 @@ export async function start(options: StartOptions = {}): Promise<RunningServer> 
   const requestedHost = options.host ?? parseHost(process.env.HOST);
   let server: ReturnType<typeof serve>;
   try {
+    // An injected service is kept as it is (it is not ours to rebuild). Our own shares its spend ledger with each rebuild.
+    const ai = options.ai ?? createAiFromEnv(store, process.env);
     const app = createApp(store, {
       webRoot: options.webRoot,
-      ai: options.ai ?? createAiFromEnv(store, process.env),
+      ai,
       uploads: createUploadService(database),
-      rebuildAi: (rebuilt) => createAiFromEnv(rebuilt, process.env),
+      rebuildAi: options.ai ? undefined : (rebuilt) => ai.withData(knownNamesFrom(rebuilt), snapshotId(rebuilt)),
+      allowedHosts: [requestedHost.replace(/^[|]$/g, '')].map((h) => (h.includes(':') ? `[${h}]` : h)),
     });
     server = serve({ fetch: app.fetch, port: requested, hostname: requestedHost });
     await new Promise<void>((resolve, reject) => {

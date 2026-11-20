@@ -204,6 +204,15 @@ describe('commitUpload', () => {
         db.exec(BOOM_RAW);
         const before = readFileSync(path);
         expect(() => commitUpload(db, callsFile(lines()))).toThrow(/nothing was stored/);
+        // before closing: close() would roll back by itself and hide a missing ROLLBACK
+        expect(db.isTransaction).toBe(false);
+        const other = openDatabase(path);
+        try {
+          expect(count(other, 'raw_calls')).toBe(1);
+          expect(count(other, 'seeds')).toBe(1);
+        } finally {
+          other.close();
+        }
         expect(readFileSync(path).equals(before)).toBe(true);
         db.close();
         expect(readFileSync(path).equals(before)).toBe(true);
@@ -213,6 +222,83 @@ describe('commitUpload', () => {
         rmSync(dir, { recursive: true, force: true });
       }
     });
+  });
+
+  test('a failure message does not carry the database file path', () => {
+    const dir = tempDir();
+    const path = join(dir, 'calls.db');
+    try {
+      const db = openDatabase(path);
+      seedFromTexts(db, { folder: 'test', ...csvTexts({ calls: [callLine({ call_id: 'c_1' })] }) });
+      db.exec(`CREATE TRIGGER boom BEFORE INSERT ON raw_calls WHEN NEW.call_id = 'c_boom' BEGIN SELECT RAISE(ABORT, 'boom'); END`);
+      let message = '';
+      try {
+        commitUpload(db, callsFile([callLine({ call_id: 'c_boom' })]));
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      db.close();
+      expect(message).toContain('boom');
+      expect(message).not.toContain(path);
+      expect(message).not.toContain(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('another connection holding the write lock fails the commit cleanly, and the same upload works once it lets go', () => {
+    const dir = tempDir();
+    const path = join(dir, 'calls.db');
+    try {
+      const db = openDatabase(path);
+      seedFromTexts(db, { folder: 'test', ...csvTexts({ calls: [callLine({ call_id: 'c_1' })] }) });
+      db.exec('PRAGMA busy_timeout = 50'); // do not wait the full 5 s
+      const other = openDatabase(path); // stands in for `npm run seed`
+      try {
+        other.exec('BEGIN IMMEDIATE');
+        const file = callsFile([callLine({ call_id: 'c_new' })]);
+        expect(() => commitUpload(db, file)).toThrow(UploadFailed);
+        expect(() => commitUpload(db, file)).toThrow(/nothing was stored/);
+        expect(db.isTransaction).toBe(false);
+        other.exec('ROLLBACK');
+        expect(count(other, 'raw_calls')).toBe(1);
+        expect(count(other, 'seeds')).toBe(1);
+
+        other.exec('BEGIN IMMEDIATE');
+        other.exec('COMMIT');
+        expect(commitUpload(db, file).written).toBe(1);
+        expect(count(other, 'raw_calls')).toBe(2);
+      } finally {
+        other.close();
+        db.close();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a calls commit rebuilds the store once, not twice, inside the lock', () => {
+    const db = database();
+    const file = callsFile([callLine({ call_id: 'c_once' })]);
+    const watch = () => {
+      let n = 0;
+      const real = db.prepare.bind(db);
+      db.prepare = ((sql: string) => {
+        if (sql === 'SELECT * FROM locations ORDER BY rowid') n += 1; // one per readStore
+        return real(sql);
+      }) as typeof db.prepare;
+      return { count: () => n, stop: () => { db.prepare = real as typeof db.prepare; } };
+    };
+    const planning = watch();
+    planUpload(db, file);
+    const planned = planning.count();
+    planning.stop();
+    const committing = watch();
+    commitUpload(db, file);
+    const total = committing.count();
+    committing.stop();
+    // planning inside the commit reads as much as planning alone; the store is then read exactly once more
+    expect(total - planned).toBe(1);
   });
 
   test('a later npm run seed of the same export still adds nothing after an upload', () => {

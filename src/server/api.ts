@@ -103,4 +103,6 @@ export interface UploadCommitResponse {
   preview: UploadPreview;
   written: number;
   meta: Meta;
+  /** Set when the rows were written but something after the write failed (AI was turned off for this session). */
+  warning?: string;
 }

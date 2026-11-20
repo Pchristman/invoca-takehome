@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { CallStore } from '../core/types';
 import { readStore } from './read';
 
 /**
@@ -7,7 +8,13 @@ import { readStore } from './read';
  * itself reads the raw tables. Returns the number of calls. Runs inside the caller's transaction.
  */
 export function refreshCleanedCalls(db: DatabaseSync): number {
-  const { calls } = readStore(db);
+  return rebuildCleanedCalls(db).calls.length;
+}
+
+/** The same refresh, handing back the store it was built from, so a caller that needs the store does not read it again. */
+export function rebuildCleanedCalls(db: DatabaseSync): CallStore {
+  const store = readStore(db);
+  const { calls } = store;
   db.exec('DELETE FROM cleaned_calls');
   const insert = db.prepare(
     `INSERT INTO cleaned_calls (call_id, started_at, duration_seconds, caller_hash, tracking_number, campaign_id, unattributed, channel,
@@ -20,5 +27,5 @@ export function refreshCleanedCalls(db: DatabaseSync): number {
       c.locationId, c.answered ? 1 : 0, c.outcome, c.booked ? 1 : 0, c.pending ? 1 : 0, c.revenueUsd, c.agentId, c.localDate, c.localHour, c.localWeekday,
     );
   }
-  return calls.length;
+  return store;
 }

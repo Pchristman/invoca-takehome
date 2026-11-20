@@ -18,6 +18,7 @@ const throwing: TakeawayService = {
   takeaway: () => { throw new Error('AI must not be called'); },
   interpret: () => { throw new Error('AI must not be called'); },
   status: () => { throw new Error('AI must not be called'); },
+  withData: () => { throw new Error('AI must not be called'); },
 };
 
 describe('GET /api/answer', () => {

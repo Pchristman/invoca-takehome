@@ -3,20 +3,21 @@
 
 import type { RowClass, UploadKind, UploadPreview } from '../../db/upload/types';
 import { formatCount } from '../../core/views/format';
+import { formatLongDate } from '../format';
 
 export type UploadState =
   | { step: 'choose' }
   | { step: 'checking'; fileName: string }
   | { step: 'preview'; fileName: string; preview: UploadPreview }
   | { step: 'saving'; fileName: string; preview: UploadPreview }
-  | { step: 'done'; fileName: string; preview: UploadPreview; written: number }
+  | { step: 'done'; fileName: string; preview: UploadPreview; written: number; spanEnd: string | null }
   | { step: 'error'; fileName: string | null; message: string };
 
 export type UploadAction =
   | { type: 'choose'; fileName: string }
   | { type: 'previewed'; preview: UploadPreview }
   | { type: 'confirm' }
-  | { type: 'committed'; written: number }
+  | { type: 'committed'; preview: UploadPreview; written: number; spanEnd: string | null }
   | { type: 'failed'; message: string }
   | { type: 'reset' };
 
@@ -34,7 +35,7 @@ export function uploadReducer(state: UploadState, action: UploadAction): UploadS
     case 'confirm':
       return state.step === 'preview' ? { step: 'saving', fileName: state.fileName, preview: state.preview } : state;
     case 'committed':
-      return state.step === 'saving' ? { step: 'done', fileName: state.fileName, preview: state.preview, written: action.written } : state;
+      return state.step === 'saving' ? { step: 'done', fileName: state.fileName, preview: action.preview, written: action.written, spanEnd: action.spanEnd } : state;
     case 'failed':
       return { step: 'error', fileName: state.step === 'choose' ? null : state.fileName, message: action.message };
     case 'reset':
@@ -91,7 +92,7 @@ function rowsFor(preview: UploadPreview): UploadRow[] {
   const rows = [rowFor(preview, `New ${NOUNS[kind][1]}`, 'new', counts.newRows)];
   if (kind === 'calls') rows.push(rowFor(preview, 'New versions', 'new_version', counts.newVersions));
   rows.push(rowFor(preview, 'Already stored', 'duplicate', counts.duplicates));
-  if (kind !== 'calls') rows.push(rowFor(preview, 'Conflicts', 'conflict', counts.conflicts));
+  rows.push(rowFor(preview, 'Conflicts', 'conflict', counts.conflicts));
   rows.push(rowFor(preview, 'Bad rows', 'bad', counts.bad));
   return rows;
 }
@@ -99,7 +100,7 @@ function rowsFor(preview: UploadPreview): UploadRow[] {
 function badReasonsFor(preview: UploadPreview): string[] {
   return Object.entries(preview.badByReason)
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-    .map(([reason, n]) => `${reason}: ${formatCount(n)}`);
+    .map(([reason, n]) => `${reason.replace(/_/g, ' ')}: ${formatCount(n)}`);
 }
 
 function emptyMessageFor(preview: UploadPreview): string {
@@ -107,6 +108,18 @@ function emptyMessageFor(preview: UploadPreview): string {
   if (rowsRead === 0) return 'This file has no rows.';
   if (duplicates === rowsRead) return 'Nothing to add: every row is already stored.';
   return 'Nothing to add: no row in this file can be stored.';
+}
+
+/** What the commit did, from its own counts. The date is said only when the server sent one. */
+function doneText(preview: UploadPreview, spanEnd: string | null): string {
+  const { newRows, newVersions } = preview.counts;
+  const noun = NOUNS[preview.kind];
+  const parts: string[] = [];
+  if (newRows > 0) parts.push(formatCount(newRows, [`new ${noun[0]}`, `new ${noun[1]}`]));
+  if (newVersions > 0) parts.push(formatCount(newVersions, ['new version of a call already stored', 'new versions of calls already stored']));
+  if (parts.length === 0) return 'Nothing was added.';
+  const added = `Added ${parts.join(' and ')}.`;
+  return spanEnd === null ? added : `${added} The data now runs to ${formatLongDate(spanEnd)}.`;
 }
 
 /** What to draw for this state. `seeNewDataHref` is defaultsHref of the current page, passed in. */
@@ -138,7 +151,7 @@ export function uploadModel(state: UploadState, seeNewDataHref: string): UploadV
     hints: preview.hints,
     badReasons: badReasonsFor(preview),
   };
-  if (state.step === 'done') return { ...shown, done: `Added ${formatCount(state.written, [`new ${noun[0]}`, `new ${noun[1]}`])} to the database.` };
+  if (state.step === 'done') return { ...shown, done: doneText(preview, state.spanEnd) };
   if (state.step === 'saving') return { ...shown, busy: 'Saving...' };
   if (addable === 0) return { ...shown, emptyMessage: emptyMessageFor(preview) };
   return { ...shown, canConfirm: true, confirmLabel: `Add ${formatCount(addable, noun)}` };

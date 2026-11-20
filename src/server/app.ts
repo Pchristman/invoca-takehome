@@ -28,6 +28,16 @@ export interface AppOptions {
   uploads?: UploadService;
   /** Builds the takeaway service for the store an upload produced. Omitted: the service stays as it was. */
   rebuildAi?: (store: CallStore) => TakeawayService;
+  /** Host names (no port) the upload routes accept besides localhost, 127.0.0.1 and [::1]: the address the server was told to bind. */
+  allowedHosts?: string[];
+}
+
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+
+/** The host name in a Host header, lower case, without the port; IPv6 keeps its brackets. */
+function hostName(host: string): string {
+  const name = host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.split(':')[0]!;
+  return name.toLowerCase();
 }
 
 /** What each view needs from the URL and how to build it. The view routes (and the takeaway route) all read this one table. */
@@ -92,6 +102,28 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
     const site = c.req.header('Sec-Fetch-Site');
     if (site === undefined || site === 'same-origin' || site === 'none') return null;
     return errorResponse(c, { code: 'forbidden', message: 'Cross-site requests are not allowed.' });
+  };
+
+  /**
+   * For the upload routes, on top of crossSite: a DNS-rebinding page is "same-origin" with 127.0.0.1 and a
+   * multipart POST needs no CORS check, so the Host must be one of ours and an Origin, when sent, must match the Host.
+   * A missing Host (the in-process tests; every real HTTP/1.1 client sends one) passes.
+   */
+  const allowedHosts = [...LOCAL_HOSTS, ...(options.allowedHosts ?? []).map((h) => h.toLowerCase())];
+  const uploadGuard = (c: Context): Response | null => {
+    const refused = crossSite(c);
+    if (refused) return refused;
+    const host = c.req.header('Host');
+    const origin = c.req.header('Origin');
+    let ok = host === undefined || allowedHosts.includes(hostName(host));
+    if (ok && origin !== undefined) {
+      try {
+        ok = host !== undefined && new URL(origin).host.toLowerCase() === host.toLowerCase();
+      } catch {
+        ok = false;
+      }
+    }
+    return ok ? null : errorResponse(c, { code: 'forbidden', message: 'Cross-site requests are not allowed.' });
   };
 
   /** Parse the query the way `name`'s view does; the caller gets the parsed query or the error response to return. */
@@ -222,15 +254,27 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
 
   mountUploadRoutes(app, {
     uploads: options.uploads,
-    crossSite,
+    crossSite: uploadGuard,
     meta: metaOf,
-    adopt: (commit) => {
-      if (commit.store !== null) {
-        current.store = commit.store;
-        current.span = dataSpan(commit.store.calls);
-        if (options.rebuildAi) current.ai = options.rebuildAi(commit.store);
+    adopt: (store) => {
+      // Build everything first, then assign all three together: a failure leaves nothing half swapped.
+      // If the AI service cannot be rebuilt the rows are already committed, so the new data is adopted with AI
+      // off (template text only). The old service is never kept: it holds the old data's names and snapshot.
+      let ai = current.ai;
+      let warning: string | undefined;
+      if (options.rebuildAi) {
+        try {
+          ai = options.rebuildAi(store);
+        } catch {
+          console.error('The AI service could not be rebuilt after an upload; AI is off until the server restarts.');
+          ai = offService();
+          warning = 'The rows were saved, but AI could not be set up for the new data, so AI is off until the server restarts.';
+        }
       }
-      return metaOf();
+      current.store = store;
+      current.span = dataSpan(store.calls);
+      current.ai = ai;
+      return { meta: metaOf(), warning };
     },
   });
 

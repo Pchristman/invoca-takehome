@@ -56,6 +56,28 @@ describe('planReferenceUpload: campaigns', () => {
     expect(p.kind === 'campaigns' && p.campaigns.map((c) => c.dailyBudgetUsd)).toEqual([75]);
   });
 
+  it('rows that differ from the stored campaign are each compared with the stored one', () => {
+    const p = plan(['cmp_a,Alpha,social,120', 'cmp_a,Alpha,social,130']);
+    expect(p.preview.counts).toEqual(counts({ rowsRead: 2, conflicts: 2 }));
+    expect(p.preview.examples.conflict.map((e) => e.note)).toEqual([
+      'budget is 100 in the database, 120 in this file',
+      'budget is 100 in the database, 130 in this file',
+    ]);
+  });
+
+  it('a conflict inside the file names the first row own value', () => {
+    const p = plan(['cmp_c,Gamma,paid_search,75', 'cmp_c,Gamma,paid_search,80']);
+    expect(p.preview.examples.conflict[0]!.note).toBe('differs from row 1 in this file: budget is 75 in row 1, 80 in this row');
+  });
+
+  it('a very long cell is shortened in the bad note and in a quoted value', () => {
+    const long = 'q'.repeat(5000);
+    const bad = plan([`cmp_x,X,social,${long}`]);
+    expect(bad.preview.examples.bad[0]!.note.length).toBeLessThanOrEqual(103);
+    const conflict = plan([`cmp_a,${long},social,100`]);
+    expect(conflict.preview.examples.conflict[0]!.note.length).toBeLessThan(200);
+  });
+
   it('bad rows are reported by reason and never planned', () => {
     const p = plan([',NoId,social,10', 'cmp_x,X,social,abc', 'cmp_y,Y,social,-5', 'cmp_z,Z,carrier_pigeon,10']);
     expect(p.preview.counts).toEqual(counts({ rowsRead: 4, bad: 4 }));

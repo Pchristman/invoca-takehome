@@ -3,6 +3,8 @@ import { openExistingDatabase } from './database';
 
 /** How the server reaches the database it was started with. */
 export interface DatabaseHandle {
+  /** The file behind the handle, when there is one; lets a caller keep it out of a message. */
+  readonly location?: string;
   /** Run `fn` with an open connection. The connection is not kept past a file handle's call. */
   use<T>(fn: (db: DatabaseSync) => T): T;
   /** Release whatever is held open. Safe to call twice. */
@@ -15,6 +17,7 @@ export interface DatabaseHandle {
  */
 export function createFileHandle(path: string): DatabaseHandle {
   return {
+    location: path,
     use: (fn) => {
       const db = openExistingDatabase(path);
       try {

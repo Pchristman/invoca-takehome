@@ -505,3 +505,29 @@ describe('takeaway service', () => {
     expect(service.status()).toEqual({ status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 });
   });
 });
+
+describe('a service rebuilt for new data shares the spend ledger', () => {
+  const known = { campaigns: ['Alpha'], offices: ['Office A'], channels: CHANNELS };
+
+  it('counts the old service\'s in-flight reservation, then its logged cost', async () => {
+    const a = sheet(1);
+    const model = new FakeModel(textReply(GOOD));
+    let open!: () => void;
+    model.gate = new Promise<void>((resolve) => { open = resolve; });
+    const old = make(model, { limitUsd: worst(a) / 1e9 }); // room for exactly one worst-case call
+    const running = old.takeaway(a, TEMPLATE);
+    const rebuilt = old.withData(known, 'snap2');
+
+    expect((await rebuilt.takeaway(sheet(2), TEMPLATE)).reason).toBe('budget_reached');
+    expect(model.calls).toBe(1);
+
+    open();
+    await running;
+    expect(old.status().spendUsd).toBeGreaterThan(0);
+    expect(rebuilt.status().spendUsd).toBe(old.status().spendUsd);
+  });
+
+  it('the off service rebuilds to itself', () => {
+    expect(offService().withData(known, 'x').status().status).toBe('off');
+  });
+});

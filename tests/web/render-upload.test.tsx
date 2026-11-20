@@ -5,6 +5,8 @@ import { Header } from '../../src/web/components/Header';
 import { UploadPanelView } from '../../src/web/components/UploadPanel';
 import { INITIAL_UPLOAD } from '../../src/web/models/uploadModel';
 import type { UploadState } from '../../src/web/models/uploadModel';
+import { shouldCloseUpload } from '../../src/web/models/escapeKey';
+import { EmptyScreen } from '../../src/web/App';
 import { defaultsHref, parseUrlState, printHref } from '../../src/web/urlState';
 import { serverFixture } from '../server/helpers';
 import { metaFor } from './fixtures';
@@ -21,7 +23,7 @@ function withExamples() {
   const examples = noExamples();
   examples.new = [{ row: 3, id: 'c_77', note: 'new call' }];
   examples.bad = [{ row: 9, id: 'c_99', note: 'unknown campaign' }];
-  return previewOf('calls', { newRows: 40, duplicates: 2, bad: 3 }, { examples, hints: ['Upload the campaigns first.'], badByReason: { 'unknown campaign': 3 } });
+  return previewOf('calls', { newRows: 40, duplicates: 2, bad: 3 }, { examples, hints: ['Upload the campaigns first.'], badByReason: { unknown_campaign: 3 } });
 }
 
 describe('UploadPanel', () => {
@@ -56,8 +58,9 @@ describe('UploadPanel', () => {
   it('done shows the added text and a plain link that keeps view and dev only', () => {
     const state = parseUrlState('?view=campaigns&dev&start=2026-09-01&end=2026-09-07&campaign=c1');
     const href = defaultsHref(state);
-    const html = panel({ step: 'done', fileName: 'f.csv', preview: withExamples(), written: 40 }, href);
-    expect(html).toContain('Added 40 new calls to the database.');
+    const html = panel({ step: 'done', fileName: 'f.csv', preview: previewOf('calls', { newRows: 40 }), written: 40, spanEnd: null }, href);
+    expect(html).toContain('Added 40 new calls.');
+    expect(html).toContain('Choose another file');
     const match = /<a [^>]*href="([^"]*)"/.exec(html);
     expect(match).not.toBeNull();
     const linked = match![1]!.replace(/&amp;/g, '&');
@@ -66,6 +69,11 @@ describe('UploadPanel', () => {
     expect(parseUrlState(linked.slice(linked.indexOf('?'))).view).toBe('campaigns');
     expect(linked).not.toContain('start');
     expect(linked).not.toContain('campaign=');
+  });
+
+  it('disables Close while saving, not otherwise', () => {
+    expect(panel({ step: 'saving', fileName: 'f.csv', preview: withExamples() })).toMatch(/<button[^>]*disabled=""[^>]*>Close</);
+    expect(panel({ step: 'preview', fileName: 'f.csv', preview: withExamples() })).not.toMatch(/<button[^>]*disabled/);
   });
 
   it('error shows the message in an alert', () => {
@@ -108,5 +116,26 @@ describe('Header upload button', () => {
   it('marks the button pressed only while the panel is open', () => {
     expect(render(false, false)).toContain('aria-pressed="false"');
     expect(render(false, true)).toContain('aria-pressed="true"');
+  });
+});
+
+describe('Escape on the upload panel', () => {
+  const key = (over: Partial<Parameters<typeof shouldCloseUpload>[0]> = {}) => shouldCloseUpload({ key: 'Escape', defaultPrevented: false, targetTag: 'BODY', step: 'preview', ...over });
+
+  it('closes on Escape', () => expect(key()).toBe(true));
+  it('ignores other keys, handled events, and a select', () => {
+    expect(key({ key: 'a' })).toBe(false);
+    expect(key({ defaultPrevented: true })).toBe(false);
+    expect(key({ targetTag: 'SELECT' })).toBe(false);
+  });
+  it('does not close while saving', () => expect(key({ step: 'saving' })).toBe(false));
+});
+
+describe('the empty screen can upload', () => {
+  it('shows the upload button when it is given a way to reload', () => {
+    expect(renderToStaticMarkup(<EmptyScreen notes={['Upload campaigns first.']} resetHref="/" />)).toContain('Upload data');
+  });
+  it('shows none inside the ready shell, which has the header button', () => {
+    expect(renderToStaticMarkup(<EmptyScreen notes={[]} />)).not.toContain('Upload data');
   });
 });

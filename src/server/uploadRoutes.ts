@@ -1,6 +1,6 @@
 import { bodyLimit } from 'hono/body-limit';
 import type { Context, Hono } from 'hono';
-import type { UploadCommit } from '../db/upload/commit';
+import type { CallStore } from '../core/types';
 import type { UploadService } from '../db/upload/service';
 import { UploadFailed, UploadRejected } from '../db/upload/types';
 import { statusFor } from './api';
@@ -8,19 +8,23 @@ import type { ApiError, Meta, UploadCommitResponse, UploadPreviewResponse } from
 import { UPLOAD_MAX_BYTES } from './config';
 
 const FILE_NAME_MAX_CHARS = 100;
+/** The multipart envelope (boundaries, headers, other fields) rides on top of the file; the file itself is checked after parsing. */
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+const TOO_LARGE = `The file is larger than ${UPLOAD_MAX_BYTES / (1024 * 1024)} MB.`;
 
 export interface UploadRoutesDeps {
   /** Absent when the server has no database to write to. */
   uploads: UploadService | undefined;
   /** The cross-site rule the paid routes use: a refusal to return, or null to go on. */
   crossSite: (c: Context) => Response | null;
-  /** Called with a commit that wrote rows: the app swaps in the new store, then the fresh /api/meta body comes back. */
-  adopt: (commit: UploadCommit) => Meta;
+  /** Called with the store a commit that wrote rows produced: the app swaps it in, then the fresh /api/meta body comes back (with a warning if something after the write failed). */
+  adopt: (store: CallStore) => { meta: Meta; warning?: string };
   /** The current /api/meta body. */
   meta: () => Meta;
 }
 
 const fail = (c: Context, error: ApiError) => c.json({ error }, statusFor(error.code));
+const tooLarge = (c: Context) => fail(c, { code: 'too_large', message: TOO_LARGE, field: 'file' });
 const badFile = (c: Context, message: string) => fail(c, { code: 'bad_upload', message, field: 'file' });
 
 /** The one file in the form field `file`, as its (shortened) name and its text; or the error response to return. */
@@ -36,6 +40,7 @@ async function readFileField(c: Context): Promise<{ fileName: string; text: stri
   if (files.length === 0) return badFile(c, 'No file was sent. Choose one CSV file.');
   const file = files[0];
   if (files.length > 1 || !(file instanceof File)) return badFile(c, 'Send exactly one file.');
+  if (file.size > UPLOAD_MAX_BYTES) return tooLarge(c);
   // The name is text from the user: cut, shown escaped by the page, and never used as a path.
   return { fileName: file.name.slice(0, FILE_NAME_MAX_CHARS), text: await file.text() };
 }
@@ -46,7 +51,7 @@ export function mountUploadRoutes(app: Hono, deps: UploadRoutesDeps): void {
     app.post(
       path,
       async (c, next) => deps.crossSite(c) ?? next(),
-      bodyLimit({ maxSize: UPLOAD_MAX_BYTES, onError: (c) => fail(c, { code: 'too_large', message: 'The file is larger than 10 MB.', field: 'file' }) }),
+      bodyLimit({ maxSize: UPLOAD_MAX_BYTES + MULTIPART_OVERHEAD_BYTES, onError: (c) => tooLarge(c) }),
       async (c) => {
         const { uploads } = deps;
         if (!uploads) return fail(c, { code: 'upload_unavailable', message: 'This server has no database to store uploads in.' });
@@ -65,7 +70,7 @@ export function mountUploadRoutes(app: Hono, deps: UploadRoutesDeps): void {
   route('/api/upload/preview', (uploads, name, text): UploadPreviewResponse => ({ preview: uploads.preview(name, text) }));
   route('/api/upload/commit', (uploads, name, text): UploadCommitResponse => {
     const result = uploads.commit(name, text);
-    const meta = result.store === null ? deps.meta() : deps.adopt(result);
-    return { preview: result.preview, written: result.written, meta };
+    const { meta, warning } = result.store === null ? { meta: deps.meta(), warning: undefined } : deps.adopt(result.store);
+    return { preview: result.preview, written: result.written, meta, ...(warning ? { warning } : {}) };
   });
 }

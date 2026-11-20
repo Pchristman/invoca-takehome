@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { DataNotesResponse, Meta, TakeawayResponse } from '../server/api';
 import type { ViewName } from '../core/views/facts';
 import type { DateRange } from '../core/ranges';
@@ -47,7 +48,7 @@ export function App() {
 
   return (
     <div className="page">
-      {screen.screen === 'empty' && <EmptyScreen notes={screen.notes} />}
+      {screen.screen === 'empty' && <EmptyScreen notes={screen.notes} resetHref={resetHref} />}
       {screen.screen === 'ready' && !state.print && <ReadyShell state={state} meta={screen.meta} resetHref={resetHref} />}
       {screen.screen === 'ready' && state.print && <PrintShell state={state} meta={screen.meta} resetHref={resetHref} />}
       {(screen.screen === 'loading' || screen.screen === 'error') && (
@@ -61,10 +62,20 @@ export function App() {
 }
 
 /** The export has no calls at all. */
-export function EmptyScreen({ notes }: { notes: string[] }) {
+export function EmptyScreen({ notes, resetHref, reload = reloadTo }: { notes: string[]; resetHref?: string; reload?: (href: string) => void }) {
+  // Only the top-level empty screen has no header, so only it gets its own upload control.
+  const upload = useUploadPanel(resetHref ?? '/', reload);
   return (
     <section className="notice" role="status">
       <h1>Inbound call performance</h1>
+      {resetHref !== undefined && (
+        <>
+          <button id={UPLOAD_BUTTON_ID} type="button" className="button" aria-pressed={upload.open} onClick={upload.toggle}>
+            Upload data
+          </button>
+          {upload.panel}
+        </>
+      )}
       <p>This export has no calls</p>
       {notes.map((note) => (
         <p key={note}>{note}</p>
@@ -73,10 +84,51 @@ export function EmptyScreen({ notes }: { notes: string[] }) {
   );
 }
 
+/** A full page load, so every number on the page is fetched fresh. */
+function reloadTo(href: string): void {
+  window.location.assign(href);
+}
+
+/**
+ * The upload panel's open state. Closing after a write reloads the default view (the page still shows the old numbers);
+ * a write that finishes after the panel was closed reloads when it finishes.
+ */
+function useUploadPanel(resetHref: string, reload: (href: string) => void): { open: boolean; toggle(): void; panel: ReactNode } {
+  const [open, setOpen] = useState(false); // not in the URL: a half-chosen file is not a screen to link to
+  const openRef = useRef(false);
+  const wrote = useRef(false);
+  const close = () => {
+    openRef.current = false;
+    setOpen(false);
+    if (wrote.current) reload(resetHref);
+    else document.getElementById(UPLOAD_BUTTON_ID)?.focus();
+  };
+  const onWritten = (written: number) => {
+    if (written === 0) return;
+    wrote.current = true;
+    if (!openRef.current) reload(resetHref);
+  };
+  const toggle = () => {
+    if (openRef.current) return close();
+    openRef.current = true;
+    setOpen(true);
+  };
+  const panel = (
+    <RevealPresence>
+      {open && (
+        <Reveal key="upload" kind="panel" id="upload">
+          <UploadPanel resetHref={resetHref} onClose={close} onWritten={onWritten} />
+        </Reveal>
+      )}
+    </RevealPresence>
+  );
+  return { open, toggle, panel };
+}
+
 function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; resetHref: string }) {
   const { navigate } = useUrlState();
   const [dataNotesToggled, setDataNotesToggled] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false); // not in the URL: a half-chosen file is not a screen to link to
+  const upload = useUploadPanel(resetHref, reloadTo);
   const dataNotesOpen = state.dev && dataNotesToggled; // without ?dev there is no panel, whatever the state says
   const answering = state.answer !== null; // the answer page makes its own request, not the view's
   const view = useApi<unknown>(answering ? null : `/api/${state.view}`, apiParams(state, state.view));
@@ -87,10 +139,6 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   if (view.state?.status === 'ready') lastReady.current = { key: view.state.key, data: view.state.data };
   else if (view.state?.status === 'failed' || view.state === null) lastReady.current = null;
   const shown = displayState(lastReady.current, view.state);
-  const closeUpload = () => {
-    setUploadOpen(false);
-    document.getElementById(UPLOAD_BUTTON_ID)?.focus();
-  };
   const closeDataNotes = () => {
     setDataNotesToggled(false);
     document.getElementById(DATA_NOTES_BUTTON_ID)?.focus();
@@ -121,15 +169,11 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
         dataNotesOpen={dataNotesOpen}
         onToggleDataNotes={() => setDataNotesToggled((open) => !open)}
         printLink={printHref(state)}
-        uploadOpen={uploadOpen}
-        onToggleUpload={() => setUploadOpen((open) => !open)}
+        uploadOpen={upload.open}
+        onToggleUpload={upload.toggle}
       />
+      {upload.panel}
       <RevealPresence>
-        {uploadOpen && (
-          <Reveal key="upload" kind="panel" id="upload">
-            <UploadPanel resetHref={resetHref} onClose={closeUpload} />
-          </Reveal>
-        )}
         {dataNotesOpen && (
           <Reveal key="data-notes" kind="panel" id="data-notes">
             <DataNotes resetHref={resetHref} onClose={closeDataNotes} />

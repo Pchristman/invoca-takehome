@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readTable, type Table } from '../../core/csv';
 import { LoadError } from '../../core/errors';
-import { UPLOAD_COLUMNS, UploadRejected, type UploadKind } from './types';
+import { shorten, UPLOAD_COLUMNS, UploadRejected, type UploadKind } from './types';
 
 export interface ParsedUpload {
   kind: UploadKind;
@@ -12,9 +12,6 @@ export interface ParsedUpload {
 }
 
 const KINDS: UploadKind[] = ['calls', 'campaigns', 'locations'];
-
-/** Header cells come from the file, so cut them before they go into a message. */
-const shorten = (text: string) => (text.length > 40 ? `${text.slice(0, 40)}...` : text);
 
 function readOrReject(text: string, fileName: string, required: readonly string[]): Table {
   try {
@@ -43,7 +40,7 @@ export function readUpload(fileName: string, text: string): ParsedUpload {
   }
 
   if (matches.length === 0) {
-    const found = first.header.map(shorten).join(', ');
+    const found = first.header.map((cell) => shorten(cell, 40)).join(', ');
     let message =
       `${fileName} is not a calls, campaigns or locations file. It has the columns: ${found}. ` +
       KINDS.map((kind) => `A ${kind} file needs: ${UPLOAD_COLUMNS[kind].join(', ')}.`).join(' ');

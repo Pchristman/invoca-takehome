@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { seedFromTexts } from '../../../src/db/prepare';
 import { readExportTexts } from '../../../src/node/readDataDir';
-import { planCallsUpload } from '../../../src/db/upload/planCalls';
 import { planUpload } from '../../../src/db/upload/plan';
 import { readUpload } from '../../../src/db/upload/detect';
 import { CALL_COLUMNS } from '../../../src/core/validate';
+import { cleanExport } from '../../../src/core/clean';
+import { loadExport } from '../../../src/core/loadExport';
 import { callLine, campaignLine, count, csvTexts, memoryDb } from '../helpers';
 import { csvOf, seeded } from './helpers';
 
@@ -14,14 +15,15 @@ const STORED_TIME = '2026-09-01T16:02:00Z'; // callLine's default updated_at
 const database = () =>
   seeded({ calls: [callLine({ call_id: 'c_1' }), callLine({ call_id: 'c_2', updated_at: '2026-09-01T17:00:00Z' })] });
 const upload = (lines: string[]) => readUpload('calls.csv', csvOf(HEADER, lines));
-const plan = (db: ReturnType<typeof database>, lines: string[]) => planCallsUpload(db, upload(lines));
-const calls = (p: ReturnType<typeof planCallsUpload>) => (p.kind === 'calls' ? p.calls : []);
+const plan = (db: ReturnType<typeof database>, lines: string[]) => planUpload(db, upload(lines));
+const calls = (p: ReturnType<typeof planUpload>) => (p.kind === 'calls' ? p.calls : []);
 
 const HINT_CAMPAIGN = (n: number) => `${n} rows name a campaign that is not in the database. Upload campaigns.csv first, then upload this file again.`;
 const HINT_OFFICE = (n: number) => `${n} rows name an office that is not in the database. Upload locations.csv first, then upload this file again.`;
-const HINT_DIFFERENT = (n: number) => `${n} rows match a stored call and time but have different values. They were skipped.`;
+const HINT_CONFLICT = (n: number) => `${n} rows have the same call and time as a stored or earlier row but different values. They are not added.`;
+const HINT_NEWER_BAD = (n: number) => `${n} bad rows are newer versions of calls already in the database; those calls keep their older, valid version.`;
 
-describe('planCallsUpload', () => {
+describe('planUpload on calls', () => {
   test('the same file again: every row is a duplicate', () => {
     const p = plan(database(), [callLine({ call_id: 'c_1' }), callLine({ call_id: 'c_2', updated_at: '2026-09-01T17:00:00Z' })]);
     expect(p.preview.counts).toEqual({ rowsRead: 2, newRows: 0, newVersions: 0, duplicates: 2, conflicts: 0, bad: 0 });
@@ -60,12 +62,67 @@ describe('planCallsUpload', () => {
     expect(p.preview.counts).toMatchObject({ newRows: 2, newVersions: 0, duplicates: 0 });
   });
 
-  test('the same call_id and updated_at with different values is a duplicate, skipped, and hinted', () => {
-    const p = plan(database(), [callLine({ call_id: 'c_1', answered: 'true', outcome: 'booked' })]);
-    expect(p.preview.counts).toMatchObject({ duplicates: 1, newRows: 0, newVersions: 0 });
+  test('the same call_id and updated_at as a stored call with different values is a conflict, not planned, and hinted', () => {
+    const lines = [callLine({ call_id: 'c_1', answered: 'true', outcome: 'booked' })];
+    const p = plan(database(), lines);
+    expect(p.preview.counts).toEqual({ rowsRead: 1, newRows: 0, newVersions: 0, duplicates: 0, conflicts: 1, bad: 0 });
     expect(calls(p)).toEqual([]);
-    expect(p.preview.examples.duplicate[0]!.note).toBe('already stored, but its other values differ');
-    expect(planUpload(database(), upload([callLine({ call_id: 'c_1', answered: 'true', outcome: 'booked' })])).preview.hints).toContain(HINT_DIFFERENT(1));
+    expect(p.preview.examples.conflict).toEqual([{ row: 1, id: 'c_1', note: 'differs from the stored call with the same time' }]);
+    expect(p.preview.hints).toContain(HINT_CONFLICT(1));
+  });
+
+  test('a tie inside the file with different values: the first row is planned, the later one a conflict naming the fields', () => {
+    const p = plan(database(), [
+      callLine({ call_id: 'c_new', outcome: 'missed' }),
+      callLine({ call_id: 'c_new', answered: 'true', outcome: 'booked' }),
+    ]);
+    expect(p.preview.counts).toEqual({ rowsRead: 2, newRows: 1, newVersions: 0, duplicates: 0, conflicts: 1, bad: 0 });
+    expect(calls(p).map((c) => [c.rowNumber, c.outcome])).toEqual([[1, 'missed']]);
+    expect(p.preview.examples.conflict[0]).toEqual({
+      row: 2,
+      id: 'c_new',
+      note: 'differs from row 1 in this file: answered is "false" in row 1, "true" in this row; outcome is "missed" in row 1, "booked" in this row',
+    });
+    expect(p.preview.hints).toContain(HINT_CONFLICT(1));
+  });
+
+  test('upload and CSV paths agree on the number of calls for an in-file tie; the upload keeps the first row', () => {
+    const lines = [callLine({ call_id: 'c_t', outcome: 'missed' }), callLine({ call_id: 'c_t', answered: 'true', outcome: 'booked' })];
+    const csv = cleanExport(loadExport(csvTexts({ calls: lines })));
+    const p = plan(seeded(), lines);
+    expect(csv.calls).toHaveLength(1);
+    expect(calls(p)).toHaveLength(1);
+    expect(p.preview.counts.conflicts).toBe(1);
+    expect(calls(p)[0]!.rowNumber).toBe(1);
+  });
+
+  test('an identical repeat after a tie row is still a duplicate of the first row', () => {
+    const p = plan(database(), [callLine({ call_id: 'c_new' }), callLine({ call_id: 'c_new', outcome: 'voicemail' }), callLine({ call_id: 'c_new' })]);
+    expect(p.preview.counts).toMatchObject({ newRows: 1, conflicts: 1, duplicates: 1 });
+  });
+
+  test('a bad row that is a newer version of a stored call is hinted, never silent', () => {
+    const p = plan(database(), [callLine({ call_id: 'c_1', updated_at: '2026-09-02T00:00:00Z', outcome: 'weird' })]);
+    expect(p.preview.counts).toMatchObject({ bad: 1, newVersions: 0 });
+    expect(p.preview.hints).toContain(HINT_NEWER_BAD(1));
+  });
+
+  test('a bad row newer than a call planned earlier in the file is hinted; an older one or an unknown call is not', () => {
+    const p = plan(database(), [
+      callLine({ call_id: 'n1' }),
+      callLine({ call_id: 'n1', updated_at: '2026-09-02T00:00:00Z', outcome: 'weird' }),
+      callLine({ call_id: 'c_1', updated_at: '2026-09-01T08:00:00Z', outcome: 'weird' }),
+      callLine({ call_id: 'zzz', updated_at: '2026-09-02T00:00:00Z', outcome: 'weird' }),
+    ]);
+    expect(p.preview.counts.bad).toBe(3);
+    expect(p.preview.hints).toContain(HINT_NEWER_BAD(1));
+  });
+
+  test('a bad row note is shortened to 100 characters', () => {
+    const p = plan(database(), [callLine({ call_id: 'x', outcome: 'z'.repeat(5000) })]);
+    const note = p.preview.examples.bad[0]!.note;
+    expect(note.length).toBeLessThanOrEqual(103);
+    expect(note.endsWith('...')).toBe(true);
   });
 
   test('a row with no usable updated_at is a duplicate only when the whole row is identical', () => {
@@ -173,7 +230,7 @@ describe('planCallsUpload', () => {
     const db = memoryDb();
     const texts = readExportTexts(dir);
     seedFromTexts(db, texts);
-    const p = planCallsUpload(db, readUpload('calls.csv', texts.calls));
+    const p = planUpload(db, readUpload('calls.csv', texts.calls));
     expect(p.preview.counts).toEqual({ rowsRead: rows, newRows: 0, newVersions: 0, duplicates: rows, conflicts: 0, bad: 0 });
   });
 

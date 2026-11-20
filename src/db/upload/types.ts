@@ -51,6 +51,12 @@ export interface UploadExample {
 
 export const EXAMPLES_PER_CLASS = 5;
 
+/** Cut text to `max` characters plus "...", so a huge cell cannot flood a preview. */
+export const shorten = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}...` : text);
+
+/** The longest a note or a quoted cell may be in a preview. */
+export const NOTE_MAX = 100;
+
 export interface UploadCounts {
   rowsRead: number;
   newRows: number;
