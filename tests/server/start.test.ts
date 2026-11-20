@@ -2,7 +2,7 @@ import { copyFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LoadError } from '../../src/core/errors';
-import { ConfigError, explainListenError, parseHost, parsePort } from '../../src/server/config';
+import { ConfigError, explainListenError, isLoopbackHost, nonLoopbackWarning, parseHost, parsePort } from '../../src/server/config';
 import { start } from '../../src/server/start';
 import type { RunningServer } from '../../src/server/start';
 import { loadDotEnv } from '../../src/node/env';
@@ -185,6 +185,41 @@ describe('HOST', () => {
     const err = Object.assign(new Error('x'), { code: 'EADDRNOTAVAIL' }) as NodeJS.ErrnoException;
     expect(explainListenError(err, 3000, '10.1.2.3').message).toContain('HOST "10.1.2.3"');
     expect(explainListenError(err, 3000).message).toContain('Port 3000 cannot be used');
+  });
+});
+
+describe('non-loopback warning, IPv6 url and listen errors', () => {
+  it('isLoopbackHost: 127.0.0.0/8 and ::1 only', () => {
+    for (const h of ['127.0.0.1', '127.1.2.3', '::1', '[::1]']) expect(isLoopbackHost(h)).toBe(true);
+    for (const h of ['0.0.0.0', '::', '192.168.1.5', '10.0.0.2', 'my-machine']) expect(isLoopbackHost(h)).toBe(false);
+  });
+
+  it('nonLoopbackWarning is empty for loopback and an explicit line otherwise', () => {
+    expect(nonLoopbackWarning('127.0.0.1')).toBe('');
+    expect(nonLoopbackWarning('192.168.1.5')).toBe(
+      'Listening on a non-loopback address (192.168.1.5): other devices on the network can reach this app.',
+    );
+  });
+
+  it('an IPv6 loopback host gets a bracketed url', async () => {
+    let server: RunningServer;
+    try {
+      server = await startServer(SHIPPED, 0, '::1');
+    } catch {
+      return; // no IPv6 on this machine
+    }
+    expect(server.url).toBe(`http://[::1]:${server.port}`);
+  });
+
+  it.each(['EAI_AGAIN', 'EAFNOSUPPORT'])('%s with a non-default host is a ConfigError naming HOST', (code) => {
+    const err = Object.assign(new Error('x'), { code }) as NodeJS.ErrnoException;
+    const result = explainListenError(err, 3000, 'nope.invalid');
+    expect(result).toBeInstanceOf(ConfigError);
+    expect(result.message).toContain('HOST "nope.invalid"');
+  });
+
+  it('the test environment clears an exported HOST, so the machine name cannot change a test', () => {
+    expect(process.env.HOST).toBe('');
   });
 });
 

@@ -34,7 +34,7 @@ export function explainListenError(error: NodeJS.ErrnoException, port: number, h
   if (error.code === 'EADDRINUSE') {
     return new ConfigError(`Port ${port} is already in use. Set PORT to a free port.`);
   }
-  if (host !== DEFAULT_HOST && (error.code === 'EADDRNOTAVAIL' || error.code === 'ENOTFOUND' || error.code === 'EINVAL')) {
+  if (host !== DEFAULT_HOST && ['EADDRNOTAVAIL', 'ENOTFOUND', 'EINVAL', 'EAI_AGAIN', 'EAFNOSUPPORT'].includes(error.code ?? '')) {
     return new ConfigError(
       `HOST "${shorten(host)}" is not an address this machine can listen on. Set HOST to 127.0.0.1, or 0.0.0.0 inside a container.`,
     );
@@ -43,4 +43,16 @@ export function explainListenError(error: NodeJS.ErrnoException, port: number, h
     return new ConfigError(`Port ${port} cannot be used (reserved or not permitted). Set PORT to another port.`);
   }
   return error;
+}
+
+/** True for 127.0.0.0/8 and ::1 (with or without brackets): the addresses only this machine can reach. */
+export function isLoopbackHost(host: string): boolean {
+  const text = host.replace(/^\[|\]$/g, '');
+  return text === '::1' || /^127\.\d+\.\d+\.\d+$/.test(text);
+}
+
+/** One line to print when the server really bound a non-loopback address; empty for loopback. */
+export function nonLoopbackWarning(boundHost: string): string {
+  if (isLoopbackHost(boundHost)) return '';
+  return `Listening on a non-loopback address (${boundHost}): other devices on the network can reach this app.`;
 }

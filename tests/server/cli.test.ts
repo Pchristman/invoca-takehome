@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
@@ -65,4 +65,21 @@ describe('cli', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('"xyz"');
   });
+
+  it('prints the non-loopback line when the bound address is not loopback, and not otherwise', async () => {
+    const run = (host: string) =>
+      new Promise<string>((done) => {
+        const child = spawn(process.execPath, ['--import', TSX, CLI], {
+          env: { ...process.env, DATA_DIR: SHIPPED, PORT: host === '0.0.0.0' ? '3971' : '3972', HOST: host },
+        });
+        let out = '';
+        child.stdout.on('data', (chunk) => {
+          out += chunk;
+          if (out.includes('Serving')) setTimeout(() => child.kill(), 300);
+        });
+        child.on('close', () => done(out));
+      });
+    expect(await run('0.0.0.0')).toContain('Listening on a non-loopback address (0.0.0.0)');
+    expect(await run('127.0.0.1')).not.toContain('non-loopback');
+  }, 60_000);
 });

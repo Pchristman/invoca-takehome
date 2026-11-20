@@ -1,7 +1,7 @@
 import { LoadError } from '../core/errors';
 import { dataSpan } from '../core/ranges';
 import { loadDotEnv } from '../node/env';
-import { ConfigError } from './config';
+import { ConfigError, nonLoopbackWarning } from './config';
 import { start } from './start';
 
 /** The `npm start` entry: print where it is serving, or one "Cannot start" line and exit 1. */
@@ -16,7 +16,7 @@ async function main(): Promise<void> {
     parts.push(`at ${server.url}`);
     let line = parts.join(', ');
     if (dataNotes.badRows > 0) line += `, ${dataNotes.badRows} rows skipped`;
-    console.log([line, ...dataNotes.notes].join('\n'));
+    console.log([line, nonLoopbackWarning(server.host), ...dataNotes.notes].filter(Boolean).join('\n'));
   } catch (error) {
     if (error instanceof LoadError || error instanceof ConfigError) {
       console.error(`Cannot start: ${error.message}`);

@@ -45,7 +45,8 @@ export async function start(options: StartOptions = {}): Promise<RunningServer> 
 
   const { address: host, port } = server.address() as AddressInfo;
   // A wildcard address is not a place a browser can go.
-  const urlHost = requestedHost === '0.0.0.0' || requestedHost === '::' ? 'localhost' : requestedHost;
+  const wildcard = requestedHost === '0.0.0.0' || requestedHost === '::';
+  const urlHost = wildcard ? 'localhost' : requestedHost.includes(':') && !requestedHost.startsWith('[') ? `[${requestedHost}]` : requestedHost;
   return {
     host,
     port,
