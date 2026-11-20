@@ -6,7 +6,7 @@
   (invoca.com): near-black evergreen chrome, brand green for primary actions, warm
   "sand" neutrals, near-black text with grey secondary text, white panels with a soft
   border, weight-500 headings with tight tracking, series colors green and indigo.
-  Their font (Saans) is commercial, so IBM Plex Sans stands in for it.
+  Their font (Saans) is commercial, so IBM Plex Sans stands in for it, paired with IBM Plex Mono for figures and labels.
   Invoca's brand green (#00b388) is too light for text or 3:1 marks on sand, so text-bearing
   accents use a deeper green and the true brand green stays on the dark chrome.
   Meaning is never carried by color alone (signs, words, badges, hatch).
@@ -55,7 +55,7 @@
   /* type */
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-heading: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-md: 1rem;

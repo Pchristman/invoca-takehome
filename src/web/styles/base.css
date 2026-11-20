@@ -300,11 +300,13 @@ button.button:not([aria-pressed]):not(:disabled):hover {
 }
 
 .tile-label {
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
 .tile-value {
+  font-family: var(--font-mono);
   margin: var(--space-1) 0 var(--space-2);
   font-size: var(--text-2xl);
   font-weight: 500;
@@ -314,6 +316,7 @@ button.button:not([aria-pressed]):not(:disabled):hover {
 }
 
 .tile-change {
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
@@ -516,6 +519,8 @@ th .badge {
 
 /* ---------- badges ---------- */
 .badge {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   display: inline-block;
   padding: 1px var(--space-2);
   font-size: var(--text-xs);
@@ -532,7 +537,7 @@ th .badge {
 
 .badge-best {
   color: var(--color-up);
-  background: var(--color-accent-soft);
+  background: var(--color-surface);
   border-color: var(--color-up);
 }
 
@@ -614,7 +619,7 @@ th .badge {
   padding: var(--space-3) var(--space-4);
   background: var(--color-panel);
   border: 1px solid var(--color-rule);
-  border-left: 4px solid var(--color-chrome-accent);
+  border-left: 4px solid var(--color-border);
   border-radius: var(--radius-sm) var(--radius) var(--radius) var(--radius-sm);
   font-size: var(--text-sm);
 }
@@ -764,7 +769,7 @@ th .badge {
   padding: var(--space-3) var(--space-4);
   background: var(--color-panel);
   border: 1px solid var(--color-rule);
-  border-left: 4px solid var(--color-accent);
+  border-left: 4px solid var(--color-border);
   border-radius: var(--radius-sm) var(--radius) var(--radius) var(--radius-sm);
 }
 
