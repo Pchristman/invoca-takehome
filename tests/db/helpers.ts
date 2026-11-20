@@ -52,3 +52,39 @@ export const count = (db: DatabaseSync, table: string): number =>
   (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
 
 export const noSource = { label: 'test', hashes: { calls: '', campaigns: '', locations: '' } };
+
+/** A small export that exercises every cleaning rule at once. Shared by the read and cleaned_calls tests. */
+export function messyTexts() {
+  const calls = [
+    // c_multi: three rows arriving out of order; the 10:30 one is the latest
+    callLine({ call_id: 'c_multi', updated_at: '2026-09-01T10:30:00Z', answered: 'true', outcome: 'booked', revenue_usd: '200' }),
+    callLine({ call_id: 'c_multi', updated_at: '2026-09-01T10:00:00Z', answered: 'true', outcome: '' }),
+    callLine({ call_id: 'c_multi', updated_at: '2026-09-01T10:10:00Z', answered: 'true', outcome: 'qualified_lead' }),
+    // c_tie: two rows share the latest updated_at; the later row in the file wins
+    callLine({ call_id: 'c_tie', updated_at: '2026-09-01T12:00:00Z', outcome: 'missed' }),
+    callLine({ call_id: 'c_tie', updated_at: '2026-09-01T12:00:00Z', answered: 'true', outcome: 'not_qualified' }),
+    // c_badlatest: a good older row, then a bad newer one: the call is bad
+    callLine({ call_id: 'c_badlatest', updated_at: '2026-09-01T10:00:00Z' }),
+    callLine({ call_id: 'c_badlatest', updated_at: '2026-09-01T11:00:00Z', location_id: 'loc_nope' }),
+    // no campaign, revenue on a call that did not book, a booked call with no revenue, a booked call with 0, a pending call
+    callLine({ call_id: 'c_unattr', campaign_id: '', tracking_number: '' }),
+    callLine({ call_id: 'c_revnb', answered: 'true', outcome: 'qualified_lead', revenue_usd: '40' }),
+    callLine({ call_id: 'c_bookempty', answered: 'true', outcome: 'booked', revenue_usd: '' }),
+    callLine({ call_id: 'c_bookzero', answered: 'true', outcome: 'booked', revenue_usd: '0' }),
+    callLine({ call_id: 'c_pending', answered: 'true', outcome: '', caller_number_hash: '' }),
+    // 02:00 UTC is the evening before in Phoenix (UTC-7) and Denver
+    callLine({ call_id: 'c_late', started_at: '2026-09-02T02:00:00Z', location_id: 'loc_a' }),
+    callLine({ call_id: 'c_denver', started_at: '2026-09-02T02:00:00Z', location_id: 'loc_b', campaign_id: 'cmp_b', marketing_channel: 'display' }),
+    // bad rows and unparseable dates
+    callLine({ call_id: 'c_unknownloc', location_id: 'loc_nope' }),
+    callLine({ call_id: 'c_badtime', started_at: 'not a time' }),
+    callLine({ call_id: 'c_baddates', ended_at: 'garbage', updated_at: 'garbage' }),
+  ];
+  return csvTexts({
+    calls,
+    campaigns: [
+      campaignLine('cmp_a', `O'Brien; DROP TABLE x -- "Café, Ltd"`, 'social', '100'),
+      campaignLine('cmp_b', 'Beta', 'display', '0'),
+    ],
+  });
+}
