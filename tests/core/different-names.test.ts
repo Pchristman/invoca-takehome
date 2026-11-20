@@ -156,6 +156,32 @@ describe('views on a different export', () => {
   });
 });
 
+describe('call-change alerts on a different export', () => {
+  // zz_c1 gets 25 calls in the seven days before the last seven and 60 in the last seven; one early call makes the data span reach back far enough.
+  const many = (prefix: string, day: string, n: number) =>
+    Array.from({ length: n }, (_, i) =>
+      row({ call_id: `${prefix}${i}`, caller_number_hash: `h${prefix}${i}`, started_at: `${day}T12:00:00Z`, outcome: 'booked', revenue_usd: '100' }),
+    );
+  const store = cleanExport(
+    loadFixture([...many('a', '2031-05-01', 1), ...many('b', '2031-05-08', 25), ...many('c', '2031-05-15', 60)], CAMPAIGNS, LOCATIONS),
+  );
+  const span = dataSpan(store.calls)!;
+  const resolved = resolveRange(span, { kind: 'preset', preset: 'last7' });
+  if (!resolved.ok) throw new Error(resolved.error.message);
+  const comparison = resolveComparison(span, resolved.range);
+  const previous = comparison.ok && comparison.comparison.available ? comparison.comparison.previous : undefined;
+
+  test('the jump is flagged and Overview lists it with the new name', () => {
+    const campaigns = buildCampaigns(store, resolved.range, previous);
+    expect(campaigns.rows.find((r) => r.campaignId === 'zz_c1')?.alert?.direction).toBe('jump');
+    const overview = buildOverview(store, resolved.range, previous);
+    const alert = overview.topActions.find((t) => t.action.kind === 'review_call_changes');
+    expect(alert?.action.text).toContain('Quokka Promo');
+    expectAllFinite(campaigns);
+    expectAllFinite(overview);
+  });
+});
+
 describe('the server on a different export', () => {
   const days = ['2031-05-05', '2031-05-07', '2031-05-12', '2031-05-18'];
   const store = cleanExport(

@@ -220,3 +220,20 @@ describe('callbacks CSV', () => {
     expect(cents).toBe(Math.round(view.callbacks.totalValueUsd * 100));
   });
 });
+
+describe('GET /api/campaigns alerts', () => {
+  it('last7 is checked and flags nothing when each campaign has 7 calls against 7', async () => {
+    const view = body((await get(app, '/api/campaigns?range=last7')).json);
+    expect(view.alerts).toEqual({ checked: true, reason: null, flagged: 0, z: 3, minCalls: 20 });
+    for (const r of view.rows) {
+      expect(r.previousCalls).toBe(7);
+      expect(r.alert).toBeNull();
+    }
+  });
+
+  it('all has no previous period, so it is not checked', async () => {
+    const view = body((await get(app, '/api/campaigns?range=all')).json);
+    expect(view.alerts.checked).toBe(false);
+    expect(view.alerts.reason.startsWith('No full previous period')).toBe(true);
+  });
+});
