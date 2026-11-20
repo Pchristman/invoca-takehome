@@ -10,6 +10,10 @@ export interface Thresholds {
   OUTLIER_Z: number;
   /** Answered calls with an outcome needed before a campaign's (then channel's) own rates are used. */
   MIN_ANSWERED_FOR_RATE: number;
+  /** A campaign's calls are flagged as a jump or drop when |z| against the comparison range reaches this. */
+  ALERT_Z: number;
+  /** A campaign is tested for a jump or drop when its calls in both periods added together reach this. */
+  MIN_CALLS_ALERT: number;
 }
 
 export const THRESHOLDS: Thresholds = {
@@ -18,4 +22,6 @@ export const THRESHOLDS: Thresholds = {
   MIN_CALLS_OUTLIER: 50,
   OUTLIER_Z: 2.5,
   MIN_ANSWERED_FOR_RATE: 30,
+  ALERT_Z: 3,
+  MIN_CALLS_ALERT: 20,
 };
