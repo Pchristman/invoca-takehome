@@ -21,7 +21,11 @@ export interface OverviewView extends ViewBase {
   view: 'overview';
   /** answerRate is a fraction, null with no calls. */
   tiles: { calls: Tile; uniqueCallers: Tile; answerRate: Tile; bookings: Tile; revenueUsd: Tile };
-  /** Campaigns, Locations, Missed calls, in that order: each view's first action. */
+  /**
+   * Campaigns, Locations, Missed calls, in that order: each view's first action.
+   * When Campaigns has a call-change alert that is not already its first action, it is
+   * listed (as Campaigns) right after the Campaigns entry, so there can be four entries.
+   */
   topActions: { view: ViewName; action: Action }[];
 }
 
@@ -51,8 +55,12 @@ export function buildOverview(store: CallStore, range: ResolvedRange, previous?:
     revenueUsd: countTile(now.revenueUsd, before?.revenueUsd),
   };
 
+  const campaigns = buildCampaigns(store, range, previous);
+  const campaignsFirst = firstAction(campaigns);
+  const callChanges = campaigns.actions.find((a) => a.kind === 'review_call_changes');
   const topActions: OverviewView['topActions'] = [
-    { view: 'campaigns', action: firstAction(buildCampaigns(store, range, previous)) },
+    { view: 'campaigns', action: campaignsFirst },
+    ...(callChanges && callChanges !== campaignsFirst ? [{ view: 'campaigns' as const, action: callChanges }] : []),
     { view: 'locations', action: firstAction(buildLocations(store, range, previous)) },
     { view: 'missed-calls', action: firstAction(buildMissedCalls(store, range, previous)) },
   ];

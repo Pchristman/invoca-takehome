@@ -7,7 +7,7 @@ import { buildOverview } from '../../../src/core/views/overviewView';
 import { makeViewContext } from '../../../src/core/views/viewContext';
 import type { CleanCall } from '../../../src/core/types';
 import { makeCall } from '../helpers';
-import { campaign, expectAllFinite, makeStore, office, range } from './fixtures';
+import { campaign, expectAllFinite, makeStore, many, office, range } from './fixtures';
 
 /** n calls on one date: `booked` booked at $100, then answered-not-booked, then missed. Callers repeat after `distinct`. */
 function period(
@@ -167,5 +167,73 @@ describe('buildOverview edge cases', () => {
     expect(view.notes.skippedRows).toBe(ctx.notes.skippedRows);
     expect(view.notes.outcomeLag).toEqual(ctx.notes.outcomeLag);
     expect(view.notes.incompleteCurrent).toEqual(ctx.notes.incompleteCurrent);
+  });
+});
+
+describe('buildOverview call-change alert', () => {
+  const NOW = '2026-09-10';
+  const BEFORE = '2026-09-03';
+  const cs = [
+    campaign('cmp_a', 'Best', 'social', 10),
+    campaign('cmp_b', 'Worst', 'display', 10),
+    campaign('cmp_z', 'Zed', 'social', 0),
+  ];
+  const on = (id: string, n: number, localDate: string, booked = 0, revenue = 0): CleanCall[] =>
+    many(n).map((c, i) =>
+      makeCall({
+        ...c, campaignId: id, localDate,
+        ...(i < booked
+          ? { answered: true, booked: true, outcome: 'booked', revenueUsd: revenue }
+          : { answered: true, booked: false, outcome: 'not_qualified', revenueUsd: 0 }),
+      }),
+    );
+  const build = (calls: CleanCall[], r = week) => buildOverview(makeStore(calls, { campaigns: cs, locations: options.locations }), r);
+  // A shift is possible (Best earns more per budget dollar than Worst) and Worst's calls fell 60 to 10.
+  // One cmp_z call on the first day makes the data span cover the previous period.
+  const anchor = () => on('cmp_z', 1, '2026-09-01');
+  const withShift = () => [
+    ...anchor(),
+    ...on('cmp_a', 5, NOW, 5, 1000),
+    ...on('cmp_b', 10, NOW, 10, 50),
+    ...on('cmp_b', 60, BEFORE),
+  ];
+
+  it('the alert sits beside a shift, right after the Campaigns entry', () => {
+    const view = build(withShift());
+    expect(view.topActions.map((t) => t.view)).toEqual(['campaigns', 'campaigns', 'locations', 'missed-calls']);
+    expect(view.topActions.slice(0, 2).map((t) => t.action.kind)).toEqual(['shift_budget', 'review_call_changes']);
+    expect(view.actions).toEqual(view.topActions.map((t) => t.action));
+  });
+
+  it('an alert that is the Campaigns headline is listed once', () => {
+    const view = build([...anchor(), ...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE)]);
+    expect(view.topActions).toHaveLength(3);
+    expect(view.topActions[0]!.action.kind).toBe('review_call_changes');
+    expect(view.topActions.filter((t) => t.action.kind === 'review_call_changes')).toHaveLength(1);
+  });
+
+  it('no alert keeps three entries', () => {
+    const view = build([...on('cmp_a', 50, NOW), ...on('cmp_a', 50, BEFORE)]);
+    expect(view.topActions.map((t) => t.view)).toEqual(['campaigns', 'locations', 'missed-calls']);
+  });
+
+  it('no comparison means no alert entry', () => {
+    const view = build(withShift(), range('2026-09-01', '2026-09-14'));
+    expect(view.notes.comparison.available).toBe(false);
+    expect(view.topActions).toHaveLength(3);
+    expect(view.topActions.some((t) => t.action.kind === 'review_call_changes')).toBe(false);
+  });
+
+  it('the fact sheet carries the alert facts and the campaign name', () => {
+    const view = build(withShift());
+    expect(view.factSheet.facts['alert.count']).toBeDefined();
+    expect(view.factSheet.facts['alert.top.name']).toBeDefined();
+    expect(view.factSheet.entities).toContain('Worst');
+  });
+
+  it('the headline is still the first actionable top action', () => {
+    const view = build(withShift());
+    expect(view.templateSentence).toBe(view.topActions[0]!.action.text);
+    expect(view.topActions[0]!.action.kind).toBe('shift_budget');
   });
 });
