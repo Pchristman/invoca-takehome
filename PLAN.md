@@ -495,6 +495,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - with no key, every view shows template text and the app is otherwise unchanged
   - with a key, one manual run per view shows a checked takeaway, a repeat is a cache hit with zero cost, and the log has one line per call
   - I record the spend in `docs/AI_COST_LOG.md`
+  - the README covers what this phase added
 - **Edge cases to handle and test:**
   - unknown placeholder
   - stray digit
@@ -520,6 +521,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - on a clean clone, `docker compose up --build` serves all four views at `http://localhost:3000`, both with no `.env` (AI off) and with a key (AI on)
   - `npm test` passes, and `npm start` still works outside Docker
   - the built image contains no `.env` file and no key
+  - the README covers what this phase added
 - **Edge cases to handle and test:**
   - the server listens on 127.0.0.1, which a container can't publish: inside the container it listens on 0.0.0.0 (a `HOST` setting), and Compose publishes the port only on the host's 127.0.0.1, so the callback list is still not exposed to the network
   - no `.env` file: Compose still starts, and AI is off
@@ -529,22 +531,12 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - results that don't depend on the container's time zone: the numbers match `npm start` on the host
   - Windows checkouts: nothing in the image depends on shell scripts that break on CRLF line endings
 
-### Phase 11: Submission docs
-
-- **Delivers:**
-  - README with setup and the one command (`docker compose up --build`), plus the `npm` path without Docker
-  - TECHNICAL.md (1–2 pages, covering the brief's list)
-  - architecture diagram
-  - decision summary draft for me to finish
-  - `docs/DECISIONS.md` up to date
-- **Done when:** a clean clone following only the README runs the app with Docker and with `npm`, with and without a key, and `npm test` passes.
-
-### Stretch phases (in order, only after Phase 11)
+### Stretch phases (in order, after Phase 10)
 
 #### S1: Alerts
 
 - **Delivers:** a flag on campaigns whose calls jumped or dropped against the comparison range by more than chance explains. Use a Poisson-style test on counts, with a threshold in config and a minimum count. Alerts appear on Overview's top actions and in the Campaigns table.
-- **Done when:** fixture tests cover jump, drop, no change, and too-small counts.
+- **Done when:** fixture tests cover jump, drop, no change, and too-small counts; the README covers what this phase added.
 - **Edge cases:**
   - comparison not available (no alerts, say why)
   - campaign with zero calls in one period
@@ -552,7 +544,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 #### S2: Compare any two date ranges
 
 - **Delivers:** UI to pick a second range freely. The engine already supports it.
-- **Done when:** the URL holds both ranges and every view's changes use the chosen range.
+- **Done when:** the URL holds both ranges and every view's changes use the chosen range; the README covers what this phase added.
 - **Edge cases:**
   - overlapping ranges (allowed, with a note)
   - unequal lengths (counts are compared per day, and the view says so)
@@ -561,7 +553,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 #### S3: Print-friendly one-page summary
 
 - **Delivers:** a print view for the current range with the Overview tiles, each view's action and its takeaway, plus the estimate labels and caveats from section 3.3. No dev-mode content. It fits on one page.
-- **Done when:** browser print preview fits one A4/Letter page on both datasets.
+- **Done when:** browser print preview fits one A4/Letter page on both datasets; the README covers what this phase added.
 - **Edge cases:**
   - AI off (template text)
   - long names wrapping
@@ -572,6 +564,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 - **Done when:**
   - fake-model tests pass for a valid filter, invalid values and an unanswerable question
   - three manual example questions produce correct filters
+  - the README covers what this phase added
 - **Edge cases:**
   - names that don't exist in the data
   - ambiguous weekday or hour phrasing
@@ -592,7 +585,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - panels and takeaways entering and leaving smoothly
   - all of it short (about 150–300 ms), eased, and fully disabled under `prefers-reduced-motion`
 - **Approach:** Framer Motion for all motion, so transitions, number tweens and layout changes share one consistent system (ask before adding the package at the start of S5). Its built-in reduced-motion support is used to switch motion off.
-- **Done when:** I sign off on the look in the browser; reduced-motion mode shows no animation; no view's numbers or actions change.
+- **Done when:** I sign off on the look in the browser; reduced-motion mode shows no animation; no view's numbers or actions change; the README covers what this phase added.
 
 #### S6: Database, seeded from the CSVs
 
@@ -608,6 +601,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - every existing test passes unchanged
   - on a fresh clone, `npm start` seeds and serves; a restart reads the existing database without reseeding
   - in Docker, the database file lives on the named volume and is seeded on first run
+  - the README covers what this phase added
 - **Edge cases:**
   - seeding the same export twice (no duplicates)
   - a newer version of an existing call (latest wins)
@@ -634,6 +628,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - uploading the shipped `calls.csv` into a database seeded from it imports nothing and reports every row as a duplicate
   - an upload of new calls shows up in every view's numbers right after confirming
   - fixture tests cover detection, every duplicate and conflict rule, and the preview counts
+  - the README covers what this phase added
 - **Edge cases:**
   - columns in a different order, extra columns, a byte-order mark, Windows line endings
   - an empty file, a header-only file, a file that isn't CSV, or one over a set size limit
@@ -642,6 +637,18 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - a failure partway through the write (the transaction rolls back and nothing is stored)
   - AI takeaways for ranges the upload changed are not reused from the cache, because the cache key includes the data
   - uploads stay safe only because the server listens on localhost and there is no login; the README says so
+
+### Phase 11: Submission docs
+
+Runs after the stretch phases, so the docs cover what they added.
+
+- **Delivers:**
+  - README with setup and the one command (`docker compose up --build`), plus the `npm` path without Docker
+  - TECHNICAL.md (1–2 pages, covering the brief's list)
+  - architecture diagram
+  - decision summary draft for me to finish
+  - `docs/DECISIONS.md` up to date
+- **Done when:** a clean clone following only the README runs the app with Docker and with `npm`, with and without a key, and `npm test` passes.
 
 ---
 

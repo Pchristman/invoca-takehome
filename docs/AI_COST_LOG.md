@@ -21,3 +21,7 @@ Budget: $250 hard cap on the provided Claude API key, for building and running.
 | 2026-11-19 | claude-opus-5-5 ($2.12) | Phase 7 small add-on to the build | 2.12 |
 | 2026-11-19 | claude-sonnet-5-5 ($1.67), claude-opus-5-5 ($0.83), claude-haiku-5-5 ($0.0004) | Phase 8 plan: docs/plans/08-ui-part-two.md | 2.50 |
 | 2026-11-19 | claude-sonnet-5-5 ($3.94), claude-opus-5-5 review ($1.45), claude-haiku-5-5 ($0.0076) | Phase 8 build and adversarial review: docs/plans/08-ui-part-two.md | 5.40 |
+| 2026-11-20 | claude-sonnet-5-5 (plus claude-haiku-5-5, $0.0001) | Phase 9 plan: docs/plans/09-ai-takeaway.md | 1.04 |
+| 2026-11-20 | claude-sonnet-5-5 ($4.38), claude-opus-5-5 review ($1.69), claude-haiku-5-5 ($0.0066) | Phase 9 build and adversarial review: docs/plans/09-ai-takeaway.md | 6.08 |
+| 2026-11-20 | claude-sonnet-5-5 ($0.81), claude-haiku-5-5 ($0.0003) | Phase 10 plan: docs/plans/10-docker.md | 0.81 |
+| 2026-11-20 | claude-sonnet-5-5 ($2.53), claude-opus-5-5 review ($0.99), claude-haiku-5-5 ($0.0051) | Phase 10 build and adversarial review: docs/plans/10-docker.md | 3.53 |
