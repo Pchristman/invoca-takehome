@@ -53,3 +53,18 @@ export function chartAnimation(settings: MotionSettings): {
 export function transitionKey(state: UrlState): string {
   return state.answer !== null ? 'answer' : state.view;
 }
+
+// New content replacing the dimmed old content: it starts from the dimmed look and rises into place.
+// Null when motion is off. Played with element.animate, so nothing is remounted (charts and sort stay put).
+export function settleAnimation(
+  settings: MotionSettings,
+): { keyframes: { opacity: number; transform: string }[]; options: { duration: number; easing: string } } | null {
+  if (!settings.enabled) return null;
+  return {
+    keyframes: [
+      { opacity: 0.55, transform: 'translateY(8px)' },
+      { opacity: 1, transform: 'translateY(0)' },
+    ],
+    options: { duration: settings.base * 1000, easing: `cubic-bezier(${settings.ease.join(', ')})` },
+  };
+}

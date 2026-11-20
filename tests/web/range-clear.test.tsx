@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import type { Meta } from '../../src/server/api';
 import { RangeControl } from '../../src/web/components/RangeControl';
 import { parseUrlState } from '../../src/web/urlState';
+import { MOTION_OFF } from '../../src/web/models/motionSettings';
+import { settleAnimation } from '../../src/web/models/motionVariants';
 
 const noop = () => undefined;
 const meta: Meta = {
@@ -56,5 +58,18 @@ describe('range control layout', () => {
   it('lets the page use more than 76rem', () => {
     const width = /\.page\s*\{[^}]*max-width:\s*(\d+)rem/.exec(css)?.[1];
     expect(Number(width)).toBeGreaterThan(76);
+  });
+});
+
+describe('settling new content in', () => {
+  const on = { enabled: true, fast: 0.2, base: 0.3, slow: 0.3, ease: [0.2, 0, 0, 1] as [number, number, number, number] };
+  it('is nothing when motion is off', () => {
+    expect(settleAnimation(MOTION_OFF)).toBeNull();
+  });
+  it('starts from the dimmed look and rises into place over the base time', () => {
+    const animation = settleAnimation(on)!;
+    expect(animation.keyframes[0]).toEqual({ opacity: 0.55, transform: 'translateY(8px)' });
+    expect(animation.keyframes[1]).toEqual({ opacity: 1, transform: 'translateY(0)' });
+    expect(animation.options).toEqual({ duration: 300, easing: 'cubic-bezier(0.2, 0, 0, 1)' });
   });
 });
