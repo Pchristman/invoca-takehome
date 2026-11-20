@@ -25,13 +25,26 @@ function resolveDataDir(dir?: string): string {
   return process.env.DATA_DIR?.trim() || process.cwd();
 }
 
-/** The only I/O in the loader. */
-export function readExportFromDir(dir?: string): LoadedExport {
+export interface ExportTexts {
+  calls: string;
+  campaigns: string;
+  locations: string;
+  /** The folder the texts were read from, as resolved. */
+  folder: string;
+}
+
+/** Read the three CSV files as text. The only file I/O for an export; seeding hashes this text. */
+export function readExportTexts(dir?: string): ExportTexts {
   const folder = resolveDataDir(dir);
   if (!existsSync(folder)) throw new LoadError(`Data folder not found: ${folder}`);
-  return loadExport({
+  return {
     calls: readCsv(join(folder, 'calls.csv')),
     campaigns: readCsv(join(folder, 'campaigns.csv')),
     locations: readCsv(join(folder, 'locations.csv')),
-  });
+    folder,
+  };
+}
+
+export function readExportFromDir(dir?: string): LoadedExport {
+  return loadExport(readExportTexts(dir));
 }

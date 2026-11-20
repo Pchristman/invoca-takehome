@@ -205,3 +205,20 @@ export function openDatabase(path: string): DatabaseSync {
 export function openExistingDatabase(path: string): DatabaseSync {
   return open(path, false);
 }
+
+/** True when there is nothing in the file to protect: it is missing, has zero bytes, or is a valid SQLite file with no tables. */
+export function holdsNothing(path: string): boolean {
+  if (path === IN_MEMORY) return true;
+  if (!existsSync(path)) return true;
+  if (statSync(path).size === 0) return true;
+  let db: DatabaseSync | undefined;
+  try {
+    db = new DatabaseSync(path, { readOnly: true });
+    const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    return hasNothing(db, version);
+  } catch {
+    return false; // not SQLite or damaged: the real open reports it
+  } finally {
+    db?.close();
+  }
+}
