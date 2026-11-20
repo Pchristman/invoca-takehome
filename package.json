@@ -13,23 +13,23 @@
     "ai:try": "tsx scripts/ai-try.ts"
   },
   "devDependencies": {
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "recharts": "^3.11.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.11.0",
-    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@hono/node-server": "^2.1.9",
     "csv-parse": "^7.0.3",
     "hono": "^4.13.19",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "recharts": "^3.11.0",
     "tsx": "^4.23.15"
   }
 }

@@ -1,2 +1,6 @@
 # CSVs are data fixtures: never rewrite their line endings (the shipped export is CRLF).
 *.csv -text
+
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+docker-compose.yml text eol=lf
