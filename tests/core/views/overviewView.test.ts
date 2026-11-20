@@ -131,20 +131,15 @@ describe('buildOverview actions', () => {
 });
 
 describe('buildOverview edge cases', () => {
-  it('a bad or unequal second range builds with no comparison', () => {
-    for (const bad of [
-      { start: '2026-02-30', end: '2026-03-02' },
-      { start: '2026-09-01', end: '2026-09-03' },
-    ]) {
-      const view = buildOverview(store(), week, bad);
-      for (const tile of Object.values(view.tiles)) {
-        expect(tile.previous).toBeNull();
-        expect(tile.change).toEqual({ kind: 'none' });
-      }
-      expect(view.notes.comparison.available).toBe(false);
-      expect(view.notes.comparison.reason).toEqual(expect.any(String));
-      expectAllFinite(view);
+  it('a bad second range builds with no comparison', () => {
+    const view = buildOverview(store(), week, { start: '2026-02-30', end: '2026-03-02' });
+    for (const tile of Object.values(view.tiles)) {
+      expect(tile.previous).toBeNull();
+      expect(tile.change).toEqual({ kind: 'none' });
     }
+    expect(view.notes.comparison.available).toBe(false);
+    expect(view.notes.comparison.reason).toEqual(expect.any(String));
+    expectAllFinite(view);
   });
 
   it('an empty range and an empty store build', () => {
@@ -235,5 +230,109 @@ describe('buildOverview call-change alert', () => {
     const view = build(withShift());
     expect(view.templateSentence).toBe(view.topActions[0]!.action.text);
     expect(view.topActions[0]!.action.kind).toBe('shift_budget');
+  });
+});
+
+describe('buildOverview with a second range of another length', () => {
+  const short = { start: '2026-09-01', end: '2026-09-03' };
+  type Span = { start: string; end: string };
+  /** n calls on each date of a span; booked ones are answered, booked, $100. */
+  const onEach = (r: Span, n: number, tag: string, booked = false): CleanCall[] => {
+    const out: CleanCall[] = [];
+    for (let d = Number(r.start.slice(8)); d <= Number(r.end.slice(8)); d++) {
+      const localDate = `2026-09-${String(d).padStart(2, '0')}`;
+      for (let i = 0; i < n; i++) {
+        const callerHash = `${tag}_${d}_${i}`;
+        out.push(
+          booked
+            ? makeCall({ localDate, callerHash, answered: true, outcome: 'booked', booked: true, revenueUsd: 100 })
+            : makeCall({ localDate, callerHash, answered: true, outcome: 'not_qualified', booked: false, revenueUsd: 0 }),
+        );
+      }
+    }
+    return out;
+  };
+  const build = (calls: CleanCall[], second: Span = short, r = week) => buildOverview(makeStore(calls, options), r, second);
+  const day = (localDate: string) => makeCall({ localDate });
+
+  it('per day, not totals', () => {
+    // 14 calls in 7 days is 2 a day; 3 calls in 3 days is 1 a day: +100% per day (totals would say about +367%).
+    const view = build([...onEach(week, 2, 'c'), ...onEach(short, 1, 'p')]);
+    expect(view.tiles.calls).toEqual({ current: 14, previous: 3, change: { kind: 'percent', value: expect.closeTo(100, 6) } });
+  });
+
+  it('bookings and revenue per day', () => {
+    // 1 a day now against 1 in 3 days (0.33 a day): +200% per day (totals would say +600%).
+    const calls = [...onEach(week, 1, 'c', true), ...onEach({ start: '2026-09-01', end: '2026-09-01' }, 1, 'p', true)];
+    const { tiles } = build(calls);
+    expect(tiles.bookings).toEqual({ current: 7, previous: 1, change: { kind: 'percent', value: expect.closeTo(200, 6) } });
+    expect(tiles.revenueUsd).toEqual({ current: 700, previous: 100, change: { kind: 'percent', value: expect.closeTo(200, 6) } });
+  });
+
+  it('unique callers are not compared', () => {
+    const calls = [...onEach(week, 2, 'c'), ...onEach(short, 1, 'p')];
+    const view = build(calls);
+    expect(view.tiles.uniqueCallers.previous).toBeNull();
+    expect(view.tiles.uniqueCallers.change).toEqual({ kind: 'none' });
+    expect(view.tiles.calls.change.kind).toBe('percent');
+    const equal = buildOverview(makeStore(calls, options), week);
+    expect(equal.tiles.uniqueCallers.previous).not.toBeNull();
+  });
+
+  it('answer rate stays in points', () => {
+    const miss = makeCall({ localDate: '2026-09-10', answered: false, outcome: 'missed', booked: false, revenueUsd: 0 });
+    const hit = (localDate: string) => makeCall({ localDate, answered: true, outcome: 'not_qualified', booked: false, revenueUsd: 0 });
+    const view = build([hit('2026-09-09'), miss, hit('2026-09-01'), hit('2026-09-02')]);
+    expect(view.tiles.answerRate.change).toEqual({ kind: 'points', value: expect.closeTo(-50, 6) });
+  });
+
+  it('notes carry the per-day facts', () => {
+    const calls = [...onEach(week, 1, 'c'), ...onEach(short, 1, 'p')];
+    expect(build(calls).notes.comparison).toMatchObject({ perDay: true, currentDays: 7, previousDays: 3, reason: null });
+    expect(buildOverview(makeStore(calls, options), week).notes.comparison).toMatchObject({ perDay: false, previousDays: 7 });
+    const bad = build(calls, { start: '2026-02-30', end: '2026-03-02' });
+    expect(bad.notes.comparison).toMatchObject({ available: false, perDay: false, previousDays: null, currentDays: 7 });
+  });
+
+  it('the fact sheet leaves out count and money changes but keeps answer rate', () => {
+    const calls = [...onEach(week, 2, 'c'), ...onEach(short, 1, 'p')];
+    const f = build(calls).factSheet.facts;
+    expect(f['overview.answer_rate_change']).toBeDefined();
+    for (const k of ['calls', 'callers', 'bookings', 'revenue']) expect(f[`overview.${k}_change`]).toBeUndefined();
+    expect(buildOverview(makeStore(calls, options), week).factSheet.facts['overview.calls_change']).toBeDefined();
+  });
+
+  it('an empty second range reads new or none, never infinite', () => {
+    // Anchors on 09-01 and 09-14 make the span cover 09-02..09-03, which holds no calls.
+    const empty = { start: '2026-09-02', end: '2026-09-03' };
+    const view = build([day('2026-09-01'), ...onEach(week, 1, 'c')], empty);
+    expect(view.tiles.calls.change).toEqual({ kind: 'new' });
+    expectAllFinite(view);
+    const both = build([day('2026-09-01'), day('2026-09-14')], empty, range('2026-09-05', '2026-09-11'));
+    expect(both.tiles.calls.change).toEqual({ kind: 'none' });
+    expectAllFinite(both);
+  });
+
+  it('the selected range as the second range reads 0%', () => {
+    const view = build(onEach(week, 1, 'c'), week);
+    expect(view.tiles.calls.change).toEqual({ kind: 'percent', value: 0 });
+    expect(view.notes.comparison.overlaps).toBe(true);
+    expect(view.notes.comparison.perDay).toBe(false);
+  });
+
+  it('a one-day second range builds', () => {
+    const view = build([day('2026-09-01'), ...onEach(week, 1, 'c')], { start: '2026-09-01', end: '2026-09-01' });
+    expect(view.notes.comparison.previousDays).toBe(1);
+    expectAllFinite(view);
+  });
+
+  it('a second range outside the data has no comparison', () => {
+    const view = build(onEach(week, 1, 'c'), { start: '2026-07-01', end: '2026-07-03' });
+    expect(view.notes.comparison.available).toBe(false);
+    expect(view.notes.comparison.reason).toMatch(/^No full previous period/);
+    for (const tile of Object.values(view.tiles)) {
+      expect(tile.previous).toBeNull();
+      expect(tile.change).toEqual({ kind: 'none' });
+    }
   });
 });

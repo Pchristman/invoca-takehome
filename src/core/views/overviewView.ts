@@ -1,4 +1,4 @@
-import { changeInCount, changeInRate, rate, tally } from '../metrics';
+import { changeInCountPerDay, changeInRate, rate, tally } from '../metrics';
 import type { Change } from '../metrics';
 import type { DateRange, ResolvedRange } from '../ranges';
 import type { CallStore } from '../types';
@@ -10,7 +10,10 @@ import { buildMissedCalls } from './missedCallsView';
 import { makeViewContext } from './viewContext';
 import type { ViewBase } from './viewContext';
 
-/** previous is null and change is none when there is no comparison. */
+/**
+ * previous is null and change is none when there is no comparison.
+ * current and previous are totals; change is per day when notes.comparison.perDay.
+ */
 export interface Tile {
   current: number | null;
   previous: number | null;
@@ -38,16 +41,21 @@ export function buildOverview(store: CallStore, range: ResolvedRange, previous?:
   const now = tally(ctx.current);
   const before = ctx.previous ? tally(ctx.previous) : null; // null unless the comparison is available
 
+  const { perDay, currentDays, previousDays } = ctx.notes.comparison;
+  // Totals stay totals; only the change is per day, and equal lengths give the plain change.
   const countTile = (current: number, prior: number | undefined): Tile =>
-    prior === undefined
+    prior === undefined || previousDays === null
       ? { current, previous: null, change: { kind: 'none' } }
-      : { current, previous: prior, change: changeInCount(current, prior) };
+      : { current, previous: prior, change: changeInCountPerDay(current, currentDays, prior, previousDays) };
 
   const currentAnswerRate = rate(now.answered, now.calls);
   const previousAnswerRate = before ? rate(before.answered, before.calls) : null;
   const tiles: OverviewView['tiles'] = {
     calls: countTile(now.calls, before?.calls),
-    uniqueCallers: countTile(now.uniqueCallers, before?.uniqueCallers),
+    // Distinct callers do not grow with days, so they are not compared across lengths (S2 gap 2).
+    uniqueCallers: perDay
+      ? { current: now.uniqueCallers, previous: null, change: { kind: 'none' } }
+      : countTile(now.uniqueCallers, before?.uniqueCallers),
     answerRate: before
       ? { current: currentAnswerRate, previous: previousAnswerRate, change: changeInRate(currentAnswerRate, previousAnswerRate) }
       : { current: currentAnswerRate, previous: null, change: { kind: 'none' } },
@@ -75,11 +83,14 @@ export function buildOverview(store: CallStore, range: ResolvedRange, previous?:
     'overview.revenue': { kind: 'usd', value: now.revenueUsd },
   };
   if (currentAnswerRate !== null) facts['overview.answer_rate'] = { kind: 'rate', value: currentAnswerRate };
-  addChangeFact(facts, 'calls', tiles.calls.change);
-  addChangeFact(facts, 'callers', tiles.uniqueCallers.change);
+  // A per-day change must not read like a total to the AI or its checker, so those facts are left out.
+  if (!perDay) {
+    addChangeFact(facts, 'calls', tiles.calls.change);
+    addChangeFact(facts, 'callers', tiles.uniqueCallers.change);
+    addChangeFact(facts, 'bookings', tiles.bookings.change);
+    addChangeFact(facts, 'revenue', tiles.revenueUsd.change);
+  }
   addChangeFact(facts, 'answer_rate', tiles.answerRate.change);
-  addChangeFact(facts, 'bookings', tiles.bookings.change);
-  addChangeFact(facts, 'revenue', tiles.revenueUsd.change);
   const allFacts: Facts = Object.assign({}, facts, ...actions.map((a) => a.facts));
 
   return {

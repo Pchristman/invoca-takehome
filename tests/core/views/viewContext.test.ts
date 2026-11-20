@@ -17,6 +17,9 @@ describe('makeViewContext', () => {
       previous: { start: '2026-09-01', end: '2026-09-07' },
       reason: null,
       overlaps: false,
+      perDay: false,
+      currentDays: 7,
+      previousDays: 7,
     });
     expect(ctx.previous?.map((c) => c.localDate)).toEqual(days.slice(0, 7));
     expect(ctx.current.map((c) => c.localDate)).toEqual(days.slice(7));
@@ -61,11 +64,30 @@ describe('makeViewContext', () => {
     expect(inverted.previous).toBeNull();
   });
 
-  test('an unequal-length second range gives no comparison', () => {
+  test('an unequal-length second range is available and per day', () => {
     const ctx = makeViewContext(store, range('2026-09-08', '2026-09-14'), { start: '2026-09-01', end: '2026-09-03' });
+    expect(ctx.notes.comparison.available).toBe(true);
+    expect(ctx.notes.comparison.perDay).toBe(true);
+    expect(ctx.notes.comparison.reason).toBeNull();
+    expect(ctx.notes.comparison.currentDays).toBe(7);
+    expect(ctx.notes.comparison.previousDays).toBe(3);
+    expect(ctx.previous?.map((c) => c.localDate)).toEqual(days.slice(0, 3));
+  });
+
+  test('an unequal range outside the data gives the coverage reason', () => {
+    const ctx = makeViewContext(store, range('2026-09-08', '2026-09-14'), { start: '2026-08-01', end: '2026-08-03' });
     expect(ctx.notes.comparison.available).toBe(false);
-    expect(ctx.notes.comparison.reason).toMatch(/^No like-for-like comparison/);
+    expect(ctx.notes.comparison.perDay).toBe(false);
+    expect(ctx.notes.comparison.reason).toMatch(/^No full previous period/);
+    expect(ctx.notes.comparison.previousDays).toBe(3);
     expect(ctx.previous).toBeNull();
+  });
+
+  test('an unresolved second range has null previousDays', () => {
+    const ctx = makeViewContext(store, range('2026-09-08', '2026-09-14'), { start: '2026-02-30', end: '2026-03-02' });
+    expect(ctx.notes.comparison.perDay).toBe(false);
+    expect(ctx.notes.comparison.previousDays).toBeNull();
+    expect(ctx.notes.comparison.currentDays).toBe(7);
   });
 
   test('a store with no calls builds a context', () => {

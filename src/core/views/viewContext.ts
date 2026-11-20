@@ -13,7 +13,17 @@ export interface ViewNotes {
   asOf: LocalDate;
   /** The range was cut to the data. */
   clamped: boolean;
-  comparison: { available: boolean; previous: DateRange | null; reason: string | null; overlaps: boolean };
+  comparison: {
+    available: boolean;
+    previous: DateRange | null;
+    reason: string | null;
+    overlaps: boolean;
+    /** The two ranges differ in length, so counts and money are compared per day. False when unavailable. */
+    perDay: boolean;
+    currentDays: number;
+    /** null when the second range could not be resolved. */
+    previousDays: number | null;
+  };
   incompleteCurrent: IncompleteDays;
   /** null when there is no previous range. */
   incompletePrevious: IncompleteDays | null;
@@ -61,10 +71,26 @@ export function makeViewContext(store: CallStore, range: ResolvedRange, previous
   if (result.ok) {
     const { comparison: c } = result;
     previousWindow = { start: c.previous.start, end: c.previous.end };
-    comparison = { available: c.available, previous: previousWindow, reason: c.unavailableReason, overlaps: c.overlaps };
+    comparison = {
+      available: c.available,
+      previous: previousWindow,
+      reason: c.unavailableReason,
+      overlaps: c.overlaps,
+      perDay: c.perDay,
+      currentDays: range.days,
+      previousDays: c.previous.days,
+    };
     if (c.available) previousCalls = callsInRange(store.calls, previousWindow);
   } else {
-    comparison = { available: false, previous: null, reason: result.error.message, overlaps: false };
+    comparison = {
+      available: false,
+      previous: null,
+      reason: result.error.message,
+      overlaps: false,
+      perDay: false,
+      currentDays: range.days,
+      previousDays: null,
+    };
   }
 
   const notes: ViewNotes = {
