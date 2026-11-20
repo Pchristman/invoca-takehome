@@ -1,7 +1,8 @@
 import type { DateRange, RangeErrorCode } from '../core/ranges';
 import type { DataNotes } from '../core/types';
 import type { ViewName } from '../core/views';
-import type { TakeawayReason } from '../ai/types';
+import type { QuestionReason, TakeawayReason } from '../ai/types';
+import type { AnswerView } from '../core/answer';
 
 /** The range presets a URL may name, and the one used when none is given. */
 export const PRESETS = ['last7', 'last28', 'all'] as const;
@@ -22,6 +23,8 @@ export interface Meta {
   skippedRows: number;
   /** store.dataNotes.notes, e.g. "calls.csv is empty: ..." */
   notes: string[];
+  /** Whether the question box can be used. */
+  aiStatus: 'on' | 'off' | 'budget_reached';
 }
 
 /** The body of GET /api/data-notes. `ai` has its final shape now; Phase 9 fills it in. */
@@ -41,6 +44,16 @@ export interface DataNotesResponse {
 export type TakeawayResponse =
   | { view: ViewName; text: string; source: 'ai'; reason: null }
   | { view: ViewName; text: string; source: 'template'; reason: TakeawayReason };
+
+/** The body of GET /api/answer: the answer plus the names of the selected ids, so the page can print how the question was read. */
+export type AnswerResponse = AnswerView & {
+  names: { offices: { id: string; name: string }[]; campaigns: { id: string; name: string }[] };
+};
+
+/** The body of GET /api/question: a validated query string (from a model reply, checked by code), or why not. */
+export type QuestionResponse =
+  | { ok: true; source: 'ai'; cached: boolean; query: string }
+  | { ok: false; reason: QuestionReason; message: string };
 
 export type ApiErrorCode =
   | RangeErrorCode

@@ -3,15 +3,16 @@ import type { Context } from 'hono';
 import { offService } from '../ai/service';
 import type { TakeawayService } from '../ai/service';
 import type { TakeawayResult } from '../ai/types';
+import { buildAnswer } from '../core/answer';
 import { dataSpan } from '../core/ranges';
 import type { DateRange } from '../core/ranges';
 import type { CallStore } from '../core/types';
 import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../core/views';
 import type { FactSheet, ViewName } from '../core/views';
 import { DEFAULT_PRESET, PRESETS, statusFor } from './api';
-import type { ApiError, DataNotesResponse, Meta, TakeawayResponse } from './api';
+import type { AnswerResponse, ApiError, DataNotesResponse, Meta, TakeawayResponse } from './api';
 import { callbacksToCsv } from './csv';
-import { parseViewQuery } from './params';
+import { parseAnswerQuery, parseViewQuery } from './params';
 import { serveWebApp } from './staticFiles';
 import type { Parsed, ViewQuery, ViewQueryWants } from './params';
 
@@ -66,6 +67,7 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
       defaultPreset: DEFAULT_PRESET,
       skippedRows: store.dataNotes.badRows,
       notes: store.dataNotes.notes,
+      aiStatus: ai.status().status,
     };
     return c.json(meta);
   });
@@ -79,6 +81,21 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
     });
   const viewNames = Object.keys(VIEW_TABLE) as ViewName[];
   for (const name of viewNames) route(name);
+
+  // Code only: the filter comes from the URL, and the AI service is never touched.
+  app.get('/api/answer', (c) => {
+    const parsed = parseAnswerQuery(store, span, c.req.queries());
+    if (!parsed.ok) return errorResponse(c, parsed.error);
+    const { range, filter } = parsed.value;
+    const response: AnswerResponse = {
+      ...buildAnswer(store, range, filter),
+      names: {
+        offices: store.locations.filter((l) => filter.officeIds.includes(l.id)).map((l) => ({ id: l.id, name: l.name })),
+        campaigns: store.campaigns.filter((x) => filter.campaignIds.includes(x.id)).map((x) => ({ id: x.id, name: x.name })),
+      },
+    };
+    return c.json(response);
+  });
 
   app.get('/api/data-notes', (c) => {
     const response: DataNotesResponse = { dataNotes: store.dataNotes, ai: ai.status() };

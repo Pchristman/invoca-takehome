@@ -1,6 +1,8 @@
 import { checkDates, resolveRange } from '../core/ranges';
 import type { DateRange, RangeSpec, ResolvedRange } from '../core/ranges';
+import type { AnswerFilter } from '../core/answer';
 import type { CallStore } from '../core/types';
+import type { ViewName } from '../core/views';
 import { DEFAULT_PRESET, PRESETS, shorten } from './api';
 import type { ApiError } from './api';
 
@@ -123,6 +125,93 @@ export function parseViewQuery(
       previous,
       campaignId: wants.campaign ? campaignId : undefined,
       locationId: wants.location ? locationId : undefined,
+    },
+  };
+}
+
+/** Most values one f_ parameter may hold. */
+export const ANSWER_LIMITS = { maxValues: 50 } as const;
+
+export interface AnswerQuery {
+  range: ResolvedRange;
+  filter: AnswerFilter;
+}
+
+const ANSWER_VIEWS: ViewName[] = ['overview', 'campaigns', 'locations', 'missed-calls'];
+
+function tooMany(field: string): { ok: false; error: ApiError } {
+  return fail({ code: 'bad_param', field, message: `The parameter ${field} may have at most ${ANSWER_LIMITS.maxValues} values.` });
+}
+
+/** Whole numbers from min to max, de-duplicated with order kept, or the first bad value's message. */
+function parseInts(query: Query, field: string, min: number, max: number): Parsed<number[]> {
+  const raw = query[field] ?? [];
+  if (raw.length > ANSWER_LIMITS.maxValues) return tooMany(field);
+  const numbers: number[] = [];
+  for (const text of raw) {
+    const n = /^[0-9]+$/.test(text) ? Number(text) : NaN;
+    if (!(n >= min && n <= max)) {
+      return fail({ code: 'bad_param', field, message: `"${shorten(text)}" is not a whole number from ${min} to ${max}.` });
+    }
+    if (!numbers.includes(n)) numbers.push(n);
+  }
+  return { ok: true, value: numbers };
+}
+
+/** Ids that must all exist: de-duplicated with order kept; an empty value counts as absent. */
+function parseIds(
+  query: Query,
+  field: string,
+  exists: (id: string) => boolean,
+  unknown: 'unknown_location' | 'unknown_campaign',
+  noun: string,
+): Parsed<string[]> {
+  const raw = query[field] ?? [];
+  if (raw.length > ANSWER_LIMITS.maxValues) return tooMany(field);
+  const ids = [...new Set(raw.filter((id) => id !== ''))];
+  const missing = ids.find((id) => !exists(id));
+  if (missing !== undefined) return fail({ code: unknown, field, message: `No ${noun} has the id "${shorten(missing)}".` });
+  return { ok: true, value: ids };
+}
+
+/** Turn the URL's range, view and f_ filter into a resolved range and an AnswerFilter, or one message. Never throws. */
+export function parseAnswerQuery(store: CallStore, span: DateRange | null, query: Query): Parsed<AnswerQuery> {
+  const parsedRange = parseViewQuery(store, span, query);
+  if (!parsedRange.ok) return parsedRange;
+
+  const viewText = query['view']?.[0] ?? '';
+  const view = viewText === '' ? 'overview' : ANSWER_VIEWS.find((v) => v === viewText);
+  if (view === undefined) {
+    return fail({ code: 'unknown_view', field: 'view', message: `Unknown view. Use one of: ${ANSWER_VIEWS.join(', ')}.` });
+  }
+
+  const officeIds = parseIds(query, 'f_office', (id) => store.locations.some((l) => l.id === id), 'unknown_location', 'office');
+  if (!officeIds.ok) return officeIds;
+  const campaignIds = parseIds(query, 'f_campaign', (id) => store.campaigns.some((c) => c.id === id), 'unknown_campaign', 'campaign');
+  if (!campaignIds.ok) return campaignIds;
+
+  const unattributed = (query['f_unattributed'] ?? []).filter((v) => v !== '');
+  if (unattributed.length > 1 || (unattributed[0] !== undefined && unattributed[0] !== '0' && unattributed[0] !== '1')) {
+    return fail({ code: 'bad_param', field: 'f_unattributed', message: 'The parameter f_unattributed must be 1 or 0.' });
+  }
+
+  const weekdays = parseInts(query, 'f_weekday', 0, 6);
+  if (!weekdays.ok) return weekdays;
+  const hours = parseInts(query, 'f_hour', 0, 23);
+  if (!hours.ok) return hours;
+
+  return {
+    ok: true,
+    value: {
+      range: parsedRange.value.range,
+      filter: {
+        view,
+        officeIds: officeIds.value,
+        campaignIds: campaignIds.value,
+        includeUnattributed: unattributed[0] === '1',
+        weekdays: weekdays.value,
+        hours: hours.value,
+      },
     },
   };
 }

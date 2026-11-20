@@ -37,6 +37,7 @@ describe('meta', () => {
       defaultPreset: 'last28',
       skippedRows: store.dataNotes.badRows,
       notes: store.dataNotes.notes,
+      aiStatus: 'off',
     });
   });
 });

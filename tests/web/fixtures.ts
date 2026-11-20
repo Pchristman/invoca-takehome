@@ -78,6 +78,7 @@ export function metaFor(store: CallStore): Meta {
     defaultPreset: DEFAULT_PRESET,
     skippedRows: store.dataNotes.badRows,
     notes: store.dataNotes.notes,
+    aiStatus: 'off',
   });
 }
 
