@@ -165,6 +165,16 @@ A one-page, plain document of the whole app, for paper or PDF.
 - **One page:** it fits one A4 or Letter page by using small print type, never by dropping caveats, numbers or estimate labels.
 - **Known limit:** page fit is checked by eye in print preview, on the shipped and extended exports and on a worst-case range with every caveat. A name far longer than any in the data is wrapped, not cut, and could push the page onto a second page.
 
+### Visual design and motion
+
+- **The look:** evergreen header, sand neutrals, white panels with soft borders and weight-500 headings. The type pairing is IBM Plex Sans for text with IBM Plex Mono for figures and small labels. The accent green marks only what you can act on (links, buttons, the current tab, focus); bars and heat cells keep their own colours. Colours, type, spacing and timing are all set in `src/web/styles/tokens.css`, and tests fail on a raw colour or duration anywhere else.
+- **What moves:** a view change (a short fade and small rise below the range control; the header, tabs and range control stay still), the takeaway line (loading text and sentence swap), the Data notes panel under `?dev`, the Missed calls heatmap when you switch between By office and By weekday, the five Overview tiles (each counts to its new value and ends on the server's exact text), and the Campaigns weekly chart when you change its campaign.
+- **Timing:** every duration is 150 to 300 ms, with one easing curve, set in `tokens.css` (`--motion-*`, `--ease-standard`) and read from there at run time. Animation uses the `motion` package (imported from `motion/react`); the `Reveal` wrapper renders a plain div when motion is off, so nothing can stay half-faded.
+- **Reduced motion:** `prefers-reduced-motion: reduce` turns all of it off at once, and the app follows the setting live, without a reload.
+- **Print:** no motion reaches print. Print CSS forces everything to its final state, and the print summary imports no motion code.
+- **Never animated:** tables and sentences. The numbers and action sentences are the server's text, the same with motion on or off (a test checks this on both real exports).
+- **Known limits:** the bars use Recharts' own animation, with the nearest keyword easing (`ease-out`) rather than the token's curve. Changing the date range grows the chart in instead of morphing it, because old numbers are never shown under a new range.
+
 ## AI takeaways
 
 Each view shows one short takeaway line under the date control, marked `AI` or `template`. The template sentence is built in code from the view's computed facts. With `ANTHROPIC_API_KEY` set, Claude Haiku 5.5 writes the sentence instead, using `{placeholders}` for every number and name; code checks the text (no digits, no invented names) and fills in the values. If the check fails, the call fails, the budget is reached or there is no key, the template sentence is shown, and nothing else about the app changes. The views never wait on it.
