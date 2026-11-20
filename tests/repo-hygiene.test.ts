@@ -19,9 +19,10 @@ test('.gitattributes stops git rewriting line endings in CSVs (they are fixtures
 
 test('.env.example documents every variable with no real secret', () => {
   const text = readFileSync('.env.example', 'utf8');
-  for (const name of ['ANTHROPIC_API_KEY', 'AI_SPEND_LIMIT_USD', 'DATA_DIR', 'PORT']) {
+  for (const name of ['ANTHROPIC_API_KEY', 'AI_SPEND_LIMIT_USD', 'DATA_DIR', 'PORT', 'HOST']) {
     expect(text).toMatch(new RegExp(`^${name}=`, 'm'));
   }
+  expect(text).toMatch(/^HOST=127\.0\.0\.1\s*$/m);
   expect(text).not.toMatch(/sk-ant-/);
   expect(text).toMatch(/^ANTHROPIC_API_KEY=\s*$/m);
 });

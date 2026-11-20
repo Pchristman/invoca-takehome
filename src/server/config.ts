@@ -21,10 +21,23 @@ export function parsePort(value: string | undefined): number {
   return port;
 }
 
+const DEFAULT_HOST = '127.0.0.1';
+
+/** HOST from the environment: unset or blank gives loopback; otherwise the trimmed text. */
+export function parseHost(value: string | undefined): string {
+  const text = value?.trim() ?? '';
+  return text === '' ? DEFAULT_HOST : text;
+}
+
 /** Turn a listen() failure into a ConfigError the user can act on; anything else is returned unchanged. */
-export function explainListenError(error: NodeJS.ErrnoException, port: number): Error {
+export function explainListenError(error: NodeJS.ErrnoException, port: number, host: string = DEFAULT_HOST): Error {
   if (error.code === 'EADDRINUSE') {
     return new ConfigError(`Port ${port} is already in use. Set PORT to a free port.`);
+  }
+  if (host !== DEFAULT_HOST && (error.code === 'EADDRNOTAVAIL' || error.code === 'ENOTFOUND' || error.code === 'EINVAL')) {
+    return new ConfigError(
+      `HOST "${shorten(host)}" is not an address this machine can listen on. Set HOST to 127.0.0.1, or 0.0.0.0 inside a container.`,
+    );
   }
   if (error.code === 'EACCES' || error.code === 'EADDRNOTAVAIL') {
     return new ConfigError(`Port ${port} cannot be used (reserved or not permitted). Set PORT to another port.`);

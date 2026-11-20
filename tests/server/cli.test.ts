@@ -41,6 +41,13 @@ describe('cli', () => {
     expect(result.stderr).toContain('PORT');
   });
 
+  it('a HOST this machine cannot bind exits 1 with one Cannot start line naming HOST', () => {
+    const result = runCli({ DATA_DIR: 'tests/fixtures/original-export', PORT: '3998', HOST: '203.0.113.7' });
+    expect(result.status).toBe(1);
+    expect(result.stderr.startsWith('Cannot start: HOST "203.0.113.7"')).toBe(true);
+    expect(result.stderr).not.toMatch(/^\s+at /m);
+  });
+
   it('reads a .env in the current folder (a temporary one, never the real .env)', () => {
     const dir = tempDir();
     dirs.push(dir);

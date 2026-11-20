@@ -2,7 +2,7 @@ import { copyFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LoadError } from '../../src/core/errors';
-import { ConfigError, explainListenError, parsePort } from '../../src/server/config';
+import { ConfigError, explainListenError, parseHost, parsePort } from '../../src/server/config';
 import { start } from '../../src/server/start';
 import type { RunningServer } from '../../src/server/start';
 import { loadDotEnv } from '../../src/node/env';
@@ -18,8 +18,8 @@ const HEADER =
 const running: RunningServer[] = [];
 const dirs: string[] = [];
 
-async function startServer(dataDir: string, port = 0): Promise<RunningServer> {
-  const server = await start({ dataDir, port });
+async function startServer(dataDir: string, port = 0, host?: string): Promise<RunningServer> {
+  const server = await start({ dataDir, port, host });
   running.push(server);
   return server;
 }
@@ -151,6 +151,40 @@ describe('parsePort', () => {
     } catch (error) {
       expect((error as Error).message.length).toBeLessThan(300);
     }
+  });
+});
+
+describe('HOST', () => {
+  it('parseHost: unset, blank and whitespace give loopback; a value is trimmed', () => {
+    expect(parseHost(undefined)).toBe('127.0.0.1');
+    expect(parseHost('')).toBe('127.0.0.1');
+    expect(parseHost('   ')).toBe('127.0.0.1');
+    expect(parseHost(' 0.0.0.0 ')).toBe('0.0.0.0');
+  });
+
+  it('start({ host: "0.0.0.0" }) listens on all interfaces and prints a browsable url', async () => {
+    const server = await startServer(SHIPPED, 0, '0.0.0.0');
+    expect(server.host).toBe('0.0.0.0');
+    expect(server.url).toBe(`http://localhost:${server.port}`);
+    expect((await fetch(`http://127.0.0.1:${server.port}/api/meta`)).status).toBe(200);
+  });
+
+  it('HOST in the environment is used when no host option is given', async () => {
+    vi.stubEnv('HOST', '0.0.0.0');
+    const server = await startServer(SHIPPED);
+    expect(server.host).toBe('0.0.0.0');
+  });
+
+  it('a HOST this machine cannot bind is a ConfigError that names HOST', async () => {
+    // 203.0.113.0/24 is reserved for documentation (TEST-NET-3): no machine has it.
+    await expect(start({ dataDir: SHIPPED, port: 0, host: '203.0.113.7' })).rejects.toThrow(/HOST "203\.0\.113\.7"/);
+    await expect(start({ dataDir: SHIPPED, port: 0, host: '203.0.113.7' })).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  it('explainListenError: a non-default host names HOST; the default host keeps the old message', () => {
+    const err = Object.assign(new Error('x'), { code: 'EADDRNOTAVAIL' }) as NodeJS.ErrnoException;
+    expect(explainListenError(err, 3000, '10.1.2.3').message).toContain('HOST "10.1.2.3"');
+    expect(explainListenError(err, 3000).message).toContain('Port 3000 cannot be used');
   });
 });
 
