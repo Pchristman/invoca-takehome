@@ -130,8 +130,10 @@ describe('checkTakeaway', () => {
     const alertSheet = makeFactSheet('campaigns', {
       'alert.count': { kind: 'count', value: 1, noun: ['alert', 'alerts'] },
       'alert.top.name': { kind: 'name', value: 'Alpha' },
+      'alert.top.direction': { kind: 'word', value: 'dropped' },
     });
     expect(reasonOf('{alert.top.name} calls moved most, so find out what changed.', alertSheet)).toBe('ok');
+    expect(reasonOf('Calls to {alert.top.name} {alert.top.direction}; check what changed.', alertSheet)).toBe('ok');
     expect(reasonOf('Gamma calls moved most, so find out what changed.', alertSheet)).toBe('off_sheet_name');
   });
 

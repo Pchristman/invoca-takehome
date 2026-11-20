@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { alertAction } from '../../../src/core/views/campaignAlerts';
+import { makeFactSheet } from '../../../src/core/views/facts';
 import type { FlaggedCampaign } from '../../../src/core/views/campaignAlerts';
 
 const flag = (over: Partial<FlaggedCampaign>): FlaggedCampaign => ({
@@ -25,6 +26,14 @@ describe('alertAction', () => {
     expect(action.kind).toBe('review_call_changes');
     expect(action.actionable).toBe(true);
     expect(action.link).toEqual({ view: 'campaigns' });
+  });
+
+  it('states the biggest mover direction as a word fact that is not a name', () => {
+    const jump = alertAction([flag({})])!;
+    expect(jump.facts['alert.top.direction']).toEqual({ kind: 'word', value: 'jumped' });
+    const drop = alertAction([flag({ direction: 'drop', previous: 60, current: 20 })])!;
+    expect(drop.facts['alert.top.direction']).toEqual({ kind: 'word', value: 'dropped' });
+    expect(makeFactSheet('campaigns', jump.facts).entities).toEqual(['Alpha']);
   });
 
   it('one drop', () => {

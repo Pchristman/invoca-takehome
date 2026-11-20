@@ -8,6 +8,7 @@ export type ViewName = 'overview' | 'campaigns' | 'locations' | 'missed-calls';
 
 export type Fact =
   | { kind: 'name'; value: string } // a campaign, office or channel: becomes an entity
+  | { kind: 'word'; value: string } // a plain word the text must use as given, such as 'jumped'; not an entity
   | { kind: 'count'; value: number; noun?: readonly [string, string] }
   | { kind: 'usd'; value: number }
   | { kind: 'usd_per_dollar'; value: number } // revenue per budget dollar, to the cent
@@ -26,7 +27,7 @@ export interface FactSheet {
 }
 
 export function formatFact(fact: Fact): string {
-  if (fact.kind === 'name') return fact.value;
+  if (fact.kind === 'name' || fact.kind === 'word') return fact.value;
   if (!Number.isFinite(fact.value)) throw new Error(`Cannot format a non-finite ${fact.kind} fact`);
   switch (fact.kind) {
     case 'count': return formatCount(fact.value, fact.noun);

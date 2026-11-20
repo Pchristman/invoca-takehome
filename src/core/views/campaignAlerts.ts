@@ -33,6 +33,7 @@ export function alertAction(flagged: readonly FlaggedCampaign[]): Action | null 
     {
       'alert.count': { kind: 'count', value: sorted.length, noun: ['campaign', 'campaigns'] },
       'alert.top.name': { kind: 'name', value: top.name },
+      'alert.top.direction': { kind: 'word', value: top.direction === 'jump' ? 'jumped' : 'dropped' },
       'alert.top.previous': { kind: 'count', value: top.previous },
       'alert.top.current': { kind: 'count', value: top.current, noun: ['call', 'calls'] },
     },
