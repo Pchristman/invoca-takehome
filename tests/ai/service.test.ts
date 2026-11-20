@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildPrompt } from '../../src/ai/prompt';
@@ -149,7 +149,7 @@ describe('takeaway service', () => {
       const result = await make(model, { limitUsd: 0 }).takeaway(sheet(), TEMPLATE);
       expect(result).toEqual({ text: TEMPLATE, source: 'template', reason: 'budget_reached' });
       expect(model.calls).toBe(0);
-      expect(() => readFileSync(paths().logPath)).toThrow();
+      expect(readFileSync(paths().logPath, 'utf8')).toBe(''); // only the empty file made at start
     });
 
     it('a limit equal to spend plus the worst case allows the call, one nano-dollar less blocks it', async () => {
@@ -236,7 +236,7 @@ describe('takeaway service', () => {
     const result = await make(model).takeaway(makeFactSheet('campaigns', {}), TEMPLATE);
     expect(result).toEqual({ text: TEMPLATE, source: 'template', reason: 'no_facts' });
     expect(model.calls).toBe(0);
-    expect(() => readFileSync(paths().logPath)).toThrow();
+    expect(readFileSync(paths().logPath, 'utf8')).toBe(''); // only the empty file made at start
   });
 
   it('the key never leaks', async () => {
@@ -261,11 +261,44 @@ describe('takeaway service', () => {
       expect(model.calls).toBe(0);
     });
 
+    it('a log that cannot be appended to at start turns AI off before any paid call', async () => {
+      mkdirSync(join(dir, 'logs'));
+      const readOnly = paths().logPath;
+      writeFileSync(readOnly, '');
+      chmodSync(readOnly, 0o444); // readable, not writable
+      // A directory in place of the file is unwritable on every platform (and as root): the same case.
+      const dirAsLog = join(dir, 'logs', 'dir-as-log.jsonl');
+      mkdirSync(dirAsLog);
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      for (const path of [readOnly, dirAsLog]) {
+        const model = new FakeModel(textReply(GOOD));
+        const service = make(model, { logPath: path });
+        expect(service.status().status).toBe('off');
+        expect(await service.takeaway(sheet(), TEMPLATE)).toEqual({ text: TEMPLATE, source: 'template', reason: 'log_unavailable' });
+        expect(model.calls).toBe(0);
+      }
+      expect(JSON.stringify(spy.mock.calls)).toContain('cannot be written');
+      chmodSync(readOnly, 0o644);
+    });
+
+    it('a log that is writable at start leaves only the empty file and prints nothing', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(make(new FakeModel(textReply(GOOD))).status().status).toBe('on');
+      expect(readFileSync(paths().logPath, 'utf8')).toBe('');
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('no model means no probe and no log file', () => {
+      make(null);
+      expect(existsSync(paths().logPath)).toBe(false);
+    });
+
     it('a log that fails to write after a paid call still returns that call, then AI is off', async () => {
-      writeFileSync(join(dir, 'afile'), 'x');
       vi.spyOn(console, 'error').mockImplementation(() => {});
       const model = new FakeModel(textReply(GOOD));
-      const service = make(model, { logPath: join(dir, 'afile', 'ai.jsonl') });
+      const service = make(model);
+      rmSync(paths().logPath); // after start: a directory takes the file's place
+      mkdirSync(paths().logPath);
       expect((await service.takeaway(sheet(1), TEMPLATE)).source).toBe('ai');
       expect(service.status().status).toBe('off');
       expect((await service.takeaway(sheet(2), TEMPLATE)).reason).toBe('log_unavailable');
@@ -345,12 +378,13 @@ describe('takeaway service', () => {
 
   describe('a log that breaks while calls are in flight', () => {
     it('prints exactly one line', async () => {
-      writeFileSync(join(dir, 'afile'), 'x');
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const model = new FakeModel(textReply(GOOD));
       let open!: () => void;
       model.gate = new Promise<void>((resolve) => { open = resolve; });
-      const service = make(model, { logPath: join(dir, 'afile', 'ai.jsonl') });
+      const service = make(model);
+      rmSync(paths().logPath); // breaks after a clean start
+      mkdirSync(paths().logPath);
       const first = service.takeaway(sheet(1), TEMPLATE);
       const second = service.takeaway(sheet(2), TEMPLATE);
       open();

@@ -1,5 +1,5 @@
 // The call log: one JSON line per model call. Spend, cache hits and checker failures are read back from it.
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { ViewName } from '../core/views/facts';
 
@@ -34,6 +34,19 @@ export function appendLogLine(path: string, line: CallLogLine): void {
   try {
     mkdirSync(dirname(path), { recursive: true });
     appendFileSync(path, JSON.stringify(line) + '\n');
+  } catch {
+    throw new LogUnavailableError('The AI call log cannot be written.');
+  }
+}
+
+/**
+ * Check at start that a line can be appended: open for append and close, adding nothing.
+ * Creates the folder and, if missing, the empty file the first append would create anyway.
+ */
+export function checkLogWritable(path: string): void {
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    closeSync(openSync(path, 'a'));
   } catch {
     throw new LogUnavailableError('The AI call log cannot be written.');
   }

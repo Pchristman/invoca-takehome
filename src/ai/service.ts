@@ -2,7 +2,7 @@
 // Every failure ends in the template text; takeaway() never rejects.
 import type { AiStatus } from '../server/api';
 import { fillPlaceholders, type FactSheet } from '../core/views/facts';
-import { appendLogLine, loadLog, type CallLogLine, type LogSummary } from './callLog';
+import { appendLogLine, checkLogWritable, loadLog, type CallLogLine, type LogSummary } from './callLog';
 import { cacheKey, TakeawayCache } from './cache';
 import { checkTakeaway, type KnownNames } from './checker';
 import { costNanoUsd, MAX_OUTPUT_TOKENS, nanoToUsd, worstCaseNanoUsd } from './pricing';
@@ -49,12 +49,21 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
   // Spend comes from the log, so a log we cannot read means unknown spend: fail closed.
   let summary: LogSummary = { spendNanoUsd: 0, cacheHits: 0, checkerFailures: 0, skippedLines: 0 };
   let logUsable = true;
+  // A log we can read but not write is just as bad: a paid call would go unrecorded. Check before any call.
   if (logPath !== null) {
     try {
       summary = loadLog(logPath);
     } catch {
       logUsable = false;
       console.error('AI is off for this session: the call log cannot be read.');
+    }
+    if (logUsable && model !== null) { // with AI off nothing is ever appended
+      try {
+        checkLogWritable(logPath);
+      } catch {
+        logUsable = false;
+        console.error('AI is off for this session: the call log cannot be written.');
+      }
     }
   }
 
