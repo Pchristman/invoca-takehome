@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { Meta, QuestionResponse } from '../../server/api';
 import { askQuestion } from '../api';
-import { askModel } from '../models/askModel';
+import { askModel, replyWanted } from '../models/askModel';
 import type { AskShow } from '../models/askModel';
 import type { RequestState } from '../requestState';
 import { answerHref } from '../urlState';
@@ -54,19 +54,34 @@ export function AskBoxView({
   );
 }
 
-/** One request at a time. On a valid filter it navigates to the answer page; on failure the typed text stays. */
+/**
+ * One request at a time. On a valid filter it navigates to the answer page; on failure the typed text stays.
+ * Each submit has its own AbortController; leaving the page or asking again cancels the one in flight.
+ */
 export function AskBox({ meta, state, onNavigate }: { meta: Pick<Meta, 'aiStatus'>; state: UrlState; onNavigate(href: string): void }) {
   const [value, setValue] = useState('');
   const [request, setRequest] = useState<RequestState<QuestionResponse> | null>(null);
   const busy = request?.status === 'loading';
+  const latestState = useRef(state); // navigate from the page as it is when the reply arrives
+  latestState.current = state;
+  const controller = useRef<AbortController | null>(null);
+  const latestId = useRef(0);
+
+  useEffect(() => () => controller.current?.abort(), []); // unmount
 
   const submit = () => {
     if (busy || value.trim() === '') return;
+    controller.current?.abort();
+    const abort = new AbortController();
+    controller.current = abort;
+    latestId.current += 1;
+    const submitId = latestId.current;
     setRequest({ status: 'loading', key: value });
-    askQuestion(value).then((reply) => {
+    askQuestion(value, abort.signal).then((reply) => {
+      if (!replyWanted({ submitId, latestId: latestId.current, aborted: abort.signal.aborted })) return;
       if (reply.ok) {
         setRequest(null);
-        onNavigate(answerHref(state, reply.query));
+        onNavigate(answerHref(latestState.current, reply.query));
       } else {
         setRequest({ status: 'ready', key: value, data: reply });
       }

@@ -92,6 +92,46 @@ describe('buildAnswer', () => {
     expectAllFinite(v);
   });
 
+  describe('ties for the top value (M11)', () => {
+    const miss = { answered: false, outcome: 'missed' as const, booked: false, revenueUsd: 0 };
+    const tied = (count: number) =>
+      makeStore(
+        ['a', 'b', 'c', 'd', 'e'].slice(0, count).flatMap((id) => [
+          callAt(FRI, { locationId: id, ...miss, ...fri }),
+          callAt(FRI, { locationId: id, ...miss, ...fri }),
+        ]),
+        {
+          locations: [office('a', 'Alpha Office'), office('b', 'Beta Office'), office('c', 'Canyon Office'),
+            office('d', 'Delta Office'), office('e', 'Echo Office')],
+          campaigns: [],
+        },
+      );
+
+    it('two tied groups are named together', () => {
+      expect(buildAnswer(tied(2), r, open).sentence).toBe(
+        'Alpha Office and Beta Office tied for the most unanswered calls: 2 of 2.',
+      );
+    });
+
+    it('three are listed; more than three say "and N more"', () => {
+      expect(buildAnswer(tied(3), r, open).sentence).toBe(
+        'Alpha Office, Beta Office and Canyon Office tied for the most unanswered calls: 2 of 2.',
+      );
+      expect(buildAnswer(tied(5), r, open).sentence).toBe(
+        'Alpha Office, Beta Office, Canyon Office and 2 more tied for the most unanswered calls: 2 of 2.',
+      );
+    });
+
+    it('locations and campaigns ties are worded the same way; a single leader is unchanged', () => {
+      expect(buildAnswer(tied(2), r, { ...open, view: 'locations' }).sentence).toBe(
+        'Alpha Office and Beta Office tied for the most calls: 2, of which 0 were answered.',
+      );
+      expect(buildAnswer(store, r, { ...open, weekdays: [4] }).sentence).toBe(
+        'Alpha Office had the most unanswered calls: 3 of 4.',
+      );
+    });
+  });
+
   it('a missed-calls top row with nothing unanswered says so', () => {
     const v = buildAnswer(store, r, { ...open, officeIds: ['b'] });
     expect(v.sentence).toBe('No matching call went unanswered.');

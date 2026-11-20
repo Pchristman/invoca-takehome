@@ -534,16 +534,26 @@ describe('answer state (S4)', () => {
     expect(parseUrlState(URL_TEXT).answer).toEqual({
       offices: ['a', 'b'],
       campaigns: [],
-      unattributed: true,
-      weekdays: [4],
-      hours: [9, 10],
+      unattributed: '1',
+      weekdays: ['4'],
+      hours: ['9', '10'],
     });
     expect(parseUrlState('?view=missed-calls&f_office=a').answer).toBeNull();
-    const dropped = parseUrlState('?answer&f_weekday=abc&f_hour=&f_hour=x1&f_office=');
-    expect(dropped.answer).toEqual({ offices: [], campaigns: [], unattributed: false, weekdays: [], hours: [] });
+    const dropped = parseUrlState('?answer&f_hour=&f_office=');
+    expect(dropped.answer).toEqual({ offices: [], campaigns: [], unattributed: null, weekdays: [], hours: [] });
     expect(parseUrlState('?answer').answer).toEqual({
-      offices: [], campaigns: [], unattributed: false, weekdays: [], hours: [],
+      offices: [], campaigns: [], unattributed: null, weekdays: [], hours: [],
     });
+  });
+
+  it('malformed values are kept and passed to /api/answer unchanged, so the server judges them (M8)', () => {
+    const parsed = parseUrlState('?answer&f_hour=abc&f_weekday=9&f_unattributed=yes&range=last7');
+    expect(parsed.answer).toEqual({ offices: [], campaigns: [], unattributed: 'yes', weekdays: ['9'], hours: ['abc'] });
+    const params = answerParams(parsed);
+    expect(params.getAll('f_hour')).toEqual(['abc']);
+    expect(params.getAll('f_weekday')).toEqual(['9']);
+    expect(params.get('f_unattributed')).toBe('yes');
+    expect(parseUrlState(toSearch(parsed))).toEqual(parsed);
   });
 
   it('toSearch writes view, range, filter, answer, print, dev, and round-trips', () => {

@@ -63,7 +63,9 @@ function buildRows(store: CallStore, calls: readonly CleanCall[], groupBy: Answe
   const groups = new Map<string | null, CleanCall[]>();
   for (const call of calls) {
     const id = groupBy === 'office' ? call.locationId : call.campaignId;
-    groups.set(id, [...(groups.get(id) ?? []), call]);
+    const group = groups.get(id);
+    if (group) group.push(call);
+    else groups.set(id, [call]);
   }
   return [...groups].map(([id, groupCalls]) => ({
     id,
@@ -81,19 +83,34 @@ function byId(a: AnswerRow, b: AnswerRow): number {
   return a.id < b.id ? -1 : 1;
 }
 
+const MAX_NAMED = 3;
+
+/** 'A', 'A and B', 'A, B and C', 'A, B, C and 2 more'. */
+function namesText(names: string[]): string {
+  if (names.length > MAX_NAMED) return `${names.slice(0, MAX_NAMED).join(', ')} and ${names.length - MAX_NAMED} more`;
+  if (names.length === 1) return names[0] as string;
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 function sentenceFor(filter: AnswerFilter, totals: AnswerView['totals'], rows: AnswerRow[]): string {
   if (totals.calls === 0) return NO_MATCH;
   const top = rows[0];
   if (top) {
+    // Rows are sorted by the view's key, so the leaders are the rows that equal the first one on it.
+    const value = (row: AnswerRow) => (filter.view === 'missed-calls' ? row.unanswered : row.calls);
+    const leaders = rows.filter((row) => value(row) === value(top));
+    const tied = leaders.length > 1;
+    const who = tied ? `${namesText(leaders.map((row) => row.name))} tied for the most` : `${top.name} had the most`;
     if (filter.view === 'missed-calls') {
       if (top.unanswered === 0) return 'No matching call went unanswered.';
-      return `${top.name} had the most unanswered calls: ${formatCount(top.unanswered)} of ${formatCount(top.calls)}.`;
+      return `${who} unanswered calls: ${formatCount(top.unanswered)} of ${formatCount(top.calls)}.`;
     }
     if (filter.view === 'locations') {
-      return `${top.name} took the most calls: ${formatCount(top.calls)}, of which ${formatCount(top.answered)} were answered.`;
+      const lead = tied ? who : `${top.name} took the most`;
+      return `${lead} calls: ${formatCount(top.calls)}, of which ${formatCount(top.answered)} were answered.`;
     }
     if (filter.view === 'campaigns') {
-      return `${top.name} had the most calls: ${formatCount(top.calls)}, with ${formatCount(top.bookings, ['booking', 'bookings'])}.`;
+      return `${who} calls: ${formatCount(top.calls)}, with ${formatCount(top.bookings, ['booking', 'bookings'])}.`;
     }
   }
   const answerRate = totals.answerRate === null ? '' : formatRate(totals.answerRate);

@@ -19,6 +19,7 @@ const ALL_CODES: Record<ClientErrorCode, true> = {
   unknown_location: true,
   unknown_view: true,
   not_found: true,
+  forbidden: true,
   internal: true,
   network: true,
   bad_response: true,

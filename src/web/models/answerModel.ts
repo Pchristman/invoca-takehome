@@ -20,6 +20,7 @@ export interface AnswerShow {
   link: { label: string; href: string };
   caveats: Caveat[];
   empty: boolean;
+  showTable: boolean; // false for Overview answers (totals only) and when nothing matched
 }
 
 const SEPARATOR = ' · ';
@@ -115,5 +116,6 @@ export function answerModel(answer: AnswerResponse, span: DateRange): AnswerShow
     link: linkFor(answer),
     caveats: caveatsFor(answer.notes, span, { comparing: false, range: answer.range }),
     empty: totals.calls === 0,
+    showTable: groupBy !== 'none' && answer.rows.length > 0,
   };
 }

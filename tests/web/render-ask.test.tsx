@@ -10,7 +10,7 @@ import { Header } from '../../src/web/components/Header';
 import { Nav } from '../../src/web/components/Nav';
 import { askModel } from '../../src/web/models/askModel';
 import type { RequestState } from '../../src/web/requestState';
-import { parseUrlState } from '../../src/web/urlState';
+import { answerParams, parseUrlState } from '../../src/web/urlState';
 import { serverFixture } from '../server/helpers';
 import { metaFor, toJson } from './fixtures';
 
@@ -46,7 +46,7 @@ const page = (request: RequestState<AnswerResponse>, search = '?answer&view=miss
 describe('AskBox', () => {
   it('AI off: the note and no form or input', () => {
     const markup = box('off');
-    expect(markup).toContain('Ask a question needs an AI key.');
+    expect(markup).toContain('Ask a question needs AI.');
     expect(markup).not.toContain('<input');
     expect(markup).not.toContain('<form');
   });
@@ -97,7 +97,10 @@ describe('AnswerView', () => {
 
   it('?dev is kept on the links', () => {
     const markup = page(ready(answer({ view: 'missed-calls' })), '?answer&view=missed-calls&range=last7&dev');
-    expect(markup).toMatch(/href="[^"]*Open[^"]*"|href="[^"]*dev"/);
+    const hrefs = [...markup.matchAll(/href="([^"]*)"/g)].map((m) => m[1]!);
+    const open = hrefs.find((h) => h.includes('view=missed-calls'))!;
+    expect(open).toMatch(/&amp;dev$/);
+    expect(hrefs.find((h) => h.startsWith('/?range=last7'))!).toMatch(/dev$/);
     expect(markup.match(/dev"/g)!.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -133,11 +136,40 @@ describe('AnswerView', () => {
     expect(markup).toContain('Reset to defaults');
   });
 
-  it('an empty answer says so and has an empty table body, no NaN', () => {
+  it('a hand-edited hour (f_hour=abc) is kept in the request and the server 400 message is shown (M8)', () => {
+    const state = parseUrlState('?answer&f_hour=abc&range=last7');
+    expect(answerParams(state).getAll('f_hour')).toEqual(['abc']);
+    const markup = page(
+      {
+        status: 'failed',
+        key: 'k',
+        error: { code: 'bad_param', message: 'f_hour must be a whole number from 0 to 23.', field: 'f_hour', status: 400 },
+      },
+      '?answer&f_hour=abc&range=last7',
+    );
+    expect(markup).toContain('f_hour must be a whole number from 0 to 23.');
+    expect(markup).toContain('role="alert"');
+  });
+
+  it('an empty answer says so and shows no table (no misleading empty table)', () => {
     const markup = page(ready(answer({ view: 'locations', weekdays: [6], hours: [3] })));
     expect(markup).toContain('No calls match this question in this range.');
     expect(markup).not.toContain('NaN');
-    expect(markup).not.toMatch(/<tbody><tr/);
+    expect(markup).not.toContain('<table');
+  });
+
+  it('an Overview answer with matches shows totals only, no table (M10)', () => {
+    const markup = page(ready(answer({ view: 'overview' })));
+    expect(markup).not.toContain('<table');
+    expect(markup).not.toContain('>Office<');
+    expect(markup).toContain('answer-totals');
+    expect(markup).not.toContain('No calls match');
+  });
+
+  it('an empty missed-calls answer says so and shows no table (M10)', () => {
+    const markup = page(ready(answer({ view: 'missed-calls', weekdays: [6], hours: [3] })));
+    expect(markup).toContain('No calls match this question in this range.');
+    expect(markup).not.toContain('<table');
   });
 
   it('loading prints a status line', () => {

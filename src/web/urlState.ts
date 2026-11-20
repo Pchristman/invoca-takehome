@@ -6,13 +6,16 @@ export type RangeChoice =
   | { kind: 'preset'; preset: string } // raw: the server judges it
   | { kind: 'custom'; start: string; end: string }; // either may be '' (hand-edited URL)
 
-/** The filter of an answer page (S4). The server judges the values; the web keeps only well-formed ones. */
+/**
+ * The filter of an answer page (S4). The server is the single judge of the values: the web keeps every
+ * non-empty value as typed (even 'abc') and passes it on, so a hand-edited URL shows the server's 400 message.
+ */
 export interface AnswerParams {
   offices: string[];
   campaigns: string[];
-  unattributed: boolean;
-  weekdays: number[];
-  hours: number[];
+  unattributed: string | null; // '1' normally; kept raw so a bad value reaches the server
+  weekdays: string[];
+  hours: string[];
 }
 
 export interface UrlState {
@@ -68,9 +71,9 @@ function parseAnswer(params: URLSearchParams): AnswerParams | null {
   return {
     offices: nonEmpty(params.getAll('f_office')),
     campaigns: nonEmpty(params.getAll('f_campaign')),
-    unattributed: params.get('f_unattributed') === '1',
-    weekdays: integers(params.getAll('f_weekday')),
-    hours: integers(params.getAll('f_hour')),
+    unattributed: firstValue(params, 'f_unattributed'),
+    weekdays: nonEmpty(params.getAll('f_weekday')),
+    hours: nonEmpty(params.getAll('f_hour')),
   };
 }
 
@@ -108,9 +111,9 @@ function filterPairs(answer: AnswerParams): Array<[string, string]> {
   const pairs: Array<[string, string]> = [];
   for (const id of answer.offices) pairs.push(['f_office', id]);
   for (const id of answer.campaigns) pairs.push(['f_campaign', id]);
-  if (answer.unattributed) pairs.push(['f_unattributed', '1']);
-  for (const day of answer.weekdays) pairs.push(['f_weekday', String(day)]);
-  for (const hour of answer.hours) pairs.push(['f_hour', String(hour)]);
+  if (answer.unattributed !== null) pairs.push(['f_unattributed', answer.unattributed]);
+  for (const day of answer.weekdays) pairs.push(['f_weekday', day]);
+  for (const hour of answer.hours) pairs.push(['f_hour', hour]);
   return pairs;
 }
 

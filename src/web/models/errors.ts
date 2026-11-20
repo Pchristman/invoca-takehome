@@ -32,6 +32,8 @@ export function describeError(error: ClientError): ErrorCopy {
         canReset: false,
         canRetry: false,
       };
+    case 'forbidden':
+      return { title: 'That request was blocked', message: error.message, canReset: false, canRetry: false };
     case 'internal':
       return {
         title: 'The server hit an unexpected error',

@@ -7,7 +7,7 @@ export type AskShow =
   | { box: 'hidden'; note: string }
   | { box: 'shown'; busy: boolean; message: string | null; examples: string[] | null };
 
-export const AI_OFF_NOTE = 'Ask a question needs an AI key. Set ANTHROPIC_API_KEY and restart.';
+export const AI_OFF_NOTE = 'Ask a question needs AI. Set ANTHROPIC_API_KEY, make sure the logs folder is writable, and restart.';
 
 /** Three kinds of question the box can answer. No names, no numbers: they must work on any export. */
 export const EXAMPLE_QUESTIONS: string[] = [
@@ -16,25 +16,18 @@ export const EXAMPLE_QUESTIONS: string[] = [
   'Which campaign gets the most calls in the mornings?',
 ];
 
-// The same sentences the server sends (Task 4). invalid_filter carries the server's own detail.
-const MESSAGES: Record<Exclude<QuestionReason, 'invalid_filter'>, string> = {
-  ai_off: 'Questions need an AI key.',
-  budget_reached: 'The AI budget for this app is used up.',
-  timeout: "The AI service didn't answer. Try again.",
-  api_error: "The AI service didn't answer. Try again.",
-  refusal: "Couldn't turn that into a filter. Try rewording it.",
-  malformed: "Couldn't turn that into a filter. Try rewording it.",
-  unanswerable: "That isn't a question about these calls.",
-  log_unavailable: 'AI is off for this session.',
-};
-
 const WITH_EXAMPLES: QuestionReason[] = ['invalid_filter', 'malformed', 'refusal', 'unanswerable'];
 
+const FALLBACK_MESSAGE = "Couldn't answer that. Try again.";
+
+/** The server's text for every failure (the client-side api_error carries its own). Never a copy of the server's table. */
 function failureMessage(reply: Extract<QuestionResponse, { ok: false }>): string {
-  if (reply.reason === 'invalid_filter') return reply.message;
-  // A client-side api_error ("Can't reach the data.") keeps its own sentence.
-  if (reply.reason === 'api_error' && reply.message !== '') return reply.message;
-  return MESSAGES[reply.reason];
+  return reply.message !== '' ? reply.message : FALLBACK_MESSAGE;
+}
+
+/** Is a reply still wanted? Not if a newer question was submitted, or this one was cancelled (unmount, new submit). */
+export function replyWanted(submit: { submitId: number; latestId: number; aborted: boolean }): boolean {
+  return !submit.aborted && submit.submitId === submit.latestId;
 }
 
 export function askModel(meta: Pick<Meta, 'aiStatus'>, request: RequestState<QuestionResponse> | null): AskShow {

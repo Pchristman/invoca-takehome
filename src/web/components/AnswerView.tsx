@@ -37,6 +37,7 @@ export function AnswerPage({
                 <li key={total.label}>{`${total.label}: ${total.value}`}</li>
               ))}
             </ul>
+            {show.showTable && (
             <div className="table-wrap">
               <table>
                 <caption className="visually-hidden">Calls that match the question</caption>
@@ -68,6 +69,7 @@ export function AnswerPage({
                 </tbody>
               </table>
             </div>
+            )}
             <p className="row">
               <Link href={withDevOf(show.link.href, state)}>{show.link.label}</Link>
               <Link href={clearHref(state)}>Clear question</Link>
