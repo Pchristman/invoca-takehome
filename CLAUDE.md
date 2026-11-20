@@ -26,7 +26,7 @@ I'm building a small local web product that helps a marketing manager track inbo
 - Timestamps are UTC. Convert to the office's IANA time zone for any time-of-day or day-of-week view.
 - Revenue only counts on booked calls.
 - Spend isn't in the data. If we estimate it from daily_budget_usd x days, label it as an estimate. Cost per booking is empty when the budget is 0, never infinity.
-- Comparisons use periods of equal length. Never compare a partial period with a full one without saying so.
+- Comparisons use periods of equal length by default; a second range of another length is compared per day and labelled. Never compare a partial period with a full one without saying so.
 - Bad rows (bad timestamp, unknown campaign or location) are counted and reported. They never crash the app.
 
 ## AI budget

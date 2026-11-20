@@ -59,7 +59,7 @@ In order: S1 alerts, S2 compare any two date ranges, S3 print-friendly one-page 
 
 ### 3.2 Comparison
 
-- Default comparison range: the same number of days immediately before the selected range.
+- Default comparison range: the same number of days immediately before the selected range. A second range of another length (stretch S2) is compared per day and labelled as such.
 - If any day of the comparison range falls before the first date in the data, **no change is shown**; the tile shows "No full previous period" with a one-line reason. "All data" therefore never shows a change.
 - If the selected range or the comparison range includes the first or last date in the data, a note says that day may be incomplete.
 - Counts and money show % change. Rates (answer rate, booking rate) show change in percentage points.
@@ -188,7 +188,7 @@ All rules live in the pure data core. **Each rule gets its own test** against a 
 6. **Revenue.** Counts only when the current outcome is `booked`. Revenue on any other outcome is ignored and counted in data notes. A booked call with empty revenue counts as a booking with $0 revenue and is counted in data notes.
 7. **Pending outcomes.** An answered call with an empty outcome is "pending": it counts in calls and answer rate, not in bookings, and is excluded from booking-rate denominators used for missed-call value.
 8. **Spend.** Not in the data. Estimated spend = daily budget x days in range; always labeled as an estimate. Cost per booking is blank when budget is $0 or bookings are 0.
-9. **Comparisons.** Equal-length periods only. A comparison period not fully covered by the data shows no change and says why. Partial first or last data days are noted (section 3.2).
+9. **Comparisons.** Equal length by default; a second range of another length is compared per day and labelled as such. A comparison period not fully covered by the data shows no change and says why. Partial first or last data days are noted (section 3.2).
 10. **Weeks.** Monday to Sunday by local date; partial weeks marked.
 11. **Nothing hard-coded.** No campaign names, office names, IDs, channels-to-campaign maps or dates in code. Enums (`outcome`, `marketing_channel`) are the documented column contract and may live in code.
 
