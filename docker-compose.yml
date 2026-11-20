@@ -1,0 +1,30 @@
+name: inbound-calls
+
+services:
+  app:
+    build: .
+    # A tiny init process forwards SIGTERM, so `docker compose stop` is quick.
+    init: true
+    ports:
+      # Published on this machine's loopback only, so the callback list is not on the network.
+      # PORT picks the host side; inside the container the server is always on 3000.
+      - "127.0.0.1:${PORT:-3000}:3000"
+    # The image sets HOST, PORT and DATA_DIR itself; they are not passed through,
+    # so a .env copied from the `npm start` setup cannot make the container unreachable.
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_SPEND_LIMIT_USD: ${AI_SPEND_LIMIT_USD:-}
+    volumes:
+      # Long syntax, so a Windows path with a colon is not misread.
+      # DATA_DIR only chooses which host folder is mounted, read-only, at /data.
+      - type: bind
+        source: ${DATA_DIR:-.}
+        target: /data
+        read_only: true
+      # The AI cache and the AI call log (the spend guard reads the log) survive restarts.
+      - ai-cache:/app/.cache
+      - ai-logs:/app/logs
+
+volumes:
+  ai-cache:
+  ai-logs:

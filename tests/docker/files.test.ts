@@ -98,3 +98,39 @@ describe('Dockerfile and .dockerignore', () => {
     }
   });
 });
+
+describe('docker-compose.yml', () => {
+  const compose = readText('docker-compose.yml');
+
+  it('compose publishes only on the host loopback, and the container side is fixed at 3000', () => {
+    expect(compose).not.toBe('');
+    const ports = [...compose.matchAll(/^\s*-\s*"?(\d[^"\s]*:\d+)"?\s*$/gm)].map((m) => m[1]);
+    expect(ports).toEqual(['127.0.0.1:${PORT:-3000}:3000']);
+    expect(compose).not.toMatch(/0\.0\.0\.0:/);
+  });
+
+  it('compose passes only the key and the spend limit, by interpolation, with no literal key and no env_file', () => {
+    expect(compose).toMatch(/ANTHROPIC_API_KEY: \$\{ANTHROPIC_API_KEY:-\}/);
+    expect(compose).toMatch(/AI_SPEND_LIMIT_USD: \$\{AI_SPEND_LIMIT_USD:-\}/);
+    expect(compose).not.toMatch(/env_file/);
+    expect(compose).not.toMatch(/sk-ant-/);
+    // these stay the image's, whatever .env says (comments may name them, so look at YAML keys only)
+    expect(compose).not.toMatch(/^\s*(HOST|PORT|DATA_DIR):/m);
+  });
+
+  it('compose mounts the data folder read-only and puts the AI cache and log on named volumes', () => {
+    expect(compose).toMatch(/source: \$\{DATA_DIR:-\.\}\s+target: \/data\s+read_only: true/);
+    expect(compose).toMatch(/- ai-cache:\/app\/\.cache/);
+    expect(compose).toMatch(/- ai-logs:\/app\/logs/);
+  });
+
+  it('compose uses an init process so SIGTERM stops the server at once, and does not restart a failed start', () => {
+    expect(compose).toMatch(/^\s+init: true$/m);
+    expect(compose).not.toMatch(/restart:/);
+  });
+
+  it('compose has no CR and no build argument', () => {
+    expect(compose).not.toContain('\r');
+    expect(compose).not.toMatch(/\bargs:/);
+  });
+});
