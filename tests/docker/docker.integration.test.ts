@@ -376,14 +376,14 @@ describe.skipIf(import.meta.env.MODE !== 'docker')('real container', () => {
     expect(second.stdout.trim()).toBe('cache-ok|log-ok');
   }, 180_000);
 
-  // A root-owned folder alone leaves AI "on" until the first write fails (the app only reads the log at start),
-  // so the log file is also made root-only and unreadable, which is what turns AI off at start (Phase 9 fails closed).
+  // A volume left root-owned by an earlier run. Docker re-applies the image's ownership to an EMPTY volume at every
+  // mount, so a root-owned folder only persists when it holds a file: a root-owned log, mode 644 (readable, not
+  // writable). The app must then switch AI off at start, so no paid call can go unlogged (Phase 9 fails closed).
   it('a root-owned volume: the app still serves every view, AI reports off', async () => {
     const options = { envFile: FAKE_KEY, key: null as null, env: { PORT: String(freePort()) } };
-    const chown = compose(
-      ['run', '--rm', '--no-deps', '--user', 'root', '--entrypoint', 'sh', 'app', '-c', 'chown root:root /app/logs && chmod 755 /app/logs && touch /app/logs/ai-calls.jsonl && chown root:root /app/logs/ai-calls.jsonl && chmod 600 /app/logs/ai-calls.jsonl'],
-      options,
-    );
+    const setup =
+      'chown root:root /app/logs && chmod 755 /app/logs && touch /app/logs/ai-calls.jsonl && chown root:root /app/logs/ai-calls.jsonl && chmod 644 /app/logs/ai-calls.jsonl';
+    const chown = compose(['run', '--rm', '--no-deps', '--user', 'root', '--entrypoint', 'sh', 'app', '-c', setup], options);
     expect(chown.status).toBe(0);
     const { run, port } = up(options, Number(options.env.PORT));
     expect(run.status).toBe(0);
