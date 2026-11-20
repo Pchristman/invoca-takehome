@@ -176,6 +176,29 @@ describe('docker-compose.yml', () => {
     expect(compose).not.toMatch(/restart:/);
   });
 
+  it('Dockerfile copies src/db and creates a db folder owned by the runtime user', () => {
+    const dockerfile = readText('Dockerfile');
+    expect(lines(dockerfile)).toContain('COPY src/db ./src/db');
+    expect(lines(dockerfile)).toContain('RUN mkdir -p db && chown node:node db');
+  });
+
+  it('Dockerfile sets DB_PATH inside the volume folder, and compose mounts a named volume there', () => {
+    expect(readText('Dockerfile')).toMatch(/\bDB_PATH=\/app\/db\/calls\.db\b/);
+    expect(compose).toMatch(/- calls-db:\/app\/db/);
+    expect(compose).toMatch(/^volumes:[\s\S]*^\s+calls-db:\s*$/m);
+  });
+
+  it('compose does not pass DB_PATH through', () => {
+    expect(compose).not.toMatch(/^\s*DB_PATH:/m);
+    expect(compose).not.toMatch(/\$\{DB_PATH/);
+  });
+
+  it('.dockerignore still excludes data (the database file never enters the image)', () => {
+    const ignore = lines(readText('.dockerignore')).filter((l) => l !== '' && !l.startsWith('#'));
+    expect(ignore).toContain('data');
+    expect(isIgnored(['data', 'calls.db'].join('/'), ignore)).toBe(true);
+  });
+
   it('compose has no CR and no build argument', () => {
     expect(compose).not.toContain('\r');
     expect(compose).not.toMatch(/\bargs:/);

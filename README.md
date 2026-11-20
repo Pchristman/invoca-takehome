@@ -10,6 +10,7 @@ A small local web product that helps a marketing manager track inbound call perf
 | `npm test` | available (vitest) |
 | `npm run typecheck` | available |
 | `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
+| `npm run seed [folder]` | available; loads the three CSVs from the folder (default `DATA_DIR`) into the database; see Database below |
 | `npm run build` | available; builds the web app into `dist/` |
 | `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (only this command does) (`HOST`, default 127.0.0.1; `PORT`, default 3000; `DATA_DIR`) |
 | `docker compose up --build` | available; builds one image and serves the app at `http://localhost:3000`; see Docker below |
@@ -25,10 +26,10 @@ Copy `.env.example` to `.env` to configure. Never commit `.env`.
 One command: `docker compose up --build`, then open `http://localhost:3000`. A `.env` is optional: with none, AI is off and every view uses template text. If a start fails, plain `docker compose up` may still exit 0, so read `docker compose logs`.
 
 - **Another host port:** `PORT=3001 docker compose up --build` (PowerShell: `$env:PORT=3001; docker compose up --build`), or set `PORT` in `.env`. `PORT` is only the host side; inside the container the server is always on 3000.
-- **Another export:** `DATA_DIR=data/extended docker compose up --build`. `DATA_DIR` chooses the folder mounted read-only at `/data`; use forward slashes on Windows. A mistyped folder is created empty by Docker, and the app then prints `Cannot start: ...` (see `docker compose logs`).
+- **Another export:** `DATA_DIR=data/extended docker compose up --build` on a **first run**. After a first run the database already exists on the `calls-db` volume, so the app keeps serving the old data and prints a warning in `docker compose logs`; see "Database in Docker" below. `DATA_DIR` chooses the folder mounted read-only at `/data`; use forward slashes on Windows. A mistyped folder is created empty by Docker, and the app then prints `Cannot start: ...` (see `docker compose logs`).
 - **The default mount shows the container the whole repo folder, read-only.** The app reads only the three CSV files.
 - **Not on the network:** the server listens on all interfaces inside the container, and Compose publishes it only on your machine's `127.0.0.1`, so the callback list is not exposed. Never change the port line in `docker-compose.yml` to `0.0.0.0`.
-- **New data:** run `docker compose restart`. The data is read once at start, like `npm start`.
+- **New data:** a restart alone is not enough, because the app reads the database, not the CSVs. See "Database in Docker" below.
 - **Separate from `npm start`:** Docker keeps its AI call log and cache on the volumes `ai-logs` and `ai-cache`, while `npm start` uses `./logs` and `./.cache`. Each has its own spend cap (using both doubles the effective cap), and a takeaway paid for in one is paid for again in the other.
 - **Start-up line:** inside the container it says `http://localhost:3000` even when `PORT=3001` publishes it on 3001; the host port is the `PORT` you set.
 - **Exported key:** your shell's exported `ANTHROPIC_API_KEY` beats `.env`. To run with AI off, unset it first (PowerShell: `Remove-Item Env:ANTHROPIC_API_KEY`), or real API calls will be made.
@@ -36,11 +37,34 @@ One command: `docker compose up --build`, then open `http://localhost:3000`. A `
 - **The key** comes from `.env` at run time and is never in the image. A shell `ANTHROPIC_API_KEY` wins over `.env`, as with `npm start`.
 - **`HOST` warning:** some shells (zsh) set `HOST` to the machine name. If it is exported (the shell beats `.env`), `npm start` listens on that address, which may be reachable from other devices on your network. When the bound address is not loopback, `npm start` prints a `Listening on a non-loopback address (...)` line; if you see it and did not mean it, unset `HOST` or set `HOST=127.0.0.1`. Inside Docker the image sets its own `HOST`, so this does not matter there.
 
+### Database in Docker
+
+- The database file is on the named volume `calls-db` (mounted at `/app/db`; the image sets `DB_PATH=/app/db/calls.db`, and `.env` cannot change it). The first run seeds it from the mounted data folder.
+- **A different export after a first run:** `DATA_DIR=data/extended docker compose up --build` still serves the first export and prints a warning in `docker compose logs`. The image does not include the `npm run seed` script, so to use another export, start fresh as below and bring it up with that `DATA_DIR`.
+- **Start fresh:** `docker compose down -v`. This also clears the AI cache and the AI call log, so copy `ai-logs` first (`docker compose run --rm app cat logs/ai-calls.jsonl`) if you need the spend history.
+
 ## Data
 
-The app reads three CSVs: `calls.csv`, `campaigns.csv` and `locations.csv`. They come from the folder named by `DATA_DIR` (set in the shell or in `.env`; the shell wins), or the current directory when it is unset or blank. A relative `DATA_DIR` is relative to the current directory. Columns are matched by header name, so extra or reordered columns are fine; a missing required column stops startup with a message naming the file and column.
+The app reads three CSVs: `calls.csv`, `campaigns.csv` and `locations.csv`. They are loaded into a database (next section) and the app reads the database. They come from the folder named by `DATA_DIR` (set in the shell or in `.env`; the shell wins), or the current directory when it is unset or blank. A relative `DATA_DIR` is relative to the current directory. Columns are matched by header name, so extra or reordered columns are fine; a missing required column stops startup with a message naming the file and column.
 
 The loader returns every `calls.csv` row as either a typed call or a bad row, with bad rows counted by reason (bad timestamp, unknown location, unknown campaign, and so on). Bad rows never crash the app. Removing duplicate calls and everything after that comes in later phases.
+
+## Database
+
+The app keeps its calls in one SQLite file, `DB_PATH` (default `data/calls.db`, gitignored; it holds call data, not keys).
+
+- **`npm run seed [folder]`** loads the three CSVs from the folder (default `DATA_DIR`) into the database.
+- **`npm start` seeds when the file is missing** and reads the file afterwards.
+- **Re-seeding the same export changes nothing.** A newer export adds new versions of calls, and the latest `updated_at` wins.
+- **Tables:** `raw_calls`, `bad_rows`, `campaigns`, `locations`, `reference_issues`, `cleaned_calls` and `seeds`. The app reads the raw tables and cleans them with the same code as before; `cleaned_calls` is a derived copy you can query in SQL.
+- **Views, API and numbers are unchanged** by the database.
+
+### Limits of the database
+
+- A running server keeps its snapshot until restart, also after `npm run seed`.
+- One process at a time should write.
+- Moving to another data folder needs `npm run seed <folder>` or moving the file aside; at start the app prints a warning when the folder is not what the database was seeded from.
+- A file from an older schema, or one that is corrupt, stops startup with a message; the app never deletes it.
 
 ### Extended export (synthetic)
 
@@ -59,11 +83,11 @@ Things to know when reading it:
 - 1,400 invented calls add about 565 distinct callers (2,040 to 2,605); copies reuse real callers at the same share the shipped data shows, so repeat callers are still present.
 - Its cmp_06 has 33 bookings against 27 in the shipped export: the fade plants calls with no bookings, but the other synthetic calls copy from every campaign.
 
-The default stays the shipped export. To use the extended one, set `DATA_DIR=data/extended`. To regenerate it (same seed, same bytes), run `npm run generate:extended`; the script and its settings are in `scripts/generate-extended.ts`.
+The default stays the shipped export. To use the extended one on a **first run** (no database yet), set `DATA_DIR=data/extended`; on a **later run** the existing database wins, so run `npm run seed data/extended` and restart (or move `data/calls.db` aside). To regenerate it (same seed, same bytes), run `npm run generate:extended`; the script and its settings are in `scripts/generate-extended.ts`.
 
 ## API
 
-`npm start` loads the export once and serves JSON on **127.0.0.1 only** (the callback list carries caller hashes). A missing folder, file or column, a bad `PORT` or a busy port prints one `Cannot start: ...` line and exits 1. Every route is GET only.
+`npm start` reads the database once at start (seeding it first if the file is missing) and serves JSON on **127.0.0.1 only** (the callback list carries caller hashes). A missing folder, file or column, a bad `PORT` or a busy port prints one `Cannot start: ...` line and exits 1. Every route is GET only.
 
 | Route | Query parameters | 200 body |
 | --- | --- | --- |
@@ -110,7 +134,7 @@ The URL holds the screen, so a link, a refresh or the back button reproduces it:
 | `f_weekday` | repeatable, 0 (Monday) to 6 (Sunday), in the office's local time |
 | `f_hour` | repeatable, 0 to 23, in the office's local time |
 
-To open the extended export: `DATA_DIR=data/extended npm start`. There, Locations flags four offices, two of them "better" than the rest, because each office is tested against all others pooled and the two planted weak offices pull that pool down.
+To open the extended export: on a first run (no `data/calls.db`) `DATA_DIR=data/extended npm start`; on a later run `npm run seed data/extended`, then restart. There, Locations flags four offices, two of them "better" than the rest, because each office is tested against all others pooled and the two planted weak offices pull that pool down.
 
 ## Ask a question
 

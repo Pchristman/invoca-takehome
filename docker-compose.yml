@@ -24,7 +24,10 @@ services:
       # The AI cache and the AI call log (the spend guard reads the log) survive restarts.
       - ai-cache:/app/.cache
       - ai-logs:/app/logs
+      # The SQLite database (DB_PATH is set by the image, not passed through), seeded on first run.
+      - calls-db:/app/db
 
 volumes:
   ai-cache:
   ai-logs:
+  calls-db:
