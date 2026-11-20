@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseDuration, parseEase } from '../../src/web/models/motionSettings';
 
 const WEB = join(process.cwd(), 'src', 'web');
 const TOKENS = join(WEB, 'styles', 'tokens.css');
@@ -189,5 +190,17 @@ describe('design tokens', () => {
       });
     }
     expect(undefinedNames).toEqual([]);
+  });
+  it('motion durations are 150 to 300 ms and the ease is a cubic-bezier', () => {
+    const normal = tokens.split('@media (prefers-reduced-motion')[0] ?? '';
+    for (const name of ['--motion-fast', '--motion-base', '--motion-slow']) {
+      const value = new RegExp(`${name}\\s*:\\s*([^;]+);`).exec(normal)?.[1] ?? '';
+      const seconds = parseDuration(value);
+      expect(seconds, name).not.toBeNull();
+      expect(seconds!, name).toBeGreaterThanOrEqual(0.15);
+      expect(seconds!, name).toBeLessThanOrEqual(0.3);
+    }
+    const ease = /--ease-standard\s*:\s*([^;]+);/.exec(normal)?.[1] ?? '';
+    expect(parseEase(ease)).not.toBeNull();
   });
 });
