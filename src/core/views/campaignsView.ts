@@ -7,7 +7,7 @@ import { THRESHOLDS } from '../thresholds';
 import type { CallStore, Channel, CleanCall } from '../types';
 import { callsPerWeek } from '../weeks';
 import type { WeekBucket } from '../weeks';
-import { alertAction } from './campaignAlerts';
+import { alertAction, byText } from './campaignAlerts';
 import type { FlaggedCampaign } from './campaignAlerts';
 import { fillPlaceholders, makeAction, makeFactSheet } from './facts';
 import type { Action, Facts } from './facts';
@@ -74,7 +74,6 @@ const FEW_ELIGIBLE_REASON =
 const SAME_VALUE_REASON = 'the eligible campaigns earn the same revenue per budget dollar.';
 const NO_SHIFT_PREFIX = 'No budget shift is suggested: ';
 
-const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const BOOKING = ['booking', 'bookings'] as const;
 const BLANK_NUMBER = ['with no tracking number', 'with no tracking number'] as const;
 
@@ -118,7 +117,7 @@ export function buildCampaigns(
       isWorst: false,
       previousCalls,
       callsChange: previousCalls === null ? { kind: 'none' } : changeInCount(t.calls, previousCalls),
-      alert: test.flagged ? { direction: test.direction!, z: test.z! } : null,
+      alert: test.direction !== null && test.z !== null ? { direction: test.direction, z: test.z } : null,
     };
   });
   rows.sort((a, b) => b.calls - a.calls || byText(a.campaignId!, b.campaignId!));
@@ -195,8 +194,8 @@ export function buildCampaigns(
   }
 
   const flagged: FlaggedCampaign[] = rows.flatMap((r) =>
-    r.alert
-      ? [{ campaignId: r.campaignId!, name: r.name, direction: r.alert.direction, z: r.alert.z, current: r.calls, previous: r.previousCalls! }]
+    r.alert && r.campaignId !== null && r.previousCalls !== null
+      ? [{ campaignId: r.campaignId, name: r.name, direction: r.alert.direction, z: r.alert.z, current: r.calls, previous: r.previousCalls }]
       : [],
   );
   const callChanges = alertAction(flagged);

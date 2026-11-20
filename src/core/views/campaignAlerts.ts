@@ -18,7 +18,8 @@ const DROP_TEMPLATE =
 const MANY_TEMPLATE =
   '{alert.count} changed by more than chance explains; {alert.top.name} moved most, from {alert.top.previous} to {alert.top.current}. Review each flagged campaign in the table.';
 
-const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+/** Plain character order, so results never depend on the machine's locale. */
+export const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /** One action for all flagged campaigns, naming the biggest mover (largest |z|, ties by lower id). Null when none. */
 export function alertAction(flagged: readonly FlaggedCampaign[]): Action | null {

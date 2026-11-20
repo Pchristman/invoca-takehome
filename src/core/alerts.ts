@@ -35,7 +35,6 @@ export function countAlert(current: number, previous: number, options: AlertOpti
 
   const eligible = isCount(current) && isCount(previous) && current + previous >= Math.max(minCalls, 1);
   const z = eligible ? poissonZ(current, previous) : null;
-  const flagged = z !== null && Math.abs(z) >= threshold;
-  const direction = flagged ? (z! > 0 ? 'jump' : 'drop') : null;
-  return { eligible, z, flagged, direction };
+  const direction = z !== null && Math.abs(z) >= threshold ? (z > 0 ? 'jump' : 'drop') : null;
+  return { eligible, z, flagged: direction !== null, direction };
 }
