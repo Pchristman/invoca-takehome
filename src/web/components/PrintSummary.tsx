@@ -1,11 +1,8 @@
 import type { PrintBlock, PrintModel } from '../models/printModel';
-import type { Tone } from '../models/overviewModel';
+import { TONE_WORD } from '../models/changeModel';
 import type { TakeawayShow } from '../models/takeawayModel';
 import { Caveats } from './Caveats';
 import { Link } from './Link';
-
-// A word beside the sign, so the tone is never carried by color alone.
-const TONE_WORD: Record<Tone, string> = { up: 'up', down: 'down', flat: 'no change', new: 'new' };
 
 /** The one-page document. Plain text only: no links, no buttons, no dev content. Draws the model and decides nothing. */
 export function PrintSummary({ model }: { model: PrintModel }) {
@@ -13,10 +10,7 @@ export function PrintSummary({ model }: { model: PrintModel }) {
     <article className="print-page">
       <header className="print-head">
         <h1>Inbound call performance summary</h1>
-        <p className="print-meta">
-          <span>{model.rangeLine}</span> <span>{model.asOf}</span>
-          {model.skipped !== null && <span> {model.skipped}</span>}
-        </p>
+        <p className="print-meta">{[model.rangeLine, model.asOf, model.skipped].filter((part) => part !== null).join(' · ')}</p>
       </header>
       <Caveats items={model.caveats} />
       {model.comparisonLine !== null && <p className="print-note">{model.comparisonLine}</p>}

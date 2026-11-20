@@ -19,6 +19,7 @@ import {
   printHref,
   appHref,
   printParams,
+  printRequests,
   type UrlState,
 } from '../../src/web/urlState';
 
@@ -484,6 +485,25 @@ describe('the print flag', () => {
       expect(params.get('compareStart')).toBe('2026-09-01');
       expect(params.get('compareEnd')).toBe('2026-09-07');
     }
+  });
+
+  it('printRequests lists the overview and the four takeaways, with print params whatever the view or filters', () => {
+    const filtered = { ...FILTERED, print: true, view: 'locations' as const };
+    const requests = printRequests(filtered);
+    expect(requests.map((r) => r.path)).toEqual([
+      '/api/overview',
+      '/api/takeaway/overview',
+      '/api/takeaway/campaigns',
+      '/api/takeaway/locations',
+      '/api/takeaway/missed-calls',
+    ]);
+    for (const r of requests) {
+      expect(r.params.has('campaign')).toBe(false);
+      expect(r.params.has('location')).toBe(false);
+      expect(r.params.get('range')).toBe('last7');
+    }
+    const views = ['overview', 'overview', 'campaigns', 'locations', 'missed-calls'] as const;
+    requests.forEach((r, i) => expect(r.params.toString()).toBe(printParams(filtered, views[i]!).toString()));
   });
 
   it('printParams matches takeawayParams when no filter is set, so the cache is shared', () => {

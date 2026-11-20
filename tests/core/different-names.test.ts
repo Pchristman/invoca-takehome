@@ -11,6 +11,7 @@ import { callsPerWeek } from '../../src/core/weeks';
 import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../../src/core/views';
 import { readExportFromDir } from '../../src/node/readDataDir';
 import { createApp } from '../../src/server/app';
+import { formatLongDate } from '../../src/web/format';
 import { printModel } from '../../src/web/models/printModel';
 import type { PrintTakeaways } from '../../src/web/models/printModel';
 import { metaFor, overviewFor } from '../web/fixtures';
@@ -203,7 +204,7 @@ describe('the print summary on a different export', () => {
     const text = JSON.stringify(model);
     expect(text).not.toContain('undefined');
     expect(text).not.toContain('NaN');
-    expect(model.asOf).toContain('2031'); // the data's last date, never the clock
+    expect(model.asOf).toBe(`Data as of ${formatLongDate(days[days.length - 1]!)}`); // the data's last date, never the clock
   });
 
   test('the 7-day range names its length; All data has no comparison', () => {

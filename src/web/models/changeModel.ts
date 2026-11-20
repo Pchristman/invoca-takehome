@@ -5,6 +5,9 @@ import { formatPercentChange, formatPointsChange } from '../../core/views/format
 
 export type Tone = 'up' | 'down' | 'flat' | 'new';
 
+// A word beside the sign, so the tone is never carried by color alone.
+export const TONE_WORD: Record<Tone, string> = { up: 'up', down: 'down', flat: 'no change', new: 'new' };
+
 // The tone comes from the sign of the text the format function printed: '+' up, '-' down, else flat.
 // So a +0.04 that prints '0.0%' is flat, with no rounding done here.
 function toneOfText(text: string): Tone {

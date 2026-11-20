@@ -185,6 +185,15 @@ export function appHref(state: UrlState): string {
   return `/${toSearch({ ...state, print: false })}`;
 }
 
+/** The five requests the print page makes, in order: the overview, then each view's takeaway. Never state.view. */
+export function printRequests(state: UrlState): { path: string; params: URLSearchParams }[] {
+  const takeaways = (['overview', 'campaigns', 'locations', 'missed-calls'] as const).map((view) => ({
+    path: `/api/takeaway/${view}`,
+    params: printParams(state, view),
+  }));
+  return [{ path: '/api/overview', params: printParams(state, 'overview') }, ...takeaways];
+}
+
 // The query for the print page's requests: the same as the screen's, with no campaign or location.
 export function printParams(state: UrlState, view: ViewName): URLSearchParams {
   return apiParams({ ...state, campaign: null, location: null }, view);

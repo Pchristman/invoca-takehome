@@ -28,7 +28,7 @@ import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
 import { useApi } from './useApi';
 import { useUrlState } from './useUrlState';
-import { apiParams, appHref, defaultsHref, printHref, printParams, takeawayParams, withCampaign, withCompare, withLocation, withRange } from './urlState';
+import { apiParams, appHref, defaultsHref, printHref, printRequests, takeawayParams, withCampaign, withCompare, withLocation, withRange } from './urlState';
 import type { UrlState } from './urlState';
 
 const NO_PARAMS = new URLSearchParams();
@@ -150,12 +150,13 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
  */
 function PrintShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; resetHref: string }) {
   const hasSpan = meta.span !== null; // no data span, no requests
-  const overview = useApi<OverviewData>(hasSpan ? '/api/overview' : null, printParams(state, 'overview'));
+  const [ov, tOverview, tCampaigns, tLocations, tMissed] = printRequests(state); // the list is tested in urlState.test.ts
+  const overview = useApi<OverviewData>(hasSpan ? ov!.path : null, ov!.params);
   const takeaways: PrintTakeaways = {
-    overview: useApi<TakeawayResponse>(hasSpan ? '/api/takeaway/overview' : null, printParams(state, 'overview')).state,
-    campaigns: useApi<TakeawayResponse>(hasSpan ? '/api/takeaway/campaigns' : null, printParams(state, 'campaigns')).state,
-    locations: useApi<TakeawayResponse>(hasSpan ? '/api/takeaway/locations' : null, printParams(state, 'locations')).state,
-    'missed-calls': useApi<TakeawayResponse>(hasSpan ? '/api/takeaway/missed-calls' : null, printParams(state, 'missed-calls')).state,
+    overview: useApi<TakeawayResponse>(hasSpan ? tOverview!.path : null, tOverview!.params).state,
+    campaigns: useApi<TakeawayResponse>(hasSpan ? tCampaigns!.path : null, tCampaigns!.params).state,
+    locations: useApi<TakeawayResponse>(hasSpan ? tLocations!.path : null, tLocations!.params).state,
+    'missed-calls': useApi<TakeawayResponse>(hasSpan ? tMissed!.path : null, tMissed!.params).state,
   };
   const span = meta.span;
   return (

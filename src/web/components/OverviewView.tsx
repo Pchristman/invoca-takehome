@@ -3,14 +3,11 @@ import type { OverviewView as OverviewData } from '../../core/views';
 import { caveatsFor } from '../models/caveats';
 import { comparisonLine } from '../models/comparisonLine';
 import { overviewModel } from '../models/overviewModel';
-import type { Tone } from '../models/overviewModel';
+import { TONE_WORD } from '../models/changeModel';
 import { actionHref } from '../urlState';
 import type { UrlState } from '../urlState';
 import { Caveats } from './Caveats';
 import { Link } from './Link';
-
-// A word beside the sign, so the tone is never carried by color alone.
-const TONE_WORD: Record<Tone, string> = { up: 'up', down: 'down', flat: 'no change', new: 'new' };
 
 export function OverviewView({ view, state, span }: { view: OverviewData; state: UrlState; span: DateRange }) {
   const model = overviewModel(view);
