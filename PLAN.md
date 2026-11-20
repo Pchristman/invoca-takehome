@@ -97,7 +97,7 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 
 ### 4.1 Overview
 
-**Shows:** tiles for calls, unique callers, answer rate, bookings and revenue, each with change against the comparison range. Below that, **Top actions**: the headline action from each of the other three views, in fixed order (Campaigns, Locations, Missed calls), each linking to its view.
+**Shows:** tiles for calls, unique callers, answer rate, bookings and revenue, each with change against the comparison range. Below that, **Top actions**: the headline action from each of the other three views, in fixed order (Campaigns, Locations, Missed calls), each linking to its view. From stretch S1, when campaign call alerts exist (section 9, S1), one extra entry for them follows the Campaigns entry, so the list has three or four entries; if the alert is already Campaigns' headline it is listed once.
 
 **Action:** the top actions list itself. Each item carries its number.
 
@@ -171,6 +171,8 @@ All live in one config module with these defaults and are never derived from thi
 | `MIN_CALLS_OUTLIER`       | 50      | Office outlier eligibility                                                             |
 | `OUTLIER_Z`               | 2.5     | Office outlier flag. With ~8 offices tested, 2.5 rather than 2 keeps false flags rare. |
 | `MIN_ANSWERED_FOR_RATE`   | 30      | Missed-call value fallback to channel, then overall                                    |
+| `ALERT_Z`                 | 3       | Campaign call alert (S1). About 12 campaigns are tested at once, so 3 rather than 2.5. |
+| `MIN_CALLS_ALERT`         | 20      | Campaign call alert (S1): calls in both periods added together needed to be tested     |
 
 ---
 
@@ -535,7 +537,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 
 #### S1: Alerts
 
-- **Delivers:** a flag on campaigns whose calls jumped or dropped against the comparison range by more than chance explains. Use a Poisson-style test on counts, with a threshold in config and a minimum count. Alerts appear on Overview's top actions and in the Campaigns table.
+- **Delivers:** a flag on campaigns whose calls jumped or dropped against the comparison range by more than chance explains. Use a Poisson-style test on counts, `z = (current − previous) / √(current + previous)`, flagged at `|z| >= ALERT_Z` when current + previous reaches `MIN_CALLS_ALERT` (section 4.5). Unattributed is never flagged. Alerts appear on Overview's top actions (one extra entry, section 4.1) and in the Campaigns table. Detail in `docs/plans/s1-alerts.md`.
 - **Done when:** fixture tests cover jump, drop, no change, and too-small counts; the README covers what this phase added.
 - **Edge cases:**
   - comparison not available (no alerts, say why)
