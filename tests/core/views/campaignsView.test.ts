@@ -325,16 +325,75 @@ describe('buildCampaigns alerts', () => {
     expect(view.actions.some((a) => a.kind === 'review_call_changes')).toBe(false);
   });
 
-  it('a custom previous range of another length', () => {
-    const calls = [...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE), ...anchors()];
+  describe('a second range of another length', () => {
+    const three = range('2026-09-01', '2026-09-03');
+    const THREE_DAYS = '2026-09-02';
+    const withThree = (calls: CleanCall[], second = three) =>
+      buildCampaigns(
+        makeStore([...calls, ...anchors()], { campaigns: [noBudget('cmp_a'), noBudget('cmp_z')], locations }),
+        now,
+        second,
+      );
+    const PER_DAY_REASON = 'Call-change alerts need two periods of the same length; these are 7 and 3 days.';
+
+    it('compares per day, not totals', () => {
+      const view = withThree([...on('cmp_a', 14, NOW), ...on('cmp_a', 3, THREE_DAYS)]);
+      const a = row(view, 'cmp_a');
+      expect(a.previousCalls).toBe(3);
+      // 14 over 7 days is 2 a day; 3 over 3 days is 1 a day. Totals would say +367%.
+      expect(a.callsChange).toEqual({ kind: 'percent', value: 100 });
+    });
+
+    it('withholds alerts, because they need equal exposure', () => {
+      const view = withThree([...on('cmp_a', 60, NOW), ...on('cmp_a', 30, THREE_DAYS)]);
+      expect(view.alerts).toEqual({ checked: false, reason: PER_DAY_REASON, flagged: 0, z: 3, minCalls: 20 });
+      expect(view.rows.every((r) => r.alert === null)).toBe(true);
+      expect(view.actions.some((a) => a.kind === 'review_call_changes')).toBe(false);
+      expect(row(view, 'cmp_a').callsChange.kind).toBe('percent');
+    });
+
+    it('shows the per-day reason, not the overlap one, when it also overlaps', () => {
+      const view = withThree([...on('cmp_a', 60, NOW)], range('2026-09-10', '2026-09-12'));
+      expect(view.notes.comparison.overlaps).toBe(true);
+      expect(view.alerts.checked).toBe(false);
+      expect(view.alerts.reason).toBe('Call-change alerts need two periods of the same length; these are 7 and 3 days.');
+    });
+
+    it('compares unattributed calls per day and never alerts on them', () => {
+      const lost = (n: number, localDate: string) =>
+        many(n).map((c) => makeCall({ ...c, campaignId: null, unattributed: true, localDate }));
+      const view = withThree([...lost(14, NOW), ...lost(3, THREE_DAYS)]);
+      expect(view.unattributed!.previousCalls).toBe(3);
+      expect(view.unattributed!.callsChange).toEqual({ kind: 'percent', value: 100 });
+      expect(view.unattributed!.alert).toBeNull();
+    });
+
+    it('shows new, never infinity, when the comparison holds nothing', () => {
+      const view = withThree([...on('cmp_a', 10, NOW)]);
+      expect(row(view, 'cmp_a').callsChange).toEqual({ kind: 'new' });
+      expectAllFinite(view);
+    });
+
+    it('outside the data has no previous calls and the coverage reason', () => {
+      const view = withThree([...on('cmp_a', 10, NOW)], range('2026-08-01', '2026-08-03'));
+      expect(view.rows.every((r) => r.previousCalls === null)).toBe(true);
+      expect(view.alerts.checked).toBe(false);
+      expect(view.alerts.reason).toMatch(/^No full previous period/);
+    });
+  });
+
+  it('the selected range as the second range is overlap, changes read 0, no alerts', () => {
+    const calls = [...on('cmp_a', 60, NOW), ...on('cmp_b', 25, NOW)];
     const view = buildCampaigns(
-      makeStore(calls, { campaigns: [noBudget('cmp_a'), noBudget('cmp_z')], locations }),
+      makeStore([...calls, ...anchors()], { campaigns: [noBudget('cmp_a'), noBudget('cmp_b'), noBudget('cmp_z')], locations }),
       now,
-      range('2026-09-05', '2026-09-07'),
+      now,
     );
     expect(view.alerts.checked).toBe(false);
-    expect(view.alerts.reason).toMatch(/^No like-for-like comparison/);
-    expect(row(view, 'cmp_a').alert).toBeNull();
+    expect(view.alerts.reason).toBe('The comparison period overlaps the selected range, so changes are not tested.');
+    for (const id of ['cmp_a', 'cmp_b']) expect(row(view, id).callsChange).toEqual({ kind: 'percent', value: 0 });
+    expect(view.rows.every((r) => r.alert === null)).toBe(true);
+    expectAllFinite(view);
   });
 
   it('an overlapping comparison is not tested, because the periods are not independent', () => {

@@ -1,6 +1,6 @@
 import type { DateRange, ResolvedRange } from '../ranges';
 import { countAlert } from '../alerts';
-import { changeInCount, costPerBooking, estimatedSpend, rate, revenuePerBudgetDollar, tally } from '../metrics';
+import { changeInCountPerDay, costPerBooking, estimatedSpend, rate, revenuePerBudgetDollar, tally } from '../metrics';
 import type { Change } from '../metrics';
 import { pickBestWorst } from '../ranking';
 import { THRESHOLDS } from '../thresholds';
@@ -56,7 +56,7 @@ export interface CampaignsView extends ViewBase {
   /** `reason` is set only when nothing is marked. */
   bestWorst: { eligible: number; reason: string | null };
   weekly: { campaignId: string; name: string; weeks: WeekBucket[] } | null;
-  /** `checked` is false when there is no like-for-like comparison; `reason` says why. */
+  /** `checked` is false when changes are not tested (no comparison, an overlap, or periods of different length); `reason` says why. */
   alerts: { checked: boolean; reason: string | null; flagged: number; z: number; minCalls: number };
 }
 
@@ -78,6 +78,8 @@ const BOOKING = ['booking', 'bookings'] as const;
 const BLANK_NUMBER = ['with no tracking number', 'with no tracking number'] as const;
 
 const OVERLAP_REASON = 'The comparison period overlaps the selected range, so changes are not tested.';
+const perDayReason = (currentDays: number, previousDays: number | null) =>
+  `Call-change alerts need two periods of the same length; these are ${currentDays} and ${previousDays} days.`;
 const NOT_TESTED = { flagged: false, direction: null, z: null } as const;
 
 /** Calls with this campaign id (null: no campaign); null when there is no previous period. */
@@ -94,14 +96,19 @@ export function buildCampaigns(
   const context = makeViewContext(store, range, previous);
   // The z-test assumes independent periods; a comparison that shares days with the range is shown, not tested.
   const overlaps = context.notes.comparison.overlaps;
+  // Alerts also assume equal exposure; a per-day comparison shows the change column but is not tested.
+  const { perDay, currentDays, previousDays } = context.notes.comparison;
+  const changeOf = (calls: number, before: number | null): Change =>
+    before === null || previousDays === null
+      ? { kind: 'none' }
+      : changeInCountPerDay(calls, currentDays, before, previousDays);
 
   // One row per store campaign, from that campaign's calls in range.
   const rows: CampaignRow[] = store.campaigns.map((c) => {
     const t = tally(context.current.filter((call) => call.campaignId === c.id));
     const spend = estimatedSpend(c.dailyBudgetUsd, range.days);
     const previousCalls = countIn(context.previous, c.id);
-    // Both periods have equal length here: context.previous exists only for a like-for-like comparison.
-    const test = previousCalls === null || overlaps ? NOT_TESTED : countAlert(t.calls, previousCalls);
+    const test = previousCalls === null || overlaps || perDay ? NOT_TESTED : countAlert(t.calls, previousCalls);
     return {
       campaignId: c.id,
       name: c.name,
@@ -116,7 +123,7 @@ export function buildCampaigns(
       isBest: false,
       isWorst: false,
       previousCalls,
-      callsChange: previousCalls === null ? { kind: 'none' } : changeInCount(t.calls, previousCalls),
+      callsChange: changeOf(t.calls, previousCalls),
       alert: test.direction !== null && test.z !== null ? { direction: test.direction, z: test.z } : null,
     };
   });
@@ -135,7 +142,7 @@ export function buildCampaigns(
   if (best) best.isBest = true;
   if (worst) worst.isWorst = true;
 
-  const unattributed = buildUnattributed(context.current, countIn(context.previous, null));
+  const unattributed = buildUnattributed(context.current, countIn(context.previous, null), changeOf);
 
   // Actions, in order. The "no shift" sentence is built whenever nothing is marked, because its text is the reason.
   let shift: Action | null = null;
@@ -241,10 +248,12 @@ export function buildCampaigns(
     bestWorst: { eligible: picked.eligible, reason },
     weekly,
     alerts: {
-      checked: context.notes.comparison.available && !overlaps,
+      checked: context.notes.comparison.available && !overlaps && !perDay,
       reason: !context.notes.comparison.available
         ? context.notes.comparison.reason
-        : overlaps
+        : perDay
+          ? perDayReason(currentDays, previousDays)
+          : overlaps
           ? OVERLAP_REASON
           : null,
       flagged: flagged.length,
@@ -255,7 +264,11 @@ export function buildCampaigns(
 }
 
 /** The calls with no campaign, as one row; null when there are none now or in the previous period. */
-function buildUnattributed(calls: readonly CleanCall[], previousCalls: number | null): UnattributedRow | null {
+function buildUnattributed(
+  calls: readonly CleanCall[],
+  previousCalls: number | null,
+  changeOf: (calls: number, before: number | null) => Change,
+): UnattributedRow | null {
   const lost = calls.filter((call) => call.campaignId === null);
   if (lost.length === 0 && !previousCalls) return null; // nothing now and nothing before: no row
 
@@ -283,7 +296,7 @@ function buildUnattributed(calls: readonly CleanCall[], previousCalls: number | 
     isBest: false,
     isWorst: false,
     previousCalls,
-    callsChange: previousCalls === null ? { kind: 'none' } : changeInCount(t.calls, previousCalls),
+    callsChange: changeOf(t.calls, previousCalls),
     alert: null, // a bucket, not a campaign: "Fix attribution" already covers it
     trackingNumbers,
   };
