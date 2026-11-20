@@ -11,6 +11,9 @@ import { callsPerWeek } from '../../src/core/weeks';
 import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../../src/core/views';
 import { readExportFromDir } from '../../src/node/readDataDir';
 import { createApp } from '../../src/server/app';
+import { printModel } from '../../src/web/models/printModel';
+import type { PrintTakeaways } from '../../src/web/models/printModel';
+import { metaFor, overviewFor } from '../web/fixtures';
 import { goodRow, loadFixture } from './helpers';
 import { expectAllFinite } from './views/fixtures';
 
@@ -167,6 +170,47 @@ describe('views on a different export', () => {
       expect(text).not.toContain('undefined');
       expect(text).not.toContain('NaN');
     }
+  });
+});
+
+describe('the print summary on a different export', () => {
+  const days = ['2031-05-05', '2031-05-07', '2031-05-12', '2031-05-18'];
+  const store = cleanExport(
+    loadFixture(
+      days.flatMap((day, i) => [
+        row({ call_id: `p${i}`, caller_number_hash: `hp${i}`, started_at: `${day}T12:00:00Z`, outcome: 'booked', revenue_usd: '100' }),
+        row({ call_id: `q${i}`, caller_number_hash: `hq${i}`, started_at: `${day}T13:00:00Z`, location_id: 'zz_lon', answered: 'false', outcome: 'missed', revenue_usd: '' }),
+      ]),
+      CAMPAIGNS,
+      LOCATIONS,
+    ),
+  );
+  const meta = metaFor(store);
+  const takeaways = Object.fromEntries(
+    (['overview', 'campaigns', 'locations', 'missed-calls'] as const).map((view) => [
+      view,
+      { status: 'ready', key: view, data: { view, text: `Takeaway for ${view}.`, source: 'template', reason: 'ai_off' } },
+    ]),
+  ) as PrintTakeaways;
+  const build = (preset: string) => printModel({ view: overviewFor(`range=${preset}`, store), meta, span: meta.span!, takeaways });
+
+  test.each(['last7', 'all'])('builds for %s: finite, five tiles, three blocks, no undefined or NaN', (preset) => {
+    const model = build(preset);
+    expect(model.blocks.map((b) => b.view)).toEqual(['campaigns', 'locations', 'missed-calls']);
+    expect(model.tiles).toHaveLength(5);
+    expect(model.blocks.every((b) => b.actions.length > 0)).toBe(true);
+    expectAllFinite(model);
+    const text = JSON.stringify(model);
+    expect(text).not.toContain('undefined');
+    expect(text).not.toContain('NaN');
+    expect(model.asOf).toContain('2031'); // the data's last date, never the clock
+  });
+
+  test('the 7-day range names its length; All data has no comparison', () => {
+    expect(build('last7').rangeLine).toContain('(7 days)');
+    const all = build('all');
+    expect(all.comparisonLine).toBeNull();
+    expect(all.comparisonReason).not.toBeNull();
   });
 });
 
