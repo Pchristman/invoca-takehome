@@ -34,13 +34,13 @@ Each phase in the build order gets its own implementation plan before any code i
 
 ### In scope: stretch phases, planned and intended, after the slice
 
-In order: S1 alerts, S2 compare any two date ranges, S3 print-friendly one-page summary, S4 ask a question in plain English, S5 polished visual design with motion. They are designed here so the slice's architecture doesn't block them. The slice is never cut to make room for them.
+In order: S1 alerts, S2 compare any two date ranges, S3 print-friendly one-page summary, S4 ask a question in plain English, S5 polished visual design with motion, S6 a database seeded from the CSVs, S7 uploading a CSV into that database. They are designed here so the slice's architecture doesn't block them. The slice is never cut to make room for them.
 
 ### Non-goals
 
 - Login, authorization, multiple tenants or customers in one instance.
-- Cloud deployment, Docker requirement, scaling beyond one export in memory.
-- Uploading data through the UI. The data folder is set by config; a new export means a restart.
+- Cloud deployment, or scaling beyond one export in memory. Docker is offered for convenience (Phase 10) but never required: `npm start` always works.
+- Uploading data through the UI in the slice. The data folder is set by config, and a new export means a restart. Upload comes later as stretch S7, after the database in S6.
 - Editing campaigns, budgets or offices.
 - Live data, streaming updates, or polling for new exports.
 - Any number produced by a model.
@@ -235,12 +235,14 @@ CSV files ─▶ load + validate ─▶ clean (dedupe, attribute, localize) ─�
 | `AI_SPEND_LIMIT_USD` | Spend guard for the running app. Default 5.  |
 | `DATA_DIR`           | Folder holding the three CSVs.               |
 | `PORT`               | Default 3000.                                |
+| `HOST`               | Default 127.0.0.1. The Docker image sets 0.0.0.0; Compose publishes only on the host's 127.0.0.1. |
 
 ### Commands
 
 - `npm start`: build the web app and serve everything on one port.
 - `npm run dev`: server and Vite with hot reload.
 - `npm test`: vitest.
+- `docker compose up --build`: build the image and run the app on one port, reading `.env` and the data folder (Phase 10).
 
 ### Freshness
 
@@ -248,7 +250,7 @@ The data is a snapshot at startup; the header shows the as-of date. A new export
 
 ### Dependencies
 
-Expected list. **Ask before adding each one, at the start of the phase that needs it:** typescript, tsx, vitest, csv-parse, hono, @hono/node-server, react, react-dom, vite, @vitejs/plugin-react, recharts, @anthropic-ai/sdk, and Framer Motion for S5. Anything beyond this list needs a reason in `docs/DECISIONS.md`.
+Expected list. **Ask before adding each one, at the start of the phase that needs it:** typescript, tsx, vitest, csv-parse, hono, @hono/node-server, react, react-dom, vite, @vitejs/plugin-react, @types/react, @types/react-dom, recharts, @anthropic-ai/sdk, Framer Motion for S5, and for S6 a SQLite driver only if Node's built-in `node:sqlite` falls short (better-sqlite3). Anything beyond this list needs a reason in `docs/DECISIONS.md`.
 
 ---
 
@@ -340,7 +342,7 @@ The model fills a fixed filter schema (view, offices, campaigns, weekdays, hours
 - **Server:** in-process requests to every endpoint. Covers valid ranges, bad or missing params (400), an inverted range, a range outside the data, and the CSV download's headers and rows.
 - **AI:** checker tests with crafted good and bad outputs, one per rejection reason. Client, cache and guard are tested with a fake model: a cache hit makes no call; the guard blocks at the limit; every failure mode falls back. **No automated test calls the real API.** A manual script makes one real call when I choose to run it.
 - **Hard-coding guard:** a test runs the core on a fixture export with entirely different campaign names, office names, time zones and dates, and checks every view builds.
-- **Web:** no component tests. Each UI phase ends with a written click-through checklist, run in the browser and shown to me.
+- **Web:** decisions (text, order, blanks, caveat conditions, URL state, request state) live in pure modules with their own tests. Components are kept thin and are tested by rendering them to a string in Node with `react-dom/server` (no DOM, jsdom or testing library), checking what must be present or absent: dev-only elements, blank cells, escaped names, loading and error states. Visual layout, wrapping and charts are not unit tested. Each UI phase also ends with a written click-through checklist, run in the browser and shown to me.
 
 ---
 
@@ -505,17 +507,39 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - guard at the limit
   - cache survives restart
 
-### Phase 10: Submission docs
+### Phase 10: Docker
 
 - **Delivers:**
-  - README with setup and the one command
+  - a multi-stage `Dockerfile` on Node 24: build the web app, then a slim runtime image that runs the server
+  - `docker-compose.yml` with one service, so `docker compose up --build` is the one command
+  - `.dockerignore` covering at least `node_modules`, `.env`, `.git`, `dist`, and the AI cache and call log
+  - the data folder mounted read-only at `DATA_DIR`, and the AI cache and call log on a named volume so the cache survives restarts
+  - the API key passed in at run time from `.env`, never built into the image
+  - `npm start` keeps working without Docker
+- **Done when:**
+  - on a clean clone, `docker compose up --build` serves all four views at `http://localhost:3000`, both with no `.env` (AI off) and with a key (AI on)
+  - `npm test` passes, and `npm start` still works outside Docker
+  - the built image contains no `.env` file and no key
+- **Edge cases to handle and test:**
+  - the server listens on 127.0.0.1, which a container can't publish: inside the container it listens on 0.0.0.0 (a `HOST` setting), and Compose publishes the port only on the host's 127.0.0.1, so the callback list is still not exposed to the network
+  - no `.env` file: Compose still starts, and AI is off
+  - missing or wrong data mount: the same one-line `Cannot start: ...` and non-zero exit, visible in `docker compose logs`
+  - the host's port 3000 already in use: a documented `PORT` override
+  - the extended export selectable with `DATA_DIR=data/extended`
+  - results that don't depend on the container's time zone: the numbers match `npm start` on the host
+  - Windows checkouts: nothing in the image depends on shell scripts that break on CRLF line endings
+
+### Phase 11: Submission docs
+
+- **Delivers:**
+  - README with setup and the one command (`docker compose up --build`), plus the `npm` path without Docker
   - TECHNICAL.md (1–2 pages, covering the brief's list)
   - architecture diagram
   - decision summary draft for me to finish
   - `docs/DECISIONS.md` up to date
-- **Done when:** a clean clone following only the README runs the app, with and without a key, and `npm test` passes.
+- **Done when:** a clean clone following only the README runs the app with Docker and with `npm`, with and without a key, and `npm test` passes.
 
-### Stretch phases (in order, only after Phase 10)
+### Stretch phases (in order, only after Phase 11)
 
 #### S1: Alerts
 
@@ -570,13 +594,62 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 - **Approach:** Framer Motion for all motion, so transitions, number tweens and layout changes share one consistent system (ask before adding the package at the start of S5). Its built-in reduced-motion support is used to switch motion off.
 - **Done when:** I sign off on the look in the browser; reduced-motion mode shows no animation; no view's numbers or actions change.
 
+#### S6: Database, seeded from the CSVs
+
+- **Delivers:**
+  - SQLite as the store of record: one file at `DB_PATH` (default `data/calls.db`, gitignored)
+  - `npm run seed` loads an export through the existing load, validate and clean steps into tables for every raw call row (all versions kept), campaigns, locations, bad rows, and the cleaned calls (latest `updated_at` per `call_id`)
+  - seeding that is safe to repeat: the same export twice changes nothing; a newer export adds new row versions and the latest one wins
+  - the server builds its CallStore from the database instead of reading the CSVs; metrics, view builders and the API don't change
+  - `npm start` seeds from `DATA_DIR` when no database exists, so it stays one command
+  - the driver: Node's built-in `node:sqlite` if it does the job on Node 24, otherwise better-sqlite3 (ask before adding it)
+- **Done when:**
+  - snapshot totals read from the database match the CSV path exactly, on the shipped and the extended export
+  - every existing test passes unchanged
+  - on a fresh clone, `npm start` seeds and serves; a restart reads the existing database without reseeding
+  - in Docker, the database file lives on the named volume and is seeded on first run
+- **Edge cases:**
+  - seeding the same export twice (no duplicates)
+  - a newer version of an existing call (latest wins)
+  - bad rows (stored with their reason, never in the cleaned calls)
+  - a missing or corrupt database file (a clear message, never silently empty data)
+  - a database from an older schema version (refuse with a message to reseed)
+  - seeding while the server runs (the server keeps its snapshot until restart, and the README says so)
+  - tests use an in-memory database, never the real file
+
+#### S7: Upload a CSV into the database (needs S6)
+
+- **Delivers:**
+  - an upload control in the app that takes one CSV file at a time
+  - automatic detection of what the file is (calls, campaigns or locations) from its header columns, regardless of column order; a file that matches none, or more than one, is rejected with the columns it expected
+  - each row run through the existing validation, with bad rows reported by reason
+  - duplicate checks against the database before anything is written:
+    - calls: the same `call_id` and `updated_at` already stored is a duplicate and skipped; a new `updated_at` for an existing `call_id` is a new version, stored, and the latest wins as usual
+    - campaigns and locations: the same id with identical values is a duplicate and skipped; the same id with different values is a conflict, reported and not written
+    - duplicates inside the uploaded file itself are caught too
+  - a preview before writing: the detected type, and counts of new rows, new versions, duplicates, conflicts and bad rows, with examples of each; nothing is written until the user confirms
+  - on confirm, all new rows are written in one transaction, and the server rebuilds its CallStore so every view reflects the upload without a restart
+  - Hono's built-in body parsing handles the file, so no new package
+- **Done when:**
+  - uploading the shipped `calls.csv` into a database seeded from it imports nothing and reports every row as a duplicate
+  - an upload of new calls shows up in every view's numbers right after confirming
+  - fixture tests cover detection, every duplicate and conflict rule, and the preview counts
+- **Edge cases:**
+  - columns in a different order, extra columns, a byte-order mark, Windows line endings
+  - an empty file, a header-only file, a file that isn't CSV, or one over a set size limit
+  - calls that reference a campaign or office not in the database (bad rows, with a hint to upload campaigns or locations first)
+  - the same file uploaded twice (the second upload imports nothing)
+  - a failure partway through the write (the transaction rolls back and nothing is stored)
+  - AI takeaways for ranges the upload changed are not reused from the cache, because the cache key includes the data
+  - uploads stay safe only because the server listens on localhost and there is no login; the README says so
+
 ---
 
 ## 10. What "done" means
 
-The product is done for submission when **Phase 10 is complete**:
+The product is done for submission when **Phase 11 is complete**:
 
-- A fresh clone runs with `npm install` and `npm start`, documented in the README.
+- A fresh clone runs with `docker compose up --build`, or with `npm install` and `npm start`, both documented in the README.
 - All four views work on the shipped export and the extended export, and each ends in an action backed by a code-computed number.
 - The app works fully with the API key missing.
 - Every data rule in section 5 has a passing test, and `npm test` is green.
@@ -584,4 +657,4 @@ The product is done for submission when **Phase 10 is complete**:
 - No secrets in git history. `.env.example` documents config.
 - README, TECHNICAL.md, architecture diagram and the decision summary draft exist, and `docs/DECISIONS.md` is current.
 
-Stretch phases S1–S5 are done individually by their own "done when" lines, and none may break the above.
+Stretch phases S1–S7 are done individually by their own "done when" lines, and none may break the above.
