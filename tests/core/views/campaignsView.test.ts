@@ -337,6 +337,25 @@ describe('buildCampaigns alerts', () => {
     expect(row(view, 'cmp_a').alert).toBeNull();
   });
 
+  it('an overlapping comparison is not tested, because the periods are not independent', () => {
+    const calls = [...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE), ...anchors()];
+    const overlapping = range('2026-09-05', '2026-09-11'); // same length as `now`, shares 09-08 to 09-11
+    const view = buildCampaigns(
+      makeStore(calls, { campaigns: [noBudget('cmp_a'), noBudget('cmp_z')], locations }),
+      now,
+      overlapping,
+    );
+    expect(view.notes.comparison.available).toBe(true);
+    expect(view.notes.comparison.overlaps).toBe(true);
+    expect(view.alerts.checked).toBe(false);
+    expect(view.alerts.reason).toBe('The comparison period overlaps the selected range, so changes are not tested.');
+    expect(view.alerts.flagged).toBe(0);
+    expect(view.rows.every((r) => r.alert === null)).toBe(true);
+    expect(view.actions.some((a) => a.kind === 'review_call_changes')).toBe(false);
+    // The change column stays informational: the overlapping window holds the 60 calls on NOW.
+    expect(row(view, 'cmp_a').previousCalls).toBe(60);
+  });
+
   it('unattributed never alerts', () => {
     const lost = (n: number, localDate: string) =>
       many(n).map((c) => makeCall({ ...c, campaignId: null, unattributed: true, localDate }));

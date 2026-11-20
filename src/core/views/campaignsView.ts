@@ -78,6 +78,7 @@ const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const BOOKING = ['booking', 'bookings'] as const;
 const BLANK_NUMBER = ['with no tracking number', 'with no tracking number'] as const;
 
+const OVERLAP_REASON = 'The comparison period overlaps the selected range, so changes are not tested.';
 const NOT_TESTED = { flagged: false, direction: null, z: null } as const;
 
 /** Calls with this campaign id (null: no campaign); null when there is no previous period. */
@@ -92,6 +93,8 @@ export function buildCampaigns(
   options: CampaignsOptions = {},
 ): CampaignsView {
   const context = makeViewContext(store, range, previous);
+  // The z-test assumes independent periods; a comparison that shares days with the range is shown, not tested.
+  const overlaps = context.notes.comparison.overlaps;
 
   // One row per store campaign, from that campaign's calls in range.
   const rows: CampaignRow[] = store.campaigns.map((c) => {
@@ -99,7 +102,7 @@ export function buildCampaigns(
     const spend = estimatedSpend(c.dailyBudgetUsd, range.days);
     const previousCalls = countIn(context.previous, c.id);
     // Both periods have equal length here: context.previous exists only for a like-for-like comparison.
-    const test = previousCalls === null ? NOT_TESTED : countAlert(t.calls, previousCalls);
+    const test = previousCalls === null || overlaps ? NOT_TESTED : countAlert(t.calls, previousCalls);
     return {
       campaignId: c.id,
       name: c.name,
@@ -239,8 +242,12 @@ export function buildCampaigns(
     bestWorst: { eligible: picked.eligible, reason },
     weekly,
     alerts: {
-      checked: context.notes.comparison.available,
-      reason: context.notes.comparison.available ? null : context.notes.comparison.reason,
+      checked: context.notes.comparison.available && !overlaps,
+      reason: !context.notes.comparison.available
+        ? context.notes.comparison.reason
+        : overlaps
+          ? OVERLAP_REASON
+          : null,
       flagged: flagged.length,
       z: THRESHOLDS.ALERT_Z,
       minCalls: THRESHOLDS.MIN_CALLS_ALERT,
