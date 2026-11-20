@@ -7,6 +7,13 @@ import { formatCount } from '../core/views/format';
 /** Shown where a value is empty or not applicable: the em dash. */
 export const BLANK = '\u2014';
 
+const upToTwoDecimals = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+
+/** A threshold shown as it is, to two decimals with no trailing zeros: 3 is "3", 2.5 is "2.5". */
+export function formatThreshold(n: number): string {
+  return upToTwoDecimals.format(n);
+}
+
 const EN_DASH = '\u2013';
 
 const longDate = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' });

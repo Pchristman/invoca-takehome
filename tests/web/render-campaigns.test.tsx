@@ -79,7 +79,13 @@ describe('Campaigns screen alerts', () => {
       ...real,
       rows: [
         { ...first!, previousCalls: 100, callsChange: { kind: 'percent', value: -60 }, alert: { direction: 'drop', z: -5 } },
-        { ...second!, name: '<b>x</b>', previousCalls: 5, callsChange: { kind: 'new' } },
+        {
+          ...second!,
+          name: '<b>x</b>',
+          previousCalls: 100,
+          callsChange: { kind: 'percent', value: 60 },
+          alert: { direction: 'jump', z: 5 },
+        },
         ...rest,
       ],
       alerts: { checked: true, reason: null, flagged: 1, z: 3, minCalls: 20 },
@@ -90,7 +96,6 @@ describe('Campaigns screen alerts', () => {
     const html = render(flagged());
     expect(html).toContain('Calls dropped');
     expect(html).toContain('-60.0% (was 100)');
-    expect(html).not.toContain('Calls jumped');
   });
 
   it('shows the details block with the rule, and no all-clear note when something is flagged', () => {
@@ -105,6 +110,8 @@ describe('Campaigns screen alerts', () => {
     const html = render(flagged());
     expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
     expect(html).not.toContain('<b>x</b>');
+    // The flagged row carries the badge, so the escaped name and "Calls jumped" sit together.
+    expect(html).toMatch(/&lt;b&gt;x&lt;\/b&gt;[^]*?Calls jumped/);
   });
 
   it('an unavailable comparison shows a dash, the reason hidden, and the note; no rule', () => {
@@ -123,6 +130,62 @@ describe('Campaigns screen alerts', () => {
   });
 
   it('has no dev-only content', () => {
-    expect(render(flagged())).not.toContain('dev');
+    // ?dev adds the Data notes button in the header; the Campaigns view must not carry it or its panel.
+    const html = render(flagged());
+    expect(html).not.toContain('Data notes');
+    expect(html).not.toContain('data-notes');
+  });
+});
+
+describe('Campaigns screen caveats for the comparison period', () => {
+  const store = storeOverDates('2026-09-01', '2026-09-30');
+  const span = dataSpan(store.calls)!;
+  const renderFor = (search: string) =>
+    renderToStaticMarkup(
+      <CampaignsScreen view={campaignsFor(search, store)} state={parseUrlState('')} span={span} onSelectCampaign={noop} />,
+    );
+
+  it("says the comparison period includes the first day when it starts on the data's first day", () => {
+    const html = renderFor('start=2026-09-11&end=2026-09-20');
+    expect(html).toContain('<li>The comparison period includes the first day in the data, which may be incomplete.</li>');
+  });
+
+  it("says the comparison period includes the last day when it ends on the data's last day", () => {
+    const html = renderFor('start=2026-09-11&end=2026-09-20&compareStart=2026-09-21&compareEnd=2026-09-30');
+    expect(html).toContain('<li>The comparison period includes the last day in the data, which may be incomplete.</li>');
+  });
+
+  it('says the comparison period overlaps the selected range', () => {
+    const html = renderFor('start=2026-09-11&end=2026-09-20&compareStart=2026-09-16&compareEnd=2026-09-25');
+    expect(html).toContain('<li>The comparison period overlaps the selected range.</li>');
+  });
+});
+
+describe('Campaigns screen in an outage (calls before, none now)', () => {
+  const store = storeOverDates('2026-09-01', '2026-09-10');
+  const outage = (): ReturnType<typeof campaignsFor> => {
+    const view = campaignsFor('range=all', store);
+    return {
+      ...view,
+      rows: view.rows.map((r) => ({
+        ...r,
+        calls: 0,
+        previousCalls: 30,
+        callsChange: { kind: 'percent' as const, value: -100 },
+        alert: { direction: 'drop' as const, z: -5.5 },
+      })),
+      unattributed: null,
+      alerts: { checked: true, reason: null, flagged: view.rows.length, z: 3, minCalls: 20 },
+    };
+  };
+
+  it('keeps the table, the drop badge and the rule, and does not say there were no calls', () => {
+    const html = renderToStaticMarkup(
+      <CampaignsScreen view={outage()} state={parseUrlState('')} span={dataSpan(store.calls)!} onSelectCampaign={noop} />,
+    );
+    expect(html).not.toContain('No calls in this range.');
+    expect(html).toContain('Booking rate');
+    expect(html).toContain('Calls dropped');
+    expect(html).toContain('How alerts are decided');
   });
 });

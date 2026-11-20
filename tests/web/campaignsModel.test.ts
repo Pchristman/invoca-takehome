@@ -357,9 +357,41 @@ describe('alerts note and rule', () => {
     expect(other).not.toContain('20');
   });
 
+  it('alertsRule shows a fractional threshold as is, not rounded', () => {
+    expect(campaignsModel(withAlerts({ z: 2.5 }), DEFAULT_SORT).alertsRule!).toContain('reaches 2.5 in either direction');
+    expect(campaignsModel(withAlerts({ z: 2.25 }), DEFAULT_SORT).alertsRule!).toContain('reaches 2.25 in');
+  });
+
   it('passes a 300-character name through whole', () => {
     const long = 'x'.repeat(300);
     const view = { ...server, rows: [row('a', { name: long, previousCalls: 1, callsChange: { kind: 'new' } as const })] };
     expect(campaignsModel(view, DEFAULT_SORT).rows[0]!.name).toBe(long);
+  });
+});
+
+describe('empty', () => {
+  const only = (rows: CampaignRow[], unattributed: CampaignsView['unattributed'] = null): CampaignsView => ({
+    ...server,
+    rows,
+    unattributed,
+  });
+
+  it('is false in an outage: no calls now but calls before', () => {
+    const outage = only([row('a', { calls: 0, previousCalls: 12 }), row('b', { calls: 0, previousCalls: null })]);
+    expect(campaignsModel(outage, DEFAULT_SORT).empty).toBe(false);
+  });
+
+  it('is false when only the unattributed row had calls before', () => {
+    const unattributed = { ...row('u', { calls: 0, previousCalls: 3 }), campaignId: null, name: 'Unattributed', trackingNumbers: [] };
+    expect(campaignsModel(only([row('a', { calls: 0, previousCalls: 0 })], unattributed), DEFAULT_SORT).empty).toBe(false);
+  });
+
+  it('is true when there are no calls now and none before (previous 0 or null)', () => {
+    const none = only([row('a', { calls: 0, previousCalls: 0 }), row('b', { calls: 0, previousCalls: null })]);
+    expect(campaignsModel(none, DEFAULT_SORT).empty).toBe(true);
+  });
+
+  it('is false when there are calls now', () => {
+    expect(campaignsModel(only([row('a', { calls: 2 })]), DEFAULT_SORT).empty).toBe(false);
   });
 });

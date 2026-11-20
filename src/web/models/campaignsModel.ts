@@ -3,7 +3,7 @@
 import type { ActionKind } from '../../core/views/facts';
 import type { CampaignRow, CampaignsView, UnattributedRow } from '../../core/views/campaignsView';
 import { formatCount, formatRate, formatUsd, formatUsdPerDollar } from '../../core/views/format';
-import { BLANK, humanize } from '../format';
+import { BLANK, formatThreshold, humanize } from '../format';
 import { changeModel } from './changeModel';
 import { compareSortValues } from './sorting';
 import type { SortValue } from './sorting';
@@ -48,7 +48,7 @@ export interface CampaignRowModel {
 }
 
 export interface CampaignsModel {
-  empty: boolean; // no calls in range at all, unattributed included
+  empty: boolean; // no calls in range and none in the previous period, unattributed included
   columns: { key: SortKey; label: string; numeric: boolean; estimate: boolean }[];
   rows: CampaignRowModel[]; // sorted by `sort`; unattributed is NOT in here
   unattributed: (CampaignRowModel & { trackingNumbers: { text: string }[] }) | null; // pinned last, never sorted
@@ -152,7 +152,7 @@ function alertsRuleText({ minCalls, z }: CampaignsView['alerts']): string {
   return (
     'A campaign is marked when its calls differ from the previous period by more than chance explains. ' +
     `Campaigns with fewer than ${formatCount(minCalls)} calls across both periods are not tested. ` +
-    `Score = (calls now − calls before) ÷ √(calls now + calls before); marked when the score reaches ${formatCount(z)} in either direction.`
+    `Score = (calls now − calls before) ÷ √(calls now + calls before); marked when the score reaches ${formatThreshold(z)} in either direction.`
   );
 }
 
@@ -161,7 +161,8 @@ export function campaignsModel(view: CampaignsView, sort: CampaignSort): Campaig
   const { alerts } = view;
   const marked = view.rows.some((r) => r.isBest || r.isWorst);
   return {
-    empty: allRows.every((r) => r.calls === 0),
+    // An outage (no calls now, calls before) is not empty: the drops must stay visible.
+    empty: allRows.every((r) => r.calls === 0 && (r.previousCalls ?? 0) === 0),
     columns: COLUMNS,
     rows: sortCampaignRows(view.rows, sort).map((r) => rowModel(r, alerts.reason)),
     unattributed: view.unattributed ? unattributedModel(view.unattributed, alerts.reason) : null,
