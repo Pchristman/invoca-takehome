@@ -149,7 +149,7 @@ describe('docker-compose.yml', () => {
     for (const line of all.slice(start + 1)) {
       const text = line.trim();
       if (text === '' || text.startsWith('#')) continue;
-      if (depth(line) < depth(all[start]) || (depth(line) === depth(all[start]) && !text.startsWith('-'))) break;
+      if (depth(line) < depth(all[start]!) || (depth(line) === depth(all[start]!) && !text.startsWith('-'))) break;
       if (text.startsWith('-')) entries.push(text.replace(/^-\s*/, '').replace(/^"|"$/g, ''));
     }
     expect(entries).toEqual(['127.0.0.1:${PORT:-3000}:3000']);

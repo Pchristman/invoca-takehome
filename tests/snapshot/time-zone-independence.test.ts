@@ -56,7 +56,7 @@ describe('process time zone independence', () => {
     'every endpoint returns the same bytes under TZ=%s as under TZ=UTC, on both exports',
     async (zone) => {
       const utc = await bodiesUnder('UTC');
-      expect(utc.every((body) => / 200$/.test(body.split('\n')[0]))).toBe(true);
+      expect(utc.every((body) => / 200$/.test(body.split('\n')[0] ?? ''))).toBe(true);
       expect(await bodiesUnder(zone)).toEqual(utc);
     },
   );
