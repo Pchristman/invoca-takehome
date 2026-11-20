@@ -5,7 +5,7 @@
   Look: modeled on Invoca's own design language, read from their public stylesheet
   (invoca.com): near-black evergreen chrome, brand green for primary actions, warm
   "sand" neutrals, near-black text with grey secondary text, white panels with a soft
-  border, weight-500 headings with tight tracking, series colors green and indigo.
+  border, weight-500 headings with tight tracking, series colors blue and slate. The brand green is the accent: it marks actions only, and data and status colours stay at least 40 degrees of hue away from it (tested).
   Their font (Saans) is commercial, so IBM Plex Sans stands in for it, paired with IBM Plex Mono for figures and labels.
   Invoca's brand green (#00b388) is too light for text or 3:1 marks on sand, so text-bearing
   accents use a deeper green and the true brand green stays on the dark chrome.
@@ -32,23 +32,25 @@
   --color-accent: #00684f;
   --color-accent-soft: #dcf3e8;
   --color-accent-text: #ffffff;
-  --color-up: #00694f;
+  /* up: 6.44 / 6.87 / 6.11 on bg / panel / surface, 5.90 on accent-soft; hue 213, 47 from the accent */
+  --color-up: #1a5aa6;
   --color-down: #bf2217;
   --color-notice-bg: #fff7bf;
   --color-notice-text: #5a4100;
-  --color-chart-bar: #00936c;
-  --color-chart-bar-partial: #5e74e3;
+  /* bar: 4.64 / 4.95 / 4.40 on bg / panel / surface; partial: 3.84 / 4.10 / 3.65 */
+  --color-chart-bar: #2b72bd;
+  --color-chart-bar-partial: #6b7f99;
   --color-chrome: #0a231e;
   --color-chrome-text: #ffffff;
   --color-chrome-muted: #a9c0b8;
   --color-chrome-accent: #00b388;
-  /* heat: one green hue, five steps. Step 0 is "no calls"; steps 1 to 4 are 3:1 against the panel.
-     Dark ink on steps 0 and 1, white ink on steps 2 to 4 (4.5:1, tested). Neighbours differ by 1.4:1 or more (tested). */
+  /* heat: one blue hue (never the accent green), five steps. Step 0 is "no calls"; steps 1 to 4 are 3:1 against the panel (3.54, 6.08, 9.37, 13.81).
+     Dark ink on steps 0 and 1 (19.23, 5.94), white ink on steps 2 to 4 (6.08, 9.37, 13.81; 4.5:1 tested). Neighbours differ by 3.24, 1.72, 1.54, 1.47 (1.4:1 tested). */
   --color-heat-0: #f3f6ee;
-  --color-heat-1: #36a47c;
-  --color-heat-2: #1c7a5c;
-  --color-heat-3: #155d46;
-  --color-heat-4: #0a3d2f;
+  --color-heat-1: #4f8bd0;
+  --color-heat-2: #2b63a8;
+  --color-heat-3: #1d4680;
+  --color-heat-4: #112d52;
   --color-heat-ink: #000000;
   --color-heat-ink-inverse: #ffffff;
 
