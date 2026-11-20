@@ -175,3 +175,15 @@ describe('explainListenError', () => {
     expect(explainListenError(other, 80)).toBe(other);
   });
 });
+
+describe('start() and the takeaway service', () => {
+  it('with no ANTHROPIC_API_KEY every takeaway is template text with reason ai_off', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    const server = await startServer(SHIPPED);
+    const body = (await (await fetch(`${server.url}/api/takeaway/overview?range=all`)).json()) as { source: string; reason: string };
+    expect(body).toMatchObject({ source: 'template', reason: 'ai_off' });
+    const notes = (await (await fetch(`${server.url}/api/data-notes`)).json()) as { ai: { status: string } };
+    expect(notes.ai.status).toBe('off');
+    vi.unstubAllEnvs();
+  });
+});

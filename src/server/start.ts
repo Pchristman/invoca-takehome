@@ -3,6 +3,8 @@ import type { AddressInfo } from 'node:net';
 import { cleanExport } from '../core/clean';
 import type { CallStore } from '../core/types';
 import { readExportFromDir } from '../node/readDataDir';
+import { createAiFromEnv } from '../ai/fromEnv';
+import type { TakeawayService } from '../ai/service';
 import { createApp } from './app';
 import { explainListenError, parsePort } from './config';
 
@@ -13,6 +15,8 @@ export interface StartOptions {
   port?: number;
   /** The built web app's folder. */
   webRoot?: string;
+  /** The takeaway service. Omitted: built from the environment (AI off without ANTHROPIC_API_KEY). */
+  ai?: TakeawayService;
 }
 
 export interface RunningServer {
@@ -28,7 +32,7 @@ export interface RunningServer {
 export async function start(options: StartOptions = {}): Promise<RunningServer> {
   const requested = options.port ?? parsePort(process.env.PORT);
   const store = cleanExport(readExportFromDir(options.dataDir));
-  const app = createApp(store, { webRoot: options.webRoot });
+  const app = createApp(store, { webRoot: options.webRoot, ai: options.ai ?? createAiFromEnv(store, process.env) });
 
   const server = serve({ fetch: app.fetch, port: requested, hostname: '127.0.0.1' });
   await new Promise<void>((resolve, reject) => {

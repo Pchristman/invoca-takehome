@@ -1,12 +1,15 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { offService } from '../ai/service';
+import type { TakeawayService } from '../ai/service';
+import type { TakeawayResult } from '../ai/types';
 import { dataSpan } from '../core/ranges';
 import type { DateRange } from '../core/ranges';
 import type { CallStore } from '../core/types';
 import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../core/views';
-import type { ViewName } from '../core/views';
+import type { FactSheet, ViewName } from '../core/views';
 import { DEFAULT_PRESET, PRESETS, statusFor } from './api';
-import type { AiStatus, ApiError, DataNotesResponse, Meta, TakeawayResponse } from './api';
+import type { ApiError, DataNotesResponse, Meta, TakeawayResponse } from './api';
 import { callbacksToCsv } from './csv';
 import { parseViewQuery } from './params';
 import { serveWebApp } from './staticFiles';
@@ -15,12 +18,14 @@ import type { Parsed, ViewQuery, ViewQueryWants } from './params';
 export interface AppOptions {
   /** The built web app's folder (defaults to Vite's output folder). */
   webRoot?: string;
+  /** Writes the takeaways (defaults to AI off: every takeaway is the template sentence). */
+  ai?: TakeawayService;
 }
 
 /** What each view needs from the URL and how to build it. The view routes (and the takeaway route) all read this one table. */
 interface ViewSpec {
   wants: ViewQueryWants;
-  build: (store: CallStore, query: ViewQuery) => { view: ViewName; templateSentence: string };
+  build: (store: CallStore, query: ViewQuery) => { view: ViewName; templateSentence: string; factSheet: FactSheet };
 }
 
 // `satisfies` keeps each entry's own result type, so the CSV route can build through this table and still see `callbacks`.
@@ -37,12 +42,11 @@ const VIEW_TABLE = {
   },
 } satisfies Record<ViewName, ViewSpec>;
 
-const AI_OFF: AiStatus = { status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 };
-
 const INTERNAL_MESSAGE = 'Something went wrong on the server.';
 
 export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   const app = new Hono();
+  const ai = options.ai ?? offService();
   const span: DateRange | null = dataSpan(store.calls);
 
   const errorResponse = (c: Context, error: ApiError) => c.json({ error }, statusFor(error.code));
@@ -77,11 +81,11 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   for (const name of viewNames) route(name);
 
   app.get('/api/data-notes', (c) => {
-    const response: DataNotesResponse = { dataNotes: store.dataNotes, ai: AI_OFF };
+    const response: DataNotesResponse = { dataNotes: store.dataNotes, ai: ai.status() };
     return c.json(response);
   });
 
-  app.get('/api/takeaway/:view', (c) => {
+  app.get('/api/takeaway/:view', async (c) => {
     const name = viewNames.find((n) => n === c.req.param('view'));
     if (!name) {
       return errorResponse(c, {
@@ -93,7 +97,15 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
     const parsed = parseFor(c, name);
     if (!parsed.ok) return errorResponse(c, parsed.error);
     const view = VIEW_TABLE[name].build(store, parsed.value);
-    const response: TakeawayResponse = { view: name, text: view.templateSentence, source: 'template', reason: 'ai_off' };
+    let result: TakeawayResult;
+    try {
+      result = await ai.takeaway(view.factSheet, view.templateSentence);
+    } catch {
+      // The service should never throw. The message is fixed: an error's own text could carry request details.
+      console.error('The takeaway service failed; sending the template text.');
+      result = { text: view.templateSentence, source: 'template', reason: 'api_error' };
+    }
+    const response = { view: name, text: result.text, source: result.source, reason: result.reason } as TakeawayResponse;
     return c.json(response);
   });
 
