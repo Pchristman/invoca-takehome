@@ -71,10 +71,22 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
     try {
       appendLogLine(logPath, line);
     } catch {
+      // Print on the change only: calls already in flight will also fail to write.
+      if (logUsable) console.error('AI is off for this session: the call log cannot be written.');
       logUsable = false;
-      console.error('AI is off for this session: the call log cannot be written.');
     }
   }
+
+  let cacheWriteWarned = false;
+  function warnCacheNotSaved(): void {
+    if (cacheWriteWarned) return;
+    cacheWriteWarned = true;
+    console.error('AI takeaways could not be saved to the cache file; they are kept in memory for this session only.');
+  }
+
+  // Damage found at start-up: one line per kind, fixed text (counts only), never file contents.
+  if (cache.loadProblem !== null) console.error(`AI cache problem: ${cache.loadProblem}`);
+  if (summary.skippedLines > 0) console.error(`AI call log: ${summary.skippedLines} unreadable lines were skipped when adding up spend.`);
 
   function logLine(sheet: FactSheet, fields: Partial<CallLogLine>): CallLogLine {
     return {
@@ -136,7 +148,7 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
     }
 
     record(logLine(sheet, { ...paid, checkPassed: true }));
-    cache.set(key, text);
+    if (!cache.set(key, text)) warnCacheNotSaved();
     return { text: fillPlaceholders(text, sheet.facts), source: 'ai', reason: null };
   }
 
@@ -151,15 +163,24 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
 
     const key = cacheKey({ snapshotId, sheet, promptVersion: PROMPT_VERSION, model: model.id });
 
-    const cached = cache.get(key);
-    if (cached !== undefined) {
-      const text = fillPlaceholders(cached, sheet.facts);
-      record(logLine(sheet, { cached: true, checkPassed: true }));
-      return { text, source: 'ai', reason: null };
-    }
-
+    // Remembered failures come first: a rejected cache entry is already deleted, and must not be asked about twice.
     const remembered = rememberedFailures.get(key);
     if (remembered !== undefined) return templateResult(template, remembered);
+
+    // A cached text is checked on every hit: the file can be edited, and the known names or the checker may have changed.
+    const cached = cache.get(key);
+    if (cached !== undefined) {
+      const check = checkTakeaway(cached, sheet, known);
+      if (check.ok) {
+        record(logLine(sheet, { cached: true, checkPassed: true }));
+        return { text: fillPlaceholders(cached, sheet.facts), source: 'ai', reason: null };
+      }
+      // Not served, so not a hit: cached false, no tokens, no cost. The failure is the check's own reason.
+      if (!cache.delete(key)) warnCacheNotSaved();
+      rememberedFailures.set(key, 'check_failed');
+      record(logLine(sheet, { checkPassed: false, failure: check.reason }));
+      return templateResult(template, 'check_failed');
+    }
 
     const running = inFlight.get(key);
     if (running) return running;

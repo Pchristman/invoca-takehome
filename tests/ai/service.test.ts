@@ -281,7 +281,100 @@ describe('takeaway service', () => {
     expect(model.calls).toBe(1);
   });
 
+  describe('the reservation is released after every kind of failure', () => {
+    const oneMoreCall = (spentNano: number) => (spentNano + worst(sheet(1))) / 1e9;
+    const cases: Array<[string, Step, number, Partial<ServiceOptions>]> = [
+      ['a timeout', 'hang', 0, { timeoutMs: 20 }],
+      ['an API error', new ModelError('api_error', 'x'), 0, {}],
+      ['a refusal', { kind: 'refusal', usage: { inputTokens: 1500, outputTokens: 300 } }, 300000, {}],
+      ['a failed check', textReply('Move 5 now.'), 300000, {}],
+    ];
+    for (const [name, step, spent, extra] of cases) {
+      it(`a second different sheet still fits after ${name}`, async () => {
+        const model = new FakeModel(step);
+        const service = make(model, { limitUsd: oneMoreCall(spent), ...extra });
+        await service.takeaway(sheet(1), TEMPLATE);
+        const second = await service.takeaway(sheet(2), TEMPLATE);
+        expect(second.reason).not.toBe('budget_reached');
+        expect(model.calls).toBe(2);
+      });
+    }
+  });
+
+  describe('damage is reported once', () => {
+    function errors(spy: ReturnType<typeof vi.spyOn>): string[] {
+      return spy.mock.calls.map((c: unknown[]) => String(c[0]));
+    }
+
+    it('a damaged cache file prints one line at creation', () => {
+      writeFileSync(paths().cachePath, '{{{ garbage');
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      make(new FakeModel(textReply(GOOD)));
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(errors(spy)[0]).toContain('cache');
+      expect(errors(spy)[0]).not.toContain('garbage');
+    });
+
+    it('skipped log lines print one line with the count', async () => {
+      await make(new FakeModel(textReply(GOOD))).takeaway(sheet(), TEMPLATE);
+      writeFileSync(paths().logPath, readFileSync(paths().logPath, 'utf8') + 'not json\n{"costUsd":"x"}\n');
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      make(new FakeModel(textReply(GOOD)));
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(errors(spy)[0]).toContain('2');
+      expect(errors(spy)[0]).not.toContain('not json');
+    });
+
+    it('a clean start prints nothing', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      make(new FakeModel(textReply(GOOD)));
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('a cache that cannot be written prints once, the first time only', async () => {
+      mkdirSync(paths().cachePath); // a folder where the file should go: unreadable at load, unwritable on save
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const service = make(new FakeModel(textReply(GOOD)));
+      const atCreation = spy.mock.calls.length; // the load problem
+      await service.takeaway(sheet(1), TEMPLATE);
+      await service.takeaway(sheet(2), TEMPLATE);
+      expect(spy.mock.calls.length - atCreation).toBe(1);
+      expect(errors(spy).at(-1)).toContain('saved');
+    });
+  });
+
+  describe('a log that breaks while calls are in flight', () => {
+    it('prints exactly one line', async () => {
+      writeFileSync(join(dir, 'afile'), 'x');
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const model = new FakeModel(textReply(GOOD));
+      let open!: () => void;
+      model.gate = new Promise<void>((resolve) => { open = resolve; });
+      const service = make(model, { logPath: join(dir, 'afile', 'ai.jsonl') });
+      const first = service.takeaway(sheet(1), TEMPLATE);
+      const second = service.takeaway(sheet(2), TEMPLATE);
+      open();
+      await Promise.all([first, second]);
+      expect(model.calls).toBe(2);
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('status', () => {
+    const typicalWorst = worstCaseNanoUsd(MODEL_ID, 4000);
+
+    it('is budget_reached only because logged spend leaves no room for one more call', async () => {
+      await make(new FakeModel(textReply(GOOD))).takeaway(sheet(), TEMPLATE); // logs 300000 nano
+      const limitUsd = (300000 + typicalWorst - 1) / 1e9;
+      expect(make(new FakeModel(textReply(GOOD)), { limitUsd }).status().status).toBe('budget_reached');
+    });
+
+    it('is on when logged spend leaves room for exactly one more call', async () => {
+      await make(new FakeModel(textReply(GOOD))).takeaway(sheet(), TEMPLATE);
+      const limitUsd = (300000 + typicalWorst) / 1e9;
+      expect(make(new FakeModel(textReply(GOOD)), { limitUsd }).status().status).toBe('on');
+    });
+
     it('is off with no model', () => {
       expect(make(null).status()).toEqual({ status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 });
     });
@@ -303,6 +396,40 @@ describe('takeaway service', () => {
       await bad.takeaway(sheet(4), TEMPLATE); // checker failure
       const restarted = make(new FakeModel(textReply(GOOD))).status();
       expect(restarted).toEqual({ status: 'on', spendUsd: 0.0009, cacheHits: 1, checkerFailures: 1 });
+    });
+  });
+
+  describe('a cached entry is checked on every hit', () => {
+    async function tamperedService(model: FakeModel) {
+      await make(new FakeModel(textReply(GOOD))).takeaway(sheet(), TEMPLATE); // fills the cache file
+      const file = JSON.parse(readFileSync(paths().cachePath, 'utf8')) as Record<string, { text: string }>;
+      for (const entry of Object.values(file)) entry.text = 'Gamma made 999 more bookings than {shift.worst.name}.';
+      writeFileSync(paths().cachePath, JSON.stringify(file));
+      return make(model);
+    }
+
+    it('a tampered entry is not served: template, no model call, logged as a check failure', async () => {
+      const model = new FakeModel(textReply(GOOD));
+      const service = await tamperedService(model);
+      const result = await service.takeaway(sheet(), TEMPLATE);
+      expect(result).toEqual({ text: TEMPLATE, source: 'template', reason: 'check_failed' });
+      expect(model.calls).toBe(0);
+      const last = logLines().at(-1)!;
+      expect(last).toMatchObject({ checkPassed: false, cached: false, costUsd: 0, inputTokens: 0, outputTokens: 0 });
+      expect(typeof last.failure).toBe('string');
+      expect(last.failure).not.toBe('check_failed');
+      expect(service.status().cacheHits).toBe(0);
+      expect(service.status().checkerFailures).toBe(2 - 1); // only the rejected entry (the first call passed)
+    });
+
+    it('the bad entry is dropped from the cache file and remembered for the session', async () => {
+      const model = new FakeModel(textReply(GOOD));
+      const service = await tamperedService(model);
+      await service.takeaway(sheet(), TEMPLATE);
+      expect(JSON.parse(readFileSync(paths().cachePath, 'utf8'))).toEqual({});
+      const again = await service.takeaway(sheet(), TEMPLATE);
+      expect(again.reason).toBe('check_failed');
+      expect(model.calls).toBe(0);
     });
   });
 

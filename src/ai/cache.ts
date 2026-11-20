@@ -47,6 +47,12 @@ export class TakeawayCache {
     return this.path === null ? true : this.save(this.path);
   }
 
+  /** Remove an entry. Returns false if the file could not be written (the entry is gone from memory either way). */
+  delete(key: string): boolean {
+    this.entries.delete(key);
+    return this.path === null ? true : this.save(this.path);
+  }
+
   /** Fills the entries. Returns a message when the file was unreadable or damaged, else null. */
   private load(path: string): string | null {
     let raw: string;

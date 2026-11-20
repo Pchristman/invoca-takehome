@@ -115,6 +115,18 @@ describe('TakeawayCache', () => {
     expect(cache.get('k')).toBe('v');
   });
 
+  it('delete removes an entry in memory and in the file', () => {
+    const cache = new TakeawayCache(path);
+    cache.set('a', '1');
+    cache.set('b', '2');
+    expect(cache.delete('a')).toBe(true);
+    expect(cache.get('a')).toBeUndefined();
+    const again = new TakeawayCache(path);
+    expect(again.get('a')).toBeUndefined();
+    expect(again.get('b')).toBe('2');
+    expect(cache.delete('missing')).toBe(true); // nothing to remove is not a failure
+  });
+
   it('never touches the disk with a null path', () => {
     const cache = new TakeawayCache(null);
     expect(cache.set('k', 'v')).toBe(true);
