@@ -5,7 +5,7 @@ import { formatCount } from '../../core/views/format';
 import { formatDateSpan, formatLongDate } from '../format';
 
 export interface Caveat {
-  id: 'clamped' | 'first_day' | 'last_day' | 'previous_first_day' | 'previous_last_day' | 'outcome_lag' | 'overlap';
+  id: 'clamped' | 'first_day' | 'last_day' | 'previous_first_day' | 'previous_last_day' | 'outcome_lag' | 'overlap' | 'per_day';
   text: string;
 }
 
@@ -50,6 +50,14 @@ export function caveatsFor(
   }
   if (showPrevious && notes.comparison.overlaps) {
     add('overlap', 'The comparison period overlaps the selected range.');
+  }
+  if (showPrevious && notes.comparison.perDay) {
+    const { currentDays, previousDays } = notes.comparison;
+    const lengths = `${formatCount(currentDays, ['day', 'days'])} and ${formatCount(previousDays ?? 0, ['day', 'days'])}`;
+    add(
+      'per_day',
+      `The two ranges are different lengths (${lengths}), so changes in calls, bookings and revenue compare per day. Unique callers are not compared.`,
+    );
   }
   return found;
 }

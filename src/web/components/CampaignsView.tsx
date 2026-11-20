@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { DateRange } from '../../core/ranges';
 import type { CampaignsView as CampaignsData } from '../../core/views';
 import { caveatsFor } from '../models/caveats';
+import { comparisonLine } from '../models/comparisonLine';
 import { DEFAULT_SORT, campaignsModel, nextSort } from '../models/campaignsModel';
 import { weeklyChartModel } from '../models/weeklyChart';
 import type { UrlState } from '../urlState';
@@ -27,11 +28,13 @@ export function CampaignsView({
   const chart = weeklyChartModel(view.weekly);
   // caveatsFor shows the previous-period notes only when notes.comparison.available, so true is enough here.
   const caveats = caveatsFor(view.notes, span, { comparing: true, range: view.range });
+  const line = comparisonLine(view.notes, view.range);
   const trackingNumbers = model.unattributed?.trackingNumbers ?? [];
 
   return (
     <>
       <Caveats items={caveats} />
+      {line !== null && <p className="muted small">{line}</p>}
       <section className="section">
         <h2>Actions</h2>
         <ul>

@@ -1,6 +1,7 @@
 import type { DateRange } from '../../core/ranges';
 import type { OverviewView as OverviewData } from '../../core/views';
 import { caveatsFor } from '../models/caveats';
+import { comparisonLine } from '../models/comparisonLine';
 import { overviewModel } from '../models/overviewModel';
 import type { Tone } from '../models/overviewModel';
 import { actionHref } from '../urlState';
@@ -14,10 +15,12 @@ const TONE_WORD: Record<Tone, string> = { up: 'up', down: 'down', flat: 'no chan
 export function OverviewView({ view, state, span }: { view: OverviewData; state: UrlState; span: DateRange }) {
   const model = overviewModel(view);
   const caveats = caveatsFor(view.notes, span, { comparing: true, range: view.range });
+  const line = comparisonLine(view.notes, view.range);
 
   return (
     <>
       <Caveats items={caveats} />
+      {line !== null && <p className="muted small">{line}</p>}
       <section className="tile-grid" aria-label="Key numbers">
         {model.tiles.map((tile) => (
           <div className="tile" key={tile.key}>

@@ -3,6 +3,7 @@ import type { Change } from '../../src/core/metrics';
 import type { OverviewView } from '../../src/core/views';
 import { BLANK } from '../../src/web/format';
 import { overviewModel, reasonHeadline } from '../../src/web/models/overviewModel';
+import { callAt, campaign, makeStore, office } from '../core/views/fixtures';
 import { emptyRangeStore, overviewFor } from './fixtures';
 
 /** A copy of the view with the calls tile's change replaced (both counts stay as the API had them). */
@@ -11,14 +12,15 @@ function withCallsChange(view: OverviewView, change: Change): OverviewView {
 }
 
 describe('reasonHeadline', () => {
-  it('gives the two headlines of the real server sentences', () => {
+  it('gives the headline of the real "No full previous period" sentences', () => {
     const noFull = overviewFor('range=all').notes.comparison.reason!;
-    const noLike = overviewFor('start=2026-09-10&end=2026-09-11&compareStart=2026-09-01&compareEnd=2026-09-03').notes
+    // A second range outside the data (Aug 1-3 is before the first day, Sep 1).
+    const outside = overviewFor('start=2026-09-10&end=2026-09-11&compareStart=2026-08-01&compareEnd=2026-08-03').notes
       .comparison.reason!;
     expect(noFull.startsWith('No full previous period')).toBe(true);
-    expect(noLike.startsWith('No like-for-like comparison')).toBe(true);
+    expect(outside.startsWith('No full previous period')).toBe(true);
     expect(reasonHeadline(noFull)).toBe('No full previous period');
-    expect(reasonHeadline(noLike)).toBe('No like-for-like comparison');
+    expect(reasonHeadline(outside)).toBe('No full previous period');
   });
 
   it('returns a string with no colon whole, and empty for empty', () => {
@@ -167,5 +169,52 @@ describe('top actions with an alert entry', () => {
     expect(model.topActions).toHaveLength(4);
     expect(model.topActions[1]!.viewLabel).toBe('Campaigns');
     expect(model.topActions[1]!.text).toBe('Calls jumped for 2 campaigns.');
+  });
+});
+
+describe('per-day comparison', () => {
+  const perDayQuery = 'start=2026-09-08&end=2026-09-10&compareStart=2026-09-01&compareEnd=2026-09-02';
+  const byKey = (search: string, store?: Parameters<typeof overviewFor>[1]) =>
+    Object.fromEntries(overviewModel(overviewFor(search, store)).tiles.map((t) => [t.key, t]));
+
+  it('names the length of the second range and says per day (serverFixture: 2 calls a day in both ranges)', () => {
+    const tiles = byKey(perDayQuery);
+    expect(tiles.calls!.value).toBe('6');
+    expect(tiles.calls!.previous).toBe('was 4 in 2 days');
+    expect(tiles.calls!.change).toEqual({ text: '0.0% per day', tone: 'flat' });
+    expect(tiles.bookings!.previous).toBe('was 2 in 2 days');
+    expect(tiles.revenueUsd!.previous).toBe('was $200 in 2 days');
+  });
+
+  it('reads +100.0% per day, tone up, for 2 calls a day against 1 a day', () => {
+    // Sep 8-10 at 2 a day (6 calls) against Sep 1-2 at 1 a day (2 calls).
+    const at = (d: number) => `2026-09-${String(d).padStart(2, '0')}T16:00:00Z`;
+    const store = makeStore(
+      [1, 2, 8, 8, 9, 9, 10, 10].map((d) => callAt(at(d), { campaignId: 'cmp_a', locationId: 'loc_a' })),
+      { campaigns: [campaign('cmp_a', 'Alpha', 'social', 10)], locations: [office('loc_a', 'Office', 'America/Phoenix')] },
+    );
+    expect(byKey(perDayQuery, store).calls!.change).toEqual({ text: '+100.0% per day', tone: 'up' });
+  });
+
+  it('unique callers: no change and the reason', () => {
+    const tile = byKey(perDayQuery).uniqueCallers!;
+    expect(tile.change).toBeNull();
+    expect(tile.previous).toBeNull();
+    expect(tile.unavailable).toBe('Not compared across different lengths');
+  });
+
+  it('the answer rate has no "per day"', () => {
+    const tile = byKey(perDayQuery).answerRate!;
+    expect(tile.change?.text).not.toContain('per day');
+    expect(tile.previous ?? '').not.toContain(' in ');
+    expect(tile.unavailable).toBeNull();
+  });
+
+  it('equal length is unchanged: no "per day" anywhere', () => {
+    for (const tile of overviewModel(overviewFor('range=last7')).tiles) {
+      expect(tile.previous ?? '').not.toContain(' in ');
+      expect(tile.change?.text ?? '').not.toContain('per day');
+      expect(tile.unavailable).toBeNull();
+    }
   });
 });

@@ -67,6 +67,37 @@ describe('Campaigns screen on an empty range', () => {
   });
 });
 
+describe('Campaigns screen comparison line and per-day caveat', () => {
+  const span = dataSpan(serverFixture().calls)!;
+  const render = (view: ReturnType<typeof campaignsFor>) =>
+    renderToStaticMarkup(<CampaignsScreen view={view} state={parseUrlState('')} span={span} onSelectCampaign={noop} />);
+  const count = (html: string, needle: string) => html.split(needle).length - 1;
+  const perDay = campaignsFor('start=2026-09-08&end=2026-09-10&compareStart=2026-09-01&compareEnd=2026-09-02');
+  const PER_DAY = 'compare per day.';
+
+  it('names both ranges and shows the caveat once when the lengths differ', () => {
+    const html = render(perDay);
+    expect(count(html, 'Comparing Sep 8 – Sep 10, 2026 with Sep 1 – Sep 2, 2026.')).toBe(1);
+    expect(count(html, PER_DAY)).toBe(1);
+    expect(html).toContain('per day (was');
+    expect(html).not.toMatch(/undefined|NaN/);
+  });
+
+  it('shows the line but not the caveat at equal length', () => {
+    const html = render(campaignsFor('range=last7'));
+    expect(html).toContain('Comparing Sep 8 – Sep 14, 2026 with Sep 1 – Sep 7, 2026.');
+    expect(html).not.toContain(PER_DAY);
+  });
+
+  it('a campaign named like markup stays escaped beside the per-day cell', () => {
+    const view = { ...perDay, rows: [{ ...perDay.rows[0]!, name: '<b>x</b>' }, ...perDay.rows.slice(1)] };
+    const html = render(view);
+    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
+    expect(html).not.toContain('<b>x</b>');
+    expect(html).toContain('per day (was');
+  });
+});
+
 describe('Campaigns screen alerts', () => {
   const span = dataSpan(serverFixture().calls)!;
   const real = campaignsFor('range=all');

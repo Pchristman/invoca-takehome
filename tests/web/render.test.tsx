@@ -328,6 +328,28 @@ describe('EstimateNote', () => {
   });
 });
 
+describe('OverviewView comparison line and per-day caveat', () => {
+  const render = (search: string) =>
+    renderToStaticMarkup(<OverviewView view={overviewFor(search)} state={plainState} span={span} />);
+  const PER_DAY = 'compare per day.';
+
+  it('names both ranges and shows the per-day caveat once when the lengths differ', () => {
+    const html = render('start=2026-09-08&end=2026-09-10&compareStart=2026-09-01&compareEnd=2026-09-02');
+    expect(count(html, 'Comparing Sep 8 – Sep 10, 2026 with Sep 1 – Sep 2, 2026.')).toBe(1);
+    expect(count(html, PER_DAY)).toBe(1);
+    expect(html).toContain('was 4 in 2 days');
+    expect(html).toContain('Not compared across different lengths');
+    expect(html).not.toMatch(/undefined|NaN/);
+  });
+
+  it('shows the line but not the caveat for the default equal-length comparison', () => {
+    const html = render('range=last7');
+    expect(count(html, 'Comparing Sep 8 – Sep 14, 2026 with Sep 1 – Sep 7, 2026.')).toBe(1);
+    expect(html).not.toContain(PER_DAY);
+    expect(html).not.toMatch(/undefined|NaN/);
+  });
+});
+
 describe('OverviewView', () => {
   const render = (view: OverviewData, state = plainState) =>
     renderToStaticMarkup(<OverviewView view={view} state={state} span={span} />);

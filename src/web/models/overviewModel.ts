@@ -32,6 +32,8 @@ export function reasonHeadline(reason: string): string {
   return colon === -1 ? reason : reason.slice(0, colon);
 }
 
+const UNIQUE_CALLERS_PER_DAY = 'Not compared across different lengths';
+
 const TILES: { key: TileModel['key']; label: string; format: (value: number) => string }[] = [
   { key: 'calls', label: 'Calls', format: formatCount },
   { key: 'uniqueCallers', label: 'Unique callers', format: formatCount },
@@ -42,17 +44,27 @@ const TILES: { key: TileModel['key']; label: string; format: (value: number) => 
 
 export function overviewModel(view: OverviewView): OverviewModel {
   const { comparison } = view.notes;
+  const { perDay, previousDays } = comparison;
   const headline = !comparison.available && comparison.reason !== null ? reasonHeadline(comparison.reason) : null;
 
   const tiles = TILES.map(({ key, label, format }): TileModel => {
     const tile: Tile = view.tiles[key];
+    // Calls, bookings and revenue change per day across lengths; the answer rate is a rate and never does.
+    const countsPerDay = perDay && key !== 'answerRate';
+    const change = changeModel(tile.change);
     return {
       key,
       label,
       value: tile.current === null ? BLANK : format(tile.current),
-      previous: tile.previous === null ? null : `was ${format(tile.previous)}`,
-      change: changeModel(tile.change),
-      unavailable: headline,
+      previous:
+        tile.previous === null
+          ? null
+          : countsPerDay
+            ? `was ${format(tile.previous)} in ${formatCount(previousDays ?? 0, ['day', 'days'])}`
+            : `was ${format(tile.previous)}`,
+      // 'new' and 'none' have no rate to name, so only a percentage gets the suffix.
+      change: change !== null && countsPerDay && tile.change.kind === 'percent' ? { ...change, text: `${change.text} per day` } : change,
+      unavailable: headline ?? (perDay && key === 'uniqueCallers' ? UNIQUE_CALLERS_PER_DAY : null),
     };
   });
 

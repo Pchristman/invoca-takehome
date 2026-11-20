@@ -40,6 +40,9 @@ function everything(): ViewNotes {
       previous: { start: '2026-09-01', end: '2026-09-07' },
       reason: null,
       overlaps: true,
+      perDay: false,
+      currentDays: 7,
+      previousDays: 7,
     },
     incompleteCurrent: { includesFirstDay: true, includesLastDay: true },
     incompletePrevious: { includesFirstDay: true, includesLastDay: true },
@@ -57,6 +60,9 @@ function quiet(): ViewNotes {
       previous: { start: '2026-09-01', end: '2026-09-07' },
       reason: null,
       overlaps: false,
+      perDay: false,
+      currentDays: 7,
+      previousDays: 7,
     },
     incompleteCurrent: { includesFirstDay: false, includesLastDay: false },
     incompletePrevious: { includesFirstDay: false, includesLastDay: false },
@@ -167,6 +173,9 @@ describe('caveatsFor', () => {
         previous: { start: '2026-09-05', end: '2026-09-11' },
         reason: null,
         overlaps: true,
+        perDay: false,
+        currentDays: 7,
+        previousDays: 7,
       },
     };
     expect(textOf(notes, 'overlap')).toBe('The comparison period overlaps the selected range.');
@@ -183,6 +192,56 @@ describe('caveatsFor', () => {
       'outcome_lag',
       'overlap',
     ]);
+  });
+
+  it('order puts per_day last', () => {
+    const notes = everything();
+    const perDay: ViewNotes = { ...notes, comparison: { ...notes.comparison, perDay: true, previousDays: 3 } };
+    expect(ids(perDay).at(-1)).toBe('per_day');
+  });
+});
+
+describe('per_day caveat', () => {
+  const perDayNotes = (currentDays: number, previousDays: number): ViewNotes => ({
+    ...quiet(),
+    comparison: { ...quiet().comparison, perDay: true, currentDays, previousDays },
+  });
+
+  it('says both lengths and what is and is not compared per day', () => {
+    expect(textOf(perDayNotes(28, 7), 'per_day')).toBe(
+      'The two ranges are different lengths (28 days and 7 days), so changes in calls, bookings and revenue compare per day. Unique callers are not compared.',
+    );
+  });
+
+  it('says "1 day", not "1 days", for a one-day second range', () => {
+    const text = textOf(perDayNotes(7, 1), 'per_day');
+    expect(text).toContain('(7 days and 1 day)');
+    expect(text).not.toContain('1 days');
+  });
+
+  it('is absent for equal length, when not comparing, and when unavailable', () => {
+    expect(ids(quiet())).not.toContain('per_day');
+    expect(ids(perDayNotes(7, 3), false)).not.toContain('per_day');
+    const unavailable: ViewNotes = {
+      ...perDayNotes(7, 3),
+      comparison: { ...perDayNotes(7, 3).comparison, available: false, reason: 'No full previous period: x' },
+    };
+    expect(ids(unavailable)).not.toContain('per_day');
+  });
+
+  it('the second range equal to the selected one gives overlap and no per_day (real notes)', () => {
+    const view = overviewFor('start=2026-09-08&end=2026-09-14&compareStart=2026-09-08&compareEnd=2026-09-14');
+    const found = caveatsFor(view.notes, SPAN, { comparing: true, range: view.range }).map((c) => c.id);
+    expect(found).toContain('overlap');
+    expect(found).not.toContain('per_day');
+  });
+
+  it('a second range that includes the last data day gives previous_last_day (real notes)', () => {
+    const view = overviewFor('start=2026-09-01&end=2026-09-03&compareStart=2026-09-10&compareEnd=2026-09-14');
+    expect(view.notes.comparison.perDay).toBe(true);
+    const found = caveatsFor(view.notes, SPAN, { comparing: true, range: view.range }).map((c) => c.id);
+    expect(found).toContain('previous_last_day');
+    expect(found.at(-1)).toBe('per_day');
   });
 });
 

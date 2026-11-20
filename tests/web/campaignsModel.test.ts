@@ -395,3 +395,40 @@ describe('empty', () => {
     expect(campaignsModel(only([row('a', { calls: 2 })]), DEFAULT_SORT).empty).toBe(false);
   });
 });
+
+describe('per-day comparison', () => {
+  // Sep 8-10 against Sep 1-2: different lengths, so the change is per day.
+  const perDay = campaignsFor('start=2026-09-08&end=2026-09-10&compareStart=2026-09-01&compareEnd=2026-09-02');
+
+  it('the Calls vs previous cell says per day, with the total it was', () => {
+    expect(perDay.notes.comparison.perDay).toBe(true);
+    const id = perDay.rows[0]!.campaignId!;
+    const cell = modelRow(campaignsModel(perDay, DEFAULT_SORT).rows, id).cells.callsChange;
+    expect(cell.text).toMatch(/^[+-]?\d+\.\d% per day \(was \d+\)$/);
+  });
+
+  it('formats +54.1% per day (was 218), and keeps new (was 0) as it is', () => {
+    const edited: CampaignsView = {
+      ...perDay,
+      rows: [
+        { ...perDay.rows[0]!, previousCalls: 218, callsChange: { kind: 'percent', value: 54.1 } },
+        { ...perDay.rows[1]!, previousCalls: 0, callsChange: { kind: 'new' } },
+      ],
+    };
+    const rows = campaignsModel(edited, DEFAULT_SORT).rows;
+    expect(rows[0]!.cells.callsChange.text).toBe('+54.1% per day (was 218)');
+    expect(rows[1]!.cells.callsChange.text).toBe('new (was 0)');
+  });
+
+  it('the same row at equal length has no "per day"', () => {
+    const equal = campaignsFor('range=last7');
+    expect(equal.notes.comparison.perDay).toBe(false);
+    for (const r of campaignsModel(equal, DEFAULT_SORT).rows) expect(r.cells.callsChange.text).not.toContain('per day');
+  });
+
+  it('alertsNote is the per-day alerts reason from the real builder', () => {
+    expect(perDay.alerts.checked).toBe(false);
+    expect(perDay.alerts.reason).toContain('same length');
+    expect(campaignsModel(perDay, DEFAULT_SORT).alertsNote).toBe(perDay.alerts.reason);
+  });
+});

@@ -84,22 +84,24 @@ function numberCell(value: number | null, format: (n: number) => string, note: s
   return note === null ? { text: BLANK } : { text: BLANK, note };
 }
 
-/** "+54.1% (was 218)", "new (was 0)", or a blank that says why. */
-function callsChangeCell(row: CampaignRow, noPreviousReason: string | null): Cell {
+/** "+54.1% (was 218)", "+54.1% per day (was 218)" across lengths,, "new (was 0)", or a blank that says why. */
+function callsChangeCell(row: CampaignRow, noPreviousReason: string | null, perDay: boolean): Cell {
   if (row.previousCalls === null) return { text: BLANK, note: noPreviousReason ?? 'No previous period.' };
   const change = changeModel(row.callsChange);
   if (change === null) return { text: BLANK, note: 'No calls in either period.' };
-  return { text: `${change.text} (was ${formatCount(row.previousCalls)})` };
+  // 'new' has no rate to name, so only a percentage gets "per day".
+  const suffix = perDay && row.callsChange.kind === 'percent' ? ' per day' : '';
+  return { text: `${change.text}${suffix} (was ${formatCount(row.previousCalls)})` };
 }
 
-function cellsFor(row: CampaignRow, noPreviousReason: string | null): Record<SortKey, Cell> {
+function cellsFor(row: CampaignRow, noPreviousReason: string | null, perDay: boolean): Record<SortKey, Cell> {
   const noBudget = row.estimatedSpendUsd === null ? NOT_APPLICABLE : row.estimatedSpendUsd === 0 ? ZERO_BUDGET : null;
   const costNote = noBudget ?? (row.bookings === 0 ? NO_BOOKINGS : null);
   return {
     name: { text: row.name },
     channel: { text: humanize(row.channel) },
     calls: { text: formatCount(row.calls) },
-    callsChange: callsChangeCell(row, noPreviousReason),
+    callsChange: callsChangeCell(row, noPreviousReason, perDay),
     bookings: { text: formatCount(row.bookings) },
     bookingRate: numberCell(row.bookingRate, formatRate, NO_CALLS),
     revenueUsd: { text: formatUsd(row.revenueUsd) },
@@ -117,12 +119,16 @@ function marksFor(row: CampaignRow): Mark[] {
   return marks;
 }
 
-function rowModel(row: CampaignRow, noPreviousReason: string | null): CampaignRowModel {
-  return { id: row.campaignId, name: row.name, marks: marksFor(row), cells: cellsFor(row, noPreviousReason) };
+function rowModel(row: CampaignRow, noPreviousReason: string | null, perDay: boolean): CampaignRowModel {
+  return { id: row.campaignId, name: row.name, marks: marksFor(row), cells: cellsFor(row, noPreviousReason, perDay) };
 }
-function unattributedModel(row: UnattributedRow, noPreviousReason: string | null): NonNullable<CampaignsModel['unattributed']> {
+function unattributedModel(
+  row: UnattributedRow,
+  noPreviousReason: string | null,
+  perDay: boolean,
+): NonNullable<CampaignsModel['unattributed']> {
   return {
-    ...rowModel(row, noPreviousReason),
+    ...rowModel(row, noPreviousReason, perDay),
     trackingNumbers: row.trackingNumbers.map((n) => ({
       text: `${n.trackingNumber} · ${formatCount(n.calls, ['call', 'calls'])}`,
     })),
@@ -159,13 +165,14 @@ function alertsRuleText({ minCalls, z }: CampaignsView['alerts']): string {
 export function campaignsModel(view: CampaignsView, sort: CampaignSort): CampaignsModel {
   const allRows = view.unattributed ? [...view.rows, view.unattributed] : view.rows;
   const { alerts } = view;
+  const { perDay } = view.notes.comparison;
   const marked = view.rows.some((r) => r.isBest || r.isWorst);
   return {
     // An outage (no calls now, calls before) is not empty: the drops must stay visible.
     empty: allRows.every((r) => r.calls === 0 && (r.previousCalls ?? 0) === 0),
     columns: COLUMNS,
-    rows: sortCampaignRows(view.rows, sort).map((r) => rowModel(r, alerts.reason)),
-    unattributed: view.unattributed ? unattributedModel(view.unattributed, alerts.reason) : null,
+    rows: sortCampaignRows(view.rows, sort).map((r) => rowModel(r, alerts.reason, perDay)),
+    unattributed: view.unattributed ? unattributedModel(view.unattributed, alerts.reason, perDay) : null,
     bestWorstNote: marked ? null : view.bestWorst.reason,
     alertsNote: !alerts.checked ? alerts.reason : alerts.flagged === 0 ? ALL_CLEAR : null,
     alertsRule: alerts.checked ? alertsRuleText(alerts) : null,
