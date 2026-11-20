@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MOTION_OFF, type MotionSettings } from '../../src/web/models/motionSettings';
-import { chartAnimation, revealFor, transitionKey, type RevealKind } from '../../src/web/models/motionVariants';
+import { chartAnimation, contentKey, revealFor, transitionKey, type RevealKind } from '../../src/web/models/motionVariants';
 import { parseUrlState } from '../../src/web/urlState';
 
 const ON: MotionSettings = { enabled: true, fast: 0.15, base: 0.25, slow: 0.3, ease: [0.2, 0, 0, 1] };
@@ -79,5 +79,20 @@ describe('transitionKey', () => {
     for (const view of ['overview', 'locations'] as const) {
       expect(transitionKey({ ...answer, view })).toBe('answer');
     }
+  });
+});
+
+describe('contentKey', () => {
+  const base = parseUrlState('?view=campaigns');
+  it('changes when the range or the comparison changes, so the content transitions like a tab switch', () => {
+    expect(contentKey({ ...base, range: { kind: 'preset', preset: 'last7' } })).not.toBe(contentKey(base));
+    expect(contentKey({ ...base, range: { kind: 'custom', start: '2026-09-01', end: '2026-09-07' } })).not.toBe(contentKey(base));
+    expect(contentKey({ ...base, compare: { start: '2026-08-01', end: '2026-08-07' } })).not.toBe(contentKey(base));
+  });
+  it('still ignores the campaign, the office, dev and print', () => {
+    expect(contentKey({ ...base, campaign: 'x', location: 'y', dev: true, print: true })).toBe(contentKey(base));
+  });
+  it('differs for each view and for the answer page', () => {
+    expect(contentKey({ ...base, view: 'overview' })).not.toBe(contentKey(base));
   });
 });

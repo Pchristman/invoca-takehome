@@ -136,9 +136,9 @@ describe('views, takeaway, panels and heatmap (Task 5)', () => {
     expect(out).not.toContain('data-motion');
   });
 
-  it('the view key comes from transitionKey and never from campaign or location', () => {
+  it('the content key comes from contentKey (view, range, comparison) and never from campaign or location', () => {
     const app = src('App.tsx');
-    expect(app).toMatch(/<ViewTransition id=\{transitionKey\(state\)\}>/);
+    expect(app).toMatch(/<ViewTransition id=\{contentKey\(state\)\}>/);
     expect(app).not.toMatch(/<ViewTransition[^>]*(campaign|location)/);
   });
 });

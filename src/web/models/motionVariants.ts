@@ -53,3 +53,9 @@ export function chartAnimation(settings: MotionSettings): {
 export function transitionKey(state: UrlState): string {
   return state.answer !== null ? 'answer' : state.view;
 }
+
+// The key of the content under the takeaway: the view, plus the range and the comparison, so a new range
+// transitions the same way a tab switch does. Campaign and office choices do not (they keep focus and sort).
+export function contentKey(state: UrlState): string {
+  return JSON.stringify([transitionKey(state), state.range, state.compare]);
+}

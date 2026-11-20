@@ -29,7 +29,7 @@ import type { PrintTakeaways } from './models/printModel';
 import { takeawayModel } from './models/takeawayModel';
 import { Reveal, RevealPresence } from './components/Reveal';
 import { ViewTransition } from './components/ViewTransition';
-import { transitionKey } from './models/motionVariants';
+import { contentKey } from './models/motionVariants';
 import { shouldCloseDataNotes } from './models/escapeKey';
 import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
@@ -183,7 +183,7 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
       <Nav state={state} />
       <AskBox meta={meta} state={state} onNavigate={(href) => pushUrl(href)} />
       {!showAnswer && <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} onCompare={(compare) => navigate(withCompare(state, compare))} />}
-      <ViewTransition id={transitionKey(state)}>
+      <ViewTransition id={contentKey(state)}>
         {showAnswer ? (
           <AnswerView state={state} span={meta.span as DateRange} resetHref={resetHref} />
         ) : !hasSpan ? (
