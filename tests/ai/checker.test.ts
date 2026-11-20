@@ -126,6 +126,15 @@ describe('checkTakeaway', () => {
     for (const text of ['Up a lot ％', 'Costs €', 'Costs £', 'Costs ¥']) expect(reasonOf(text), text).toBe('symbol');
   });
 
+  it('accepts the alert campaign by placeholder, and rejects another loaded campaign not on the sheet', () => {
+    const alertSheet = makeFactSheet('campaigns', {
+      'alert.count': { kind: 'count', value: 1, noun: ['alert', 'alerts'] },
+      'alert.top.name': { kind: 'name', value: 'Alpha' },
+    });
+    expect(reasonOf('{alert.top.name} calls moved most, so find out what changed.', alertSheet)).toBe('ok');
+    expect(reasonOf('Gamma calls moved most, so find out what changed.', alertSheet)).toBe('off_sheet_name');
+  });
+
   it('reports the first failing check: digit before number word', () => {
     expect(reasonOf('3 calls, one office')).toBe('digit');
   });

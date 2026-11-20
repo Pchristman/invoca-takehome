@@ -20,7 +20,29 @@ function dataBlock(user: string): { view: string; facts: Record<string, { kind: 
 
 describe('buildPrompt', () => {
   it('has a version', () => {
-    expect(PROMPT_VERSION).toBe('1');
+    expect(PROMPT_VERSION).toBe('2');
+  });
+
+  it('tells overview and campaigns about jumped or dropped calls, and no other view', () => {
+    const sentence = 'If calls to a campaign jumped or dropped by more than chance explains, name that campaign and suggest finding out what changed.';
+    for (const view of ['overview', 'campaigns'] as ViewName[]) {
+      const { system } = buildPrompt(sheet(BASIC, view));
+      expect(system).toContain('jumped or dropped');
+      expect(system).toContain(sentence);
+    }
+    for (const view of ['locations', 'missed-calls'] as ViewName[]) {
+      expect(buildPrompt(sheet(BASIC, view)).system).not.toContain('jumped or dropped');
+    }
+  });
+
+  it('puts the alert facts in the user block with their formatted values', () => {
+    const { user } = buildPrompt(sheet({
+      'alert.count': { kind: 'count', value: 2, noun: ['alert', 'alerts'] },
+      'alert.top.name': { kind: 'name', value: 'Alpha' },
+    }));
+    const block = dataBlock(user);
+    expect(block.facts['alert.count']).toEqual({ kind: 'count', value: '2 alerts' });
+    expect(block.facts['alert.top.name']).toEqual({ kind: 'name', value: 'Alpha' });
   });
 
   it('puts a different paragraph for each view in the system text', () => {

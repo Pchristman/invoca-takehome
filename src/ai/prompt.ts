@@ -2,7 +2,7 @@
 // values and writes a takeaway with {placeholders}. Code checks it, then fills in the numbers and names.
 import { formatFact, type FactSheet, type ViewName } from '../core/views/facts';
 
-export const PROMPT_VERSION = '1'; // bump on any change to the prompt text
+export const PROMPT_VERSION = '2'; // bump on any change to the prompt text
 
 const MAX_NAME_CHARS = 80; // names are cut in the prompt only, never in the data
 
@@ -13,15 +13,18 @@ export const REPLY_SCHEMA = {
   additionalProperties: false,
 };
 
+const ALERT_SENTENCE =
+  'If calls to a campaign jumped or dropped by more than chance explains, name that campaign and suggest finding out what changed.';
+
 const VIEW_PARAGRAPHS: Record<ViewName, string> = {
   overview:
     'This is the Overview view: the headline numbers for the chosen date range (calls, answered calls, bookings, revenue) ' +
     'and how they changed from the previous period of equal length. Say what moved and which single next step follows, ' +
-    'such as which part of the business to look at next.',
+    'such as which part of the business to look at next. ' + ALERT_SENTENCE,
   campaigns:
     'This is the Campaigns view: how each campaign performs, with estimated revenue per budget dollar, and how many calls ' +
     'arrive with no campaign (unattributed). Suggest either shifting budget from the weakest campaign to the strongest, ' +
-    'or fixing call tracking when many calls are unattributed. Revenue per budget dollar is an estimate; say so.',
+    'or fixing call tracking when many calls are unattributed. Revenue per budget dollar is an estimate; say so. ' + ALERT_SENTENCE,
   locations:
     'This is the Locations view: how each office handles its calls, including how many it answers and how many become ' +
     'bookings, compared with the other offices. Suggest reviewing the one office that stands out, either for answering ' +
