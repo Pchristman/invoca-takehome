@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { offService } from '../ai/service';
 import type { TakeawayService } from '../ai/service';
-import type { TakeawayResult } from '../ai/types';
+import type { QuestionReason, TakeawayResult } from '../ai/types';
 import { buildAnswer } from '../core/answer';
 import { dataSpan } from '../core/ranges';
 import type { DateRange } from '../core/ranges';
@@ -10,9 +10,10 @@ import type { CallStore } from '../core/types';
 import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../core/views';
 import type { FactSheet, ViewName } from '../core/views';
 import { DEFAULT_PRESET, PRESETS, statusFor } from './api';
-import type { AnswerResponse, ApiError, DataNotesResponse, Meta, TakeawayResponse } from './api';
+import type { AnswerResponse, ApiError, DataNotesResponse, Meta, QuestionResponse, TakeawayResponse } from './api';
 import { callbacksToCsv } from './csv';
 import { parseAnswerQuery, parseViewQuery } from './params';
+import { QUESTION_MAX_CHARS, questionContext, replyToQuery } from './questionQuery';
 import { serveWebApp } from './staticFiles';
 import type { Parsed, ViewQuery, ViewQueryWants } from './params';
 
@@ -43,7 +44,24 @@ const VIEW_TABLE = {
   },
 } satisfies Record<ViewName, ViewSpec>;
 
-const INTERNAL_MESSAGE = 'Something went wrong on the server.';
+const COULDNT = "Couldn't turn that into a filter";
+
+/** The fixed text for each reason. Only invalid_filter carries a detail, and that detail came from our own validator. */
+function questionMessage(reason: QuestionReason, detail: string | null): string {
+  switch (reason) {
+    case 'ai_off': return 'Questions need an AI key.';
+    case 'budget_reached': return 'The AI budget for this app is used up.';
+    case 'timeout':
+    case 'api_error': return "The AI service didn't answer. Try again.";
+    case 'refusal':
+    case 'malformed': return `${COULDNT}. Try rewording it.`;
+    case 'unanswerable': return "That isn't a question about these calls.";
+    case 'invalid_filter': return detail ? `${COULDNT}: ${detail}` : `${COULDNT}.`;
+    case 'log_unavailable': return 'AI is off for this session.';
+  }
+}
+
+const INTERNAL_MESSAGE ='Something went wrong on the server.';
 
 export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   const app = new Hono();
@@ -94,6 +112,33 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
         campaigns: store.campaigns.filter((x) => filter.campaignIds.includes(x.id)).map((x) => ({ id: x.id, name: x.name })),
       },
     };
+    return c.json(response);
+  });
+
+  // The only AI step of the question box: the model's reply is a filter, and it is shown only after the URL validator accepts it.
+  app.get('/api/question', async (c) => {
+    const asked = c.req.queries('q') ?? [];
+    const q = (asked[0] ?? '').trim();
+    if (asked.length > 1) {
+      return errorResponse(c, { code: 'bad_param', field: 'q', message: 'The parameter q was given more than once.' });
+    }
+    if (q === '') {
+      return errorResponse(c, { code: 'bad_param', field: 'q', message: 'Type a question first.' });
+    }
+    if (q.length > QUESTION_MAX_CHARS) {
+      return errorResponse(c, { code: 'bad_param', field: 'q', message: `A question may have at most ${QUESTION_MAX_CHARS} characters.` });
+    }
+    if (span === null) {
+      return errorResponse(c, { code: 'no_data', message: 'There are no calls to ask about.' });
+    }
+    const result = await ai.interpret(q, questionContext(store, span), (reply) => replyToQuery(store, span, reply));
+    const response: QuestionResponse = result.ok
+      ? { ok: true, source: 'ai', cached: result.cached, query: result.value }
+      : {
+          ok: false,
+          reason: result.reason,
+          message: questionMessage(result.reason, result.detail),
+        };
     return c.json(response);
   });
 
