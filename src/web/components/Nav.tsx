@@ -12,7 +12,7 @@ export function Nav({ state }: { state: UrlState }) {
           <li key={view}>
             <Link
               href={`/${toSearch({ ...withView(state, view), campaign: null, location: null })}`}
-              ariaCurrent={view === state.view ? 'page' : undefined}
+              ariaCurrent={state.answer === null && view === state.view ? 'page' : undefined}
             >
               {VIEW_LABELS[view]}
             </Link>

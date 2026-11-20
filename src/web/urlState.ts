@@ -272,3 +272,14 @@ export function answerHref(state: UrlState, query: string): string {
   };
   return `/${toSearch(target)}`;
 }
+
+/** The Overview for the same range, off the answer page. dev is kept. */
+export function clearHref(state: UrlState): string {
+  return `/${toSearch({ view: 'overview', range: state.range, compare: null, campaign: null, location: null, dev: state.dev, print: false, answer: null })}`;
+}
+
+/** An in-app href (path and query) with dev set as the state has it. */
+export function withDevOf(href: string, state: UrlState): string {
+  const target = parseUrlState(href.slice(href.indexOf('?') === -1 ? href.length : href.indexOf('?')));
+  return `/${toSearch({ ...target, dev: state.dev })}`;
+}

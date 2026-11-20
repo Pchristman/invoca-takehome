@@ -18,6 +18,8 @@ import { Nav } from './components/Nav';
 import { RangeControl } from './components/RangeControl';
 import { RequestFrame } from './components/RequestFrame';
 import { PrintControls, PrintSummary } from './components/PrintSummary';
+import { AnswerView } from './components/AnswerView';
+import { AskBox } from './components/AskBox';
 import { Takeaway } from './components/Takeaway';
 import { dataNotesModel } from './models/dataNotesModel';
 import { canPrint, printModel } from './models/printModel';
@@ -27,7 +29,7 @@ import { shouldCloseDataNotes } from './models/escapeKey';
 import { displayState } from './models/keepPrevious';
 import { screenFor } from './models/screen';
 import { useApi } from './useApi';
-import { useUrlState } from './useUrlState';
+import { pushUrl, useUrlState } from './useUrlState';
 import { apiParams, appHref, defaultsHref, printHref, printRequests, takeawayParams, withCampaign, withCompare, withLocation, withRange } from './urlState';
 import type { UrlState } from './urlState';
 
@@ -71,9 +73,10 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
   const { navigate } = useUrlState();
   const [dataNotesToggled, setDataNotesToggled] = useState(false);
   const dataNotesOpen = state.dev && dataNotesToggled; // without ?dev there is no panel, whatever the state says
-  const view = useApi<unknown>(`/api/${state.view}`, apiParams(state, state.view));
+  const answering = state.answer !== null; // the answer page makes its own request, not the view's
+  const view = useApi<unknown>(answering ? null : `/api/${state.view}`, apiParams(state, state.view));
   // Its own request, so the view never waits on the takeaway. No data span, no request.
-  const takeaway = useApi<TakeawayResponse>(meta.span === null ? null : `/api/takeaway/${state.view}`, takeawayParams(state, state.view));
+  const takeaway = useApi<TakeawayResponse>(meta.span === null || answering ? null : `/api/takeaway/${state.view}`, takeawayParams(state, state.view));
   // The last reply that was ready, kept so a change of the chart's campaign does not unmount the screen.
   const lastReady = useRef<{ key: string; data: unknown } | null>(null);
   if (view.state?.status === 'ready') lastReady.current = { key: view.state.key, data: view.state.data };
@@ -105,6 +108,11 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
       <Header meta={meta} dev={state.dev} dataNotesOpen={dataNotesOpen} onToggleDataNotes={() => setDataNotesToggled((open) => !open)} printLink={printHref(state)} />
       {dataNotesOpen && <DataNotes resetHref={resetHref} onClose={closeDataNotes} />}
       <Nav state={state} />
+      <AskBox meta={meta} state={state} onNavigate={(href) => pushUrl(href)} />
+      {answering && hasSpan ? (
+        <AnswerView state={state} span={meta.span as DateRange} resetHref={resetHref} />
+      ) : (
+      <>
       <RangeControl state={state} meta={meta} error={rangeError} onChange={(range) => navigate(withRange(state, range))} onCompare={(compare) => navigate(withCompare(state, compare))} />
       {!hasSpan ? (
         <EmptyScreen notes={meta.notes} />
@@ -138,6 +146,8 @@ function ReadyShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
           }
         </RequestFrame>
         </>
+      )}
+      </>
       )}
     </>
   );
