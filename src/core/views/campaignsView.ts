@@ -56,7 +56,7 @@ export interface CampaignsView extends ViewBase {
   /** `reason` is set only when nothing is marked. */
   bestWorst: { eligible: number; reason: string | null };
   weekly: { campaignId: string; name: string; weeks: WeekBucket[] } | null;
-  /** `checked` is false when changes are not tested (no comparison, an overlap, or periods of different length); `reason` says why. */
+  /** `checked` is false when changes are not tested (no comparison, periods of different length, an overlap, or a comparison period that is not before the selected range); `reason` says why, in that order. */
   alerts: { checked: boolean; reason: string | null; flagged: number; z: number; minCalls: number };
 }
 
@@ -80,6 +80,7 @@ const BLANK_NUMBER = ['with no tracking number', 'with no tracking number'] as c
 const OVERLAP_REASON = 'The comparison period overlaps the selected range, so changes are not tested.';
 const perDayReason = (currentDays: number, previousDays: number | null) =>
   `Call-change alerts need two periods of the same length; these are ${currentDays} and ${previousDays} days.`;
+const NOT_EARLIER_REASON = 'Call-change alerts need the comparison period to come before the selected range.';
 const NOT_TESTED = { flagged: false, direction: null, z: null } as const;
 
 /** Calls with this campaign id (null: no campaign); null when there is no previous period. */
@@ -98,6 +99,9 @@ export function buildCampaigns(
   const overlaps = context.notes.comparison.overlaps;
   // Alerts also assume equal exposure; a per-day comparison shows the change column but is not tested.
   const { perDay, currentDays, previousDays } = context.notes.comparison;
+  // The test reads "current against before"; it only means something when the second range comes first.
+  const notEarlier = context.notes.comparison.previous !== null && context.notes.comparison.previous.end >= range.start;
+  const testable = !overlaps && !perDay && !notEarlier;
   const changeOf = (calls: number, before: number | null): Change =>
     before === null || previousDays === null
       ? { kind: 'none' }
@@ -108,7 +112,7 @@ export function buildCampaigns(
     const t = tally(context.current.filter((call) => call.campaignId === c.id));
     const spend = estimatedSpend(c.dailyBudgetUsd, range.days);
     const previousCalls = countIn(context.previous, c.id);
-    const test = previousCalls === null || overlaps || perDay ? NOT_TESTED : countAlert(t.calls, previousCalls);
+    const test = previousCalls === null || !testable ? NOT_TESTED : countAlert(t.calls, previousCalls);
     return {
       campaignId: c.id,
       name: c.name,
@@ -248,14 +252,16 @@ export function buildCampaigns(
     bestWorst: { eligible: picked.eligible, reason },
     weekly,
     alerts: {
-      checked: context.notes.comparison.available && !overlaps && !perDay,
+      checked: context.notes.comparison.available && testable,
       reason: !context.notes.comparison.available
         ? context.notes.comparison.reason
         : perDay
           ? perDayReason(currentDays, previousDays)
           : overlaps
           ? OVERLAP_REASON
-          : null,
+          : notEarlier
+            ? NOT_EARLIER_REASON
+            : null,
       flagged: flagged.length,
       z: THRESHOLDS.ALERT_Z,
       minCalls: THRESHOLDS.MIN_CALLS_ALERT,

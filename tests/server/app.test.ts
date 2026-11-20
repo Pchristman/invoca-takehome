@@ -125,6 +125,14 @@ describe('the four views', () => {
     expect(e.message).toMatch(/^Comparison range:/);
   });
 
+  it('an inverted main range is 400 with field end', async () => {
+    const r = await get(app, '/api/overview?start=2026-09-10&end=2026-09-05');
+    expect(r.status).toBe(400);
+    const e = body(r.json).error;
+    expect(e.code).toBe('start_after_end');
+    expect(e.field).toBe('end');
+  });
+
   it('a partial overlap is clamped, not refused', async () => {
     const r = await get(app, '/api/overview?start=2026-09-10&end=2026-09-30');
     expect(r.status).toBe(200);

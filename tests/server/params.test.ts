@@ -103,10 +103,12 @@ describe('parseViewQuery', () => {
   });
 
   it('an inverted range is start_after_end', () => {
-    expect(failure(parse({ start: '2026-09-10', end: '2026-09-05' })).code).toBe('start_after_end');
-    expect(failure(parse({ range: 'last7', compareStart: '2026-09-10', compareEnd: '2026-09-05' })).code).toBe(
-      'start_after_end',
-    );
+    const main = failure(parse({ start: '2026-09-10', end: '2026-09-05' }));
+    expect(main.code).toBe('start_after_end');
+    expect(main.field).toBe('end'); // the range control shows a message only when a field is named
+    const compare = failure(parse({ range: 'last7', compareStart: '2026-09-10', compareEnd: '2026-09-05' }));
+    expect(compare.code).toBe('start_after_end');
+    expect(compare.field).toBe('compareEnd');
   });
 
   it('a range outside the data is outside_data', () => {

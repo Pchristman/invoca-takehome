@@ -18,6 +18,7 @@ describe('makeViewContext', () => {
       reason: null,
       overlaps: false,
       perDay: false,
+      outcomeLagPrevious: false,
       currentDays: 7,
       previousDays: 7,
     });
@@ -43,6 +44,19 @@ describe('makeViewContext', () => {
     expect(ctx.notes.clamped).toBe(false);
     expect(makeViewContext(store, range('2026-09-01', '2026-09-07')).notes.outcomeLag.applies).toBe(false);
     expect(makeViewContext(store, { ...range('2026-09-08', '2026-09-14'), clamped: true }).notes.clamped).toBe(true);
+  });
+
+  test('the outcome-lag caveat is worked out for the second range too', () => {
+    // Lag is 3 days and the data ends 09-14. A later second range ending on 09-14 is still maturing.
+    const later = makeViewContext(store, range('2026-09-01', '2026-09-07'), { start: '2026-09-08', end: '2026-09-14' });
+    expect(later.notes.outcomeLag.applies).toBe(false);
+    expect(later.notes.comparison.outcomeLagPrevious).toBe(true);
+    const earlier = makeViewContext(store, range('2026-09-08', '2026-09-14'));
+    expect(earlier.notes.comparison.outcomeLagPrevious).toBe(false);
+    const unavailable = makeViewContext(store, range('2026-09-01', '2026-09-14'));
+    expect(unavailable.notes.comparison.outcomeLagPrevious).toBe(false);
+    const bad = makeViewContext(store, range('2026-09-08', '2026-09-14'), { start: '2026-02-30', end: '2026-03-02' });
+    expect(bad.notes.comparison.outcomeLagPrevious).toBe(false);
   });
 
   test('an explicit second range is used', () => {

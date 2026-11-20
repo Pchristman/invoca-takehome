@@ -294,11 +294,10 @@ describe('buildOverview with a second range of another length', () => {
     expect(bad.notes.comparison).toMatchObject({ available: false, perDay: false, previousDays: null, currentDays: 7 });
   });
 
-  it('the fact sheet leaves out count and money changes but keeps answer rate', () => {
+  it('the fact sheet leaves out every change fact, answer rate too', () => {
     const calls = [...onEach(week, 2, 'c'), ...onEach(short, 1, 'p')];
     const f = build(calls).factSheet.facts;
-    expect(f['overview.answer_rate_change']).toBeDefined();
-    for (const k of ['calls', 'callers', 'bookings', 'revenue']) expect(f[`overview.${k}_change`]).toBeUndefined();
+    for (const k of ['calls', 'callers', 'bookings', 'revenue', 'answer_rate']) expect(f[`overview.${k}_change`]).toBeUndefined();
     expect(buildOverview(makeStore(calls, options), week).factSheet.facts['overview.calls_change']).toBeDefined();
   });
 
@@ -334,5 +333,41 @@ describe('buildOverview with a second range of another length', () => {
       expect(tile.previous).toBeNull();
       expect(tile.change).toEqual({ kind: 'none' });
     }
+  });
+});
+
+describe('buildOverview fact sheet and the direction of the comparison', () => {
+  const CHANGES = ['calls', 'callers', 'bookings', 'revenue', 'answer_rate'].map((k) => `overview.${k}_change`);
+  const days = (localDate: string, tag: string, n: number, booked: number) =>
+    period(localDate, tag, { calls: n, answered: n - 1, booked, distinct: n });
+  // One call on 09-01 and 09-14 stretch the data over both weeks, so a later equal-length range (09-08..09-14) is inside the data.
+  const calls = () => [
+    ...days('2026-09-01', 'a', 1, 0), ...days('2026-09-03', 'e', 10, 4), ...days('2026-09-10', 'l', 12, 5), ...days('2026-09-14', 'z', 1, 0),
+  ];
+  const early = range('2026-09-01', '2026-09-07');
+  const later = { start: '2026-09-08', end: '2026-09-14' };
+  const keys = (view: ReturnType<typeof buildOverview>) => CHANGES.filter((k) => view.factSheet.facts[k] !== undefined);
+
+  it('an earlier equal-length second range keeps all five change facts', () => {
+    const view = buildOverview(makeStore(calls(), options), week, early);
+    expect(keys(view)).toEqual(CHANGES);
+  });
+
+  it('a later equal-length second range has none', () => {
+    const view = buildOverview(makeStore(calls(), options), early, later);
+    expect(view.notes.comparison.perDay).toBe(false);
+    expect(view.tiles.calls.change.kind).toBe('percent'); // the tiles still show it
+    expect(keys(view)).toEqual([]);
+  });
+
+  it('the selected range as its own second range has none', () => {
+    const view = buildOverview(makeStore(calls(), options), week, week);
+    expect(keys(view)).toEqual([]);
+  });
+
+  it('a per-day comparison has none, answer rate included', () => {
+    const view = buildOverview(makeStore(calls(), options), week, { start: '2026-09-01', end: '2026-09-03' });
+    expect(view.notes.comparison.perDay).toBe(true);
+    expect(keys(view)).toEqual([]);
   });
 });

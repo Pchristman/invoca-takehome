@@ -79,7 +79,8 @@ export function parseViewQuery(
   // 3. The dates' syntax, for the range and for the comparison.
   if (spec.kind === 'custom') {
     const problem = checkDates(spec.start, spec.end);
-    if (problem) return fail(problem);
+    // An inverted pair names no single date; put it on the end so the range control shows the message.
+    if (problem) return fail({ ...problem, field: problem.field ?? 'end' });
   }
   const compareStart = one('compareStart');
   const compareEnd = one('compareEnd');

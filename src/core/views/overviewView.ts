@@ -83,14 +83,17 @@ export function buildOverview(store: CallStore, range: ResolvedRange, previous?:
     'overview.revenue': { kind: 'usd', value: now.revenueUsd },
   };
   if (currentAnswerRate !== null) facts['overview.answer_rate'] = { kind: 'rate', value: currentAnswerRate };
-  // A per-day change must not read like a total to the AI or its checker, so those facts are left out.
-  if (!perDay) {
+  // The prompt says "previous period of equal length". A per-day change reads like a total, and a change
+  // against a later or the same range reads backwards, so the model gets no change facts for those.
+  const { previous: second } = ctx.notes.comparison;
+  const earlierEqualLength = !perDay && second !== null && second.end < range.start;
+  if (earlierEqualLength) {
     addChangeFact(facts, 'calls', tiles.calls.change);
     addChangeFact(facts, 'callers', tiles.uniqueCallers.change);
     addChangeFact(facts, 'bookings', tiles.bookings.change);
     addChangeFact(facts, 'revenue', tiles.revenueUsd.change);
+    addChangeFact(facts, 'answer_rate', tiles.answerRate.change);
   }
-  addChangeFact(facts, 'answer_rate', tiles.answerRate.change);
   const allFacts: Facts = Object.assign({}, facts, ...actions.map((a) => a.facts));
 
   return {

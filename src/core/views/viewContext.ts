@@ -20,6 +20,8 @@ export interface ViewNotes {
     overlaps: boolean;
     /** The two ranges differ in length, so counts and money are compared per day. False when unavailable. */
     perDay: boolean;
+    /** Bookings and revenue in the second range may still rise (outcome lag). False when unavailable. */
+    outcomeLagPrevious: boolean;
     currentDays: number;
     /** null when the second range could not be resolved. */
     previousDays: number | null;
@@ -77,6 +79,7 @@ export function makeViewContext(store: CallStore, range: ResolvedRange, previous
       reason: c.unavailableReason,
       overlaps: c.overlaps,
       perDay: c.perDay,
+      outcomeLagPrevious: c.available && outcomeLagApplies(span, previousWindow, store.dataNotes.outcomeLagDays),
       currentDays: range.days,
       previousDays: c.previous.days,
     };
@@ -88,6 +91,7 @@ export function makeViewContext(store: CallStore, range: ResolvedRange, previous
       reason: result.error.message,
       overlaps: false,
       perDay: false,
+      outcomeLagPrevious: false,
       currentDays: range.days,
       previousDays: null,
     };

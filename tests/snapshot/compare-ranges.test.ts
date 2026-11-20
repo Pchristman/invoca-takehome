@@ -104,10 +104,17 @@ describe('the ranges swapped on the shipped export', () => {
   const store = cleanExport(readExportFromDir(join(__dirname, '..', 'fixtures', 'original-export')));
   const view = buildOverview(store, resolved(store, SHORT), LONG);
 
-  it('reads the other way and the short range is neither clamped nor flagged', () => {
+  it('reads the other way and the short range is not clamped', () => {
     expectPercent(view.tiles.calls.change, OBSERVED.shipped.swappedCallsChange);
     expect(view.range).toMatchObject({ start: SHORT.start, end: SHORT.end, days: 7, clamped: false });
     expect(view.notes.comparison).toMatchObject({ available: true, perDay: true, currentDays: 7, previousDays: 28 });
     expectAllFinite(view);
+  });
+
+  it('the swapped ranges are per day, so Campaigns tests nothing and flags nothing', () => {
+    const campaigns = buildCampaigns(store, resolved(store, SHORT), LONG);
+    expect(campaigns.alerts).toMatchObject({ checked: false, flagged: 0 });
+    expect(campaigns.rows.every((row) => row.alert === null)).toBe(true);
+    expect(hasChangeAction(campaigns.actions)).toBe(false);
   });
 });

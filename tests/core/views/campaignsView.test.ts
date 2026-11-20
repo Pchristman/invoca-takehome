@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildCampaigns } from '../../../src/core/views/campaignsView';
+import { buildOverview } from '../../../src/core/views/overviewView';
 import type { CleanCall } from '../../../src/core/types';
 import { makeCall } from '../helpers';
 import { campaign, expectAllFinite, makeStore, many, office, range } from './fixtures';
@@ -476,5 +477,46 @@ describe('buildCampaigns alerts', () => {
     );
     expect(view.actions[0]!.text).toContain(`Calls to ${name} jumped`);
     expect(view.actions[0]!.text).not.toContain('1 campaign');
+  });
+});
+
+describe('buildCampaigns alerts with a second range that is not earlier', () => {
+  const early = range('2026-09-01', '2026-09-07');
+  const later = { start: '2026-09-08', end: '2026-09-14' };
+  const noBudget = (id: string) => campaign(id, id, 'social', 0);
+  const on = (id: string, n: number, localDate: string) => campaignCalls(id, n, 0, 0, { localDate });
+  const LATER_REASON = 'Call-change alerts need the comparison period to come before the selected range.';
+  const build = (calls: CleanCall[], current: ReturnType<typeof range>, second: { start: string; end: string }) =>
+    buildCampaigns(
+      makeStore([...calls, ...on('cmp_z', 1, '2026-09-01'), ...on('cmp_z', 1, '2026-09-14')], {
+        campaigns: [noBudget('cmp_a'), noBudget('cmp_z')],
+        locations,
+      }),
+      current,
+      second,
+    );
+
+  it('a later equal-length range is not tested: its planted jump gives no alert', () => {
+    // Selected 09-01..09-07 has 30 calls; the later second range has 60. Tested, that would read as a drop.
+    const view = build([...on('cmp_a', 30, '2026-09-03'), ...on('cmp_a', 60, '2026-09-10')], early, later);
+    expect(view.notes.comparison.available).toBe(true);
+    expect(view.notes.comparison.overlaps).toBe(false);
+    expect(view.notes.comparison.perDay).toBe(false);
+    expect(view.alerts).toEqual({ checked: false, reason: LATER_REASON, flagged: 0, z: 3, minCalls: 20 });
+    expect(view.rows.every((r) => r.alert === null)).toBe(true);
+    expect(view.actions.some((a) => a.kind === 'review_call_changes')).toBe(false);
+    expect(view.rows.find((r) => r.campaignId === 'cmp_a')!.callsChange).toEqual({ kind: 'percent', value: -50 });
+  });
+
+  it('the Overview does not list a call-change action either', () => {
+    const calls = [...on('cmp_a', 30, '2026-09-03'), ...on('cmp_a', 60, '2026-09-10'), ...on('cmp_z', 1, '2026-09-01'), ...on('cmp_z', 1, '2026-09-14')];
+    const view = buildOverview(makeStore(calls, { campaigns: [noBudget('cmp_a'), noBudget('cmp_z')], locations }), early, later);
+    expect(view.topActions.some((t) => t.action.kind === 'review_call_changes')).toBe(false);
+  });
+
+  it('an earlier equal-length range still raises the alert', () => {
+    const view = build([...on('cmp_a', 60, '2026-09-10'), ...on('cmp_a', 30, '2026-09-03')], range('2026-09-08', '2026-09-14'), early);
+    expect(view.alerts).toMatchObject({ checked: true, reason: null, flagged: 1 });
+    expect(view.actions.some((a) => a.kind === 'review_call_changes')).toBe(true);
   });
 });
