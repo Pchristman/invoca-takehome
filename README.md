@@ -130,7 +130,7 @@ A campaign is flagged when its calls jumped or dropped against the previous peri
 
 A one-page, plain document of the whole app, for paper or PDF.
 
-- **On the page:** the five Overview tiles, then Overview's takeaway and one block for each of Campaigns, Locations and Missed calls. Each block holds that view's action (the alert entry sits under Campaigns) and its takeaway, marked `AI` or `template`. The date range and comparison caveats are printed, and a two-line "est." footnote gives the spend formula and the missed-call value.
+- **On the page:** the five Overview tiles, then Overview's takeaway and one block for each of Campaigns, Locations and Missed calls. Each block holds that view's action (the alert entry sits under Campaigns) and its takeaway, marked `AI` or `template`. The date range and comparison caveats are printed, and a three-line "est." footnote gives the spend formula, the revenue-per-budget-dollar formula and the missed-call value.
 - **How to reach it:** the "Print summary" link in the header, which opens in a new tab so the app stays open in the first, or add `?print` to any URL with the range you want. On the print page, a Print button calls the browser's print and an "Open the app" link goes back to the app.
 - **What it keeps:** the range and the comparison. It ignores the campaign and office choice, so it is always company-wide, and it never shows dev content, even with `?dev`.
 - **Print waits for the takeaways.** The Print button stays disabled until the Overview and all four takeaways have loaded or failed, so paper never says "Loading takeaway...". A takeaway that failed leaves its block without one.

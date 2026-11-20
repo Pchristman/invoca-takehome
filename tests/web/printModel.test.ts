@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TakeawayReason } from '../../src/ai/types';
 import type { TakeawayResponse } from '../../src/server/api';
 import type { RequestState } from '../../src/web/requestState';
-import { formatDateSpan } from '../../src/web/format';
+import { formatDateSpan, formatLongDate } from '../../src/web/format';
 import { caveatsFor } from '../../src/web/models/caveats';
 import { estimateFormulas, printEstimateNotes } from '../../src/web/models/estimates';
 import { canPrint, printModel } from '../../src/web/models/printModel';
@@ -51,6 +51,10 @@ describe('printModel', () => {
     const { model } = build('range=last7');
     expect(model.rangeLine).toBe(`${formatDateSpan('2026-09-08', '2026-09-14')} (7 days)`);
     expect(model.asOf).toMatch(/^Data as of /);
+
+    // The as-of date is where the data ends, not where the chosen range ends.
+    const early = build('start=2026-09-02&end=2026-09-05').model;
+    expect(early.asOf).toBe(`Data as of ${formatLongDate('2026-09-14')}`);
 
     const one = build('start=2026-09-10&end=2026-09-10').model;
     expect(one.rangeLine).toBe(`${formatDateSpan('2026-09-10', '2026-09-10')} (1 day)`);
@@ -150,9 +154,11 @@ describe('printModel', () => {
 
   it('estimate notes', () => {
     const notes = printEstimateNotes(28);
-    expect(notes).toHaveLength(2);
+    expect(notes).toHaveLength(3);
     expect(notes[0]).toBe(estimateFormulas(28)[0]!.formula);
-    expect(notes[1]).toBe(
+    expect(estimateFormulas(28)[2]!.kind).toBe('revenue_per_dollar');
+    expect(notes[1]).toBe(estimateFormulas(28)[2]!.formula);
+    expect(notes[2]).toBe(
       "Est. missed-call value = the campaign's booking rate × its average booking value, using rates from the whole export. Missed calls shows the full formula.",
     );
     const { view, model } = build('range=last7');

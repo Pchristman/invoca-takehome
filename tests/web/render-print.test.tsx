@@ -48,7 +48,8 @@ describe('PrintSummary', () => {
       for (const action of block.actions) expect(markup).toContain(escape(action.text));
     }
     for (const note of model.estimateNotes) expect(count(markup, escape(note))).toBe(1);
-    if (model.comparisonLine !== null) expect(count(markup, escape(model.comparisonLine))).toBe(1);
+    expect(model.comparisonLine).not.toBeNull();
+    expect(count(markup, escape(model.comparisonLine!))).toBe(1);
   });
 
   it('caveats print once each, skipped rows only when set', () => {
@@ -120,6 +121,18 @@ describe('PrintSummary', () => {
     const allData = html('range=all');
     expect(allData.model.comparisonReason).not.toBeNull();
     expect(count(allData.markup, escape(allData.model.comparisonReason!))).toBe(1);
+  });
+});
+
+describe('PrintSummary head', () => {
+  it('separates the range, as-of and skipped lines', () => {
+    const view = overviewFor('range=last7');
+    const meta = { ...metaFor(store), skippedRows: 12 };
+    const model = printModel({ view, meta, span: meta.span!, takeaways: templates });
+    const markup = renderToStaticMarkup(<PrintSummary model={model} />);
+    expect(markup).toContain(escape(`${model.rangeLine} · ${model.asOf} · ${model.skipped}`));
+    const plain = html().model;
+    expect(html().markup).toContain(escape(`${plain.rangeLine} · ${plain.asOf}`));
   });
 });
 

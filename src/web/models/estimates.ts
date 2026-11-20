@@ -25,10 +25,11 @@ export function estimateFormulas(days: number): { kind: EstimateKind; label: str
   ];
 }
 
-/** The two "est." lines the printed page always carries: paper has no "one click away". */
+/** The three "est." lines the printed page always carries: paper has no "one click away". */
 export function printEstimateNotes(days: number): string[] {
   return [
     estimateFormulas(days)[0]!.formula,
+    estimateFormulas(days)[2]!.formula,
     "Est. missed-call value = the campaign's booking rate × its average booking value, using rates from the whole export. Missed calls shows the full formula.",
   ];
 }
