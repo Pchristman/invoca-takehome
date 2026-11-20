@@ -85,7 +85,7 @@ pre {
 
 /* ---------- layout ---------- */
 .page {
-  max-width: 76rem;
+  max-width: 92rem;
   margin: 0 auto;
   padding: 0 var(--space-5) var(--space-6);
 }
@@ -204,6 +204,12 @@ pre {
 
 .range-control > .row {
   gap: 0;
+  /* Buttons line up with the date boxes, not the middle of a caption plus a box. */
+  align-items: end;
+}
+
+.range-control > .row[aria-label="Comparison range"] {
+  gap: var(--space-3);
 }
 
 .range-control label {
@@ -517,6 +523,14 @@ th .badge {
 .loading {
   color: var(--color-text-muted);
   padding: var(--space-4) 0;
+  /* A quick reply never shows "Loading...": the label only appears if the wait lasts longer than the slow motion time. */
+  animation: loading-in var(--motion-base) var(--ease-standard) var(--motion-slow) backwards;
+}
+
+@keyframes loading-in {
+  from {
+    opacity: 0;
+  }
 }
 
 /* ---------- badges ---------- */
@@ -847,7 +861,7 @@ th .badge {
 }
 
 /* Anything that mounts inside a view (data replacing "Loading...", the takeaway) fades in instead of popping in. */
-[data-motion="view"] > :not(.loading) {
+[data-motion="view"] > :not(.loading):not([data-motion]) {
   animation: view-content-in var(--motion-base) var(--ease-standard) backwards;
 }
 

@@ -80,6 +80,19 @@ export function RangeControl({
       <button type="button" className="button" disabled={applied === null} onClick={() => onChange(applied)}>
         Apply
       </button>
+      {(start !== '' || end !== '' || fromUrl !== null) && (
+        <button
+          type="button"
+          className="button"
+          onClick={() => {
+            setStart('');
+            setEnd('');
+            if (fromUrl !== null) onChange(null); // back to the default range
+          }}
+        >
+          Clear dates
+        </button>
+      )}
       <div className="row" role="group" aria-label="Comparison range">
         <label>
           Compare start date
@@ -92,10 +105,23 @@ export function RangeControl({
         <button type="button" className="button" disabled={comparing === null} onClick={() => onCompare(comparing)}>
           Compare
         </button>
-        {state.compare !== null && (
+        {state.compare !== null ? (
           <button type="button" className="button" onClick={() => onCompare(null)}>
             Use previous period
           </button>
+        ) : (
+          (compareStart !== '' || compareEnd !== '') && (
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                setCompareStart('');
+                setCompareEnd('');
+              }}
+            >
+              Clear comparison dates
+            </button>
+          )
         )}
       </div>
       {/* Plain text on purpose: the request frame below already announces this same error as an alert. */}
