@@ -79,3 +79,10 @@ describe('createAiFromEnv', () => {
       .toThrow(ConfigError);
   });
 });
+
+describe('createAiFromEnv with a padded key', () => {
+  it('builds an on service from a key with stray spaces, without a network call', () => {
+    const service = createAiFromEnv(store(), { ANTHROPIC_API_KEY: '  sk-ant-test-key  ' }, { cachePath: null, logPath: null });
+    expect(service.status().status).toBe('on');
+  });
+});

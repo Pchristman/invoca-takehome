@@ -53,8 +53,8 @@ export function createAiFromEnv(
   if (key === undefined || key.trim() === '') return offService();
 
   const limitUsd = parseSpendLimit(env.AI_SPEND_LIMIT_USD);
-  // The SDK reads the key from process.env itself; it is never passed around or logged here.
-  const model = overrides.model ?? createAnthropicModel(newAnthropicClient());
+  // The trimmed key goes straight to the SDK client; it is never logged or put in a message.
+  const model = overrides.model ?? createAnthropicModel(newAnthropicClient(key.trim()));
   return createTakeawayService({
     model,
     known: knownNamesFrom(store),

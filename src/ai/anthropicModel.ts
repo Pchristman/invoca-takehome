@@ -18,9 +18,9 @@ interface RawReply {
 
 const TIMEOUT_MS = 8000;
 
-/** Builds the SDK client: no retries (a retry doubles cost and wait). The key comes from the environment. */
-export function newAnthropicClient(): AnthropicLikeClient {
-  return new Anthropic({ maxRetries: 0, timeout: TIMEOUT_MS });
+/** Builds the SDK client: no retries (a retry doubles cost and wait). The caller passes the already trimmed key. */
+export function newAnthropicClient(apiKey: string): AnthropicLikeClient {
+  return new Anthropic({ apiKey, maxRetries: 0, timeout: TIMEOUT_MS });
 }
 
 export function createAnthropicModel(client: AnthropicLikeClient): TakeawayModel {

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
-import { createAnthropicModel } from '../../src/ai/anthropicModel';
+import { createAnthropicModel, newAnthropicClient } from '../../src/ai/anthropicModel';
 import { MODEL_ID } from '../../src/ai/pricing';
 import { REPLY_SCHEMA } from '../../src/ai/prompt';
 import { ModelError } from '../../src/ai/types';
@@ -96,5 +96,12 @@ describe('anthropicModel', () => {
     expect((err as ModelError).code).toBe('api_error');
     expect((err as ModelError).message).not.toContain('sk-ant');
     expect((err as ModelError).message).toBe('The AI service request failed.');
+  });
+});
+
+describe('newAnthropicClient', () => {
+  it('uses the key it is given, not the environment', () => {
+    const client = newAnthropicClient('sk-ant-test-key') as unknown as { apiKey: string };
+    expect(client.apiKey).toBe('sk-ant-test-key');
   });
 });
