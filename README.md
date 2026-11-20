@@ -100,6 +100,7 @@ The URL holds the screen, so a link, a refresh or the back button reproduces it:
 | `campaign` | the campaign shown in the Campaigns weekly chart |
 | `location` | the office Missed calls is filtered to |
 | `dev` | add `?dev` to the URL to open the Data notes panel |
+| `print` | add `?print` for the one-page print summary |
 
 To open the extended export: `DATA_DIR=data/extended npm start`. There, Locations flags four offices, two of them "better" than the rest, because each office is tested against all others pooled and the two planted weak offices pull that pool down.
 
@@ -124,6 +125,18 @@ A campaign is flagged when its calls jumped or dropped against the previous peri
 - **Needs a full previous period of equal length.** Over "All data", or with a comparison of another length (compared per day, see Compare any two ranges), nothing is tested and the page says why. A comparison that overlaps the selected range is not tested either (the two periods must be independent); the change column still shows.
 - **Unattributed is never flagged.** It is a bucket, not a campaign; "Fix attribution" covers it. Its row still shows its change.
 - **Known limits:** repeat callers make counts clumpier than the test assumes, so it is somewhat optimistic; a range that is not a whole number of weeks compares unequal weekday mixes; a partly complete first or last day is noted, not corrected.
+
+### Print summary
+
+A one-page, plain document of the whole app, for paper or PDF.
+
+- **On the page:** the five Overview tiles, then Overview's takeaway and one block for each of Campaigns, Locations and Missed calls. Each block holds that view's action (the alert entry sits under Campaigns) and its takeaway, marked `AI` or `template`. The date range and comparison caveats are printed, and a two-line "est." footnote gives the spend formula and the missed-call value.
+- **How to reach it:** the "Print summary" link in the header, which opens in a new tab so the app stays open in the first, or add `?print` to any URL with the range you want. On the print page, a Print button calls the browser's print and an "Open the app" link goes back to the app.
+- **What it keeps:** the range and the comparison. It ignores the campaign and office choice, so it is always company-wide, and it never shows dev content, even with `?dev`.
+- **Print waits for the takeaways.** The Print button stays disabled until the Overview and all four takeaways have loaded or failed, so paper never says "Loading takeaway...". A takeaway that failed leaves its block without one.
+- **What it requests:** `/api/overview` and the four `/api/takeaway/:view` calls, with the same query the screen would send, and nothing else (not the Campaigns, Locations or Missed calls views). It shares the AI cache with browsing. With a key, a first open can make up to four calls (each logged as usual); a repeat is four cache hits at $0.
+- **One page:** it fits one A4 or Letter page by using small print type, never by dropping caveats, numbers or estimate labels.
+- **Known limit:** page fit is checked by eye in print preview, on the shipped and extended exports and on a worst-case range with every caveat. A name far longer than any in the data is wrapped, not cut, and could push the page onto a second page.
 
 ## AI takeaways
 
