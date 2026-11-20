@@ -67,6 +67,8 @@ describe('THRESHOLDS', () => {
       MIN_CALLS_OUTLIER: 50,
       OUTLIER_Z: 2.5,
       MIN_ANSWERED_FOR_RATE: 30,
+      ALERT_Z: 3,
+      MIN_CALLS_ALERT: 20,
     });
   });
 });

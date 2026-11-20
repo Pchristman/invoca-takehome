@@ -24,6 +24,9 @@ function row(id: string, over: Partial<CampaignRow> = {}): CampaignRow {
     revenuePerBudgetDollar: null,
     isBest: false,
     isWorst: false,
+    previousCalls: null,
+    callsChange: { kind: 'none' },
+    alert: null,
     ...over,
   };
 }

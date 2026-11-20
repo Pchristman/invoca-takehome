@@ -1,14 +1,23 @@
 import type { DateRange, ResolvedRange } from '../ranges';
-import { costPerBooking, estimatedSpend, rate, revenuePerBudgetDollar, tally } from '../metrics';
+import { countAlert } from '../alerts';
+import { changeInCount, costPerBooking, estimatedSpend, rate, revenuePerBudgetDollar, tally } from '../metrics';
+import type { Change } from '../metrics';
 import { pickBestWorst } from '../ranking';
 import { THRESHOLDS } from '../thresholds';
 import type { CallStore, Channel, CleanCall } from '../types';
 import { callsPerWeek } from '../weeks';
 import type { WeekBucket } from '../weeks';
+import { alertAction } from './campaignAlerts';
+import type { FlaggedCampaign } from './campaignAlerts';
 import { fillPlaceholders, makeAction, makeFactSheet } from './facts';
 import type { Action, Facts } from './facts';
 import { makeViewContext } from './viewContext';
 import type { ViewBase } from './viewContext';
+
+export interface CampaignAlert {
+  direction: 'jump' | 'drop';
+  z: number;
+}
 
 export interface CampaignRow {
   /** Unattributed: null id, name 'Unattributed', null channel. */
@@ -26,6 +35,11 @@ export interface CampaignRow {
   revenuePerBudgetDollar: number | null;
   isBest: boolean;
   isWorst: boolean;
+  /** Calls in the previous period; null when there is no comparison. */
+  previousCalls: number | null;
+  callsChange: Change;
+  /** Set only when calls changed by more than chance explains. Never set for Unattributed. */
+  alert: CampaignAlert | null;
 }
 
 export interface UnattributedRow extends CampaignRow {
@@ -42,6 +56,8 @@ export interface CampaignsView extends ViewBase {
   /** `reason` is set only when nothing is marked. */
   bestWorst: { eligible: number; reason: string | null };
   weekly: { campaignId: string; name: string; weeks: WeekBucket[] } | null;
+  /** `checked` is false when there is no like-for-like comparison; `reason` says why. */
+  alerts: { checked: boolean; reason: string | null; flagged: number; z: number; minCalls: number };
 }
 
 /** The weekly chart's campaign. */
@@ -62,6 +78,13 @@ const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const BOOKING = ['booking', 'bookings'] as const;
 const BLANK_NUMBER = ['with no tracking number', 'with no tracking number'] as const;
 
+const NOT_TESTED = { flagged: false, direction: null, z: null } as const;
+
+/** Calls with this campaign id (null: no campaign); null when there is no previous period. */
+function countIn(calls: readonly CleanCall[] | null, campaignId: string | null): number | null {
+  return calls === null ? null : calls.filter((call) => call.campaignId === campaignId).length;
+}
+
 export function buildCampaigns(
   store: CallStore,
   range: ResolvedRange,
@@ -74,6 +97,9 @@ export function buildCampaigns(
   const rows: CampaignRow[] = store.campaigns.map((c) => {
     const t = tally(context.current.filter((call) => call.campaignId === c.id));
     const spend = estimatedSpend(c.dailyBudgetUsd, range.days);
+    const previousCalls = countIn(context.previous, c.id);
+    // Both periods have equal length here: context.previous exists only for a like-for-like comparison.
+    const test = previousCalls === null ? NOT_TESTED : countAlert(t.calls, previousCalls);
     return {
       campaignId: c.id,
       name: c.name,
@@ -87,6 +113,9 @@ export function buildCampaigns(
       revenuePerBudgetDollar: revenuePerBudgetDollar(t.revenueUsd, spend),
       isBest: false,
       isWorst: false,
+      previousCalls,
+      callsChange: previousCalls === null ? { kind: 'none' } : changeInCount(t.calls, previousCalls),
+      alert: test.flagged ? { direction: test.direction!, z: test.z! } : null,
     };
   });
   rows.sort((a, b) => b.calls - a.calls || byText(a.campaignId!, b.campaignId!));
@@ -104,7 +133,7 @@ export function buildCampaigns(
   if (best) best.isBest = true;
   if (worst) worst.isWorst = true;
 
-  const unattributed = buildUnattributed(context.current);
+  const unattributed = buildUnattributed(context.current, countIn(context.previous, null));
 
   // Actions, in order. The "no shift" sentence is built whenever nothing is marked, because its text is the reason.
   let shift: Action | null = null;
@@ -162,9 +191,17 @@ export function buildCampaigns(
     );
   }
 
+  const flagged: FlaggedCampaign[] = rows.flatMap((r) =>
+    r.alert
+      ? [{ campaignId: r.campaignId!, name: r.name, direction: r.alert.direction, z: r.alert.z, current: r.calls, previous: r.previousCalls! }]
+      : [],
+  );
+  const callChanges = alertAction(flagged);
+
   const actions: Action[] = [];
   if (shift) actions.push(shift);
   if (fixAttribution) actions.push(fixAttribution);
+  if (callChanges) actions.push(callChanges);
   if (actions.length === 0) actions.push(noShift!); // never empty
 
   // The reason is the same constant the sentence is built from, capitalised.
@@ -201,11 +238,18 @@ export function buildCampaigns(
     unattributed,
     bestWorst: { eligible: picked.eligible, reason },
     weekly,
+    alerts: {
+      checked: context.notes.comparison.available,
+      reason: context.notes.comparison.available ? null : context.notes.comparison.reason,
+      flagged: flagged.length,
+      z: THRESHOLDS.ALERT_Z,
+      minCalls: THRESHOLDS.MIN_CALLS_ALERT,
+    },
   };
 }
 
 /** The calls with no campaign, as one row; null when there are none. */
-function buildUnattributed(calls: readonly CleanCall[]): UnattributedRow | null {
+function buildUnattributed(calls: readonly CleanCall[], previousCalls: number | null): UnattributedRow | null {
   const lost = calls.filter((call) => call.campaignId === null);
   if (lost.length === 0) return null;
 
@@ -232,6 +276,9 @@ function buildUnattributed(calls: readonly CleanCall[]): UnattributedRow | null 
     revenuePerBudgetDollar: null,
     isBest: false,
     isWorst: false,
+    previousCalls,
+    callsChange: previousCalls === null ? { kind: 'none' } : changeInCount(t.calls, previousCalls),
+    alert: null, // a bucket, not a campaign: "Fix attribution" already covers it
     trackingNumbers,
   };
 }

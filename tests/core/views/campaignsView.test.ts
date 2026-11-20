@@ -253,3 +253,148 @@ describe('buildCampaigns', () => {
     expectAllFinite(nothing);
   });
 });
+
+describe('buildCampaigns alerts', () => {
+  const now = range('2026-09-08', '2026-09-14');
+  const before = range('2026-09-01', '2026-09-07');
+  const NOW = '2026-09-10';
+  const BEFORE = '2026-09-03';
+  const noBudget = (id: string, name = id) => campaign(id, name, 'social', 0);
+  const on = (id: string, n: number, localDate: string) => campaignCalls(id, n, 0, 0, { localDate });
+  const anchors = () => [...on('cmp_z', 1, '2026-09-01'), ...on('cmp_z', 1, '2026-09-14')];
+  const build = (calls: CleanCall[], cs = [noBudget('cmp_a'), noBudget('cmp_b'), noBudget('cmp_c'), noBudget('cmp_z')]) =>
+    buildCampaigns(makeStore([...calls, ...anchors()], { campaigns: cs, locations }), now, before);
+  const row = (view: ReturnType<typeof build>, id: string) => view.rows.find((r) => r.campaignId === id)!;
+
+  it('flags a jump and a drop and leaves the rest alone', () => {
+    const view = build([
+      ...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE),
+      ...on('cmp_b', 20, NOW), ...on('cmp_b', 60, BEFORE),
+      ...on('cmp_c', 50, NOW), ...on('cmp_c', 50, BEFORE),
+    ]);
+    const a = row(view, 'cmp_a');
+    expect(a.alert!.direction).toBe('jump');
+    expect(a.alert!.z).toBeCloseTo(3.162, 3);
+    expect(row(view, 'cmp_b').alert!.direction).toBe('drop');
+    expect(row(view, 'cmp_c').alert).toBeNull();
+    expect(a.previousCalls).toBe(30);
+    expect(a.callsChange).toEqual({ kind: 'percent', value: 100 });
+    const bChange = row(view, 'cmp_b').callsChange as { value: number };
+    expect(bChange.value).toBeCloseTo(-66.67, 2);
+    expect(view.alerts).toEqual({ checked: true, reason: null, flagged: 2, z: 3, minCalls: 20 });
+  });
+
+  it('no change', () => {
+    const view = build([...on('cmp_a', 50, NOW), ...on('cmp_a', 50, BEFORE)]);
+    expect(view.rows.every((r) => r.alert === null)).toBe(true);
+    expect(view.alerts.flagged).toBe(0);
+    expect(view.actions.some((a) => a.kind === 'review_call_changes')).toBe(false);
+  });
+
+  it('too small to test', () => {
+    const view = build([...on('cmp_a', 10, NOW)]);
+    const a = row(view, 'cmp_a');
+    expect(a.previousCalls).toBe(0);
+    expect(a.callsChange).toEqual({ kind: 'new' });
+    expect(a.alert).toBeNull();
+  });
+
+  it('zero in one period', () => {
+    const view = build([...on('cmp_a', 25, BEFORE), ...on('cmp_b', 25, NOW)]);
+    const a = row(view, 'cmp_a');
+    expect(a.alert!.direction).toBe('drop');
+    expect(a.callsChange).toEqual({ kind: 'percent', value: -100 });
+    const b = row(view, 'cmp_b');
+    expect(b.alert!.direction).toBe('jump');
+    expect(b.callsChange).toEqual({ kind: 'new' });
+    expectAllFinite(view);
+  });
+
+  it('all-data range has no comparison', () => {
+    const all = range('2026-09-01', '2026-09-14');
+    const calls = [...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE), ...anchors()];
+    const view = buildCampaigns(makeStore(calls, { campaigns: [noBudget('cmp_a'), noBudget('cmp_z')], locations }), all);
+    expect(view.alerts.checked).toBe(false);
+    expect(view.alerts.reason).toMatch(/^No full previous period/);
+    expect(view.alerts.flagged).toBe(0);
+    for (const r of view.rows) {
+      expect(r.alert).toBeNull();
+      expect(r.previousCalls).toBeNull();
+      expect(r.callsChange).toEqual({ kind: 'none' });
+    }
+    expect(view.actions.some((a) => a.kind === 'review_call_changes')).toBe(false);
+  });
+
+  it('a custom previous range of another length', () => {
+    const calls = [...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE), ...anchors()];
+    const view = buildCampaigns(
+      makeStore(calls, { campaigns: [noBudget('cmp_a'), noBudget('cmp_z')], locations }),
+      now,
+      range('2026-09-05', '2026-09-07'),
+    );
+    expect(view.alerts.checked).toBe(false);
+    expect(view.alerts.reason).toMatch(/^No like-for-like comparison/);
+    expect(row(view, 'cmp_a').alert).toBeNull();
+  });
+
+  it('unattributed never alerts', () => {
+    const lost = (n: number, localDate: string) =>
+      many(n).map((c) => makeCall({ ...c, campaignId: null, unattributed: true, localDate }));
+    const view = build([...lost(60, NOW), ...lost(10, BEFORE)]);
+    expect(view.unattributed!.alert).toBeNull();
+    expect(view.unattributed!.callsChange).toEqual({ kind: 'percent', value: 500 });
+    expect(view.alerts.flagged).toBe(0);
+  });
+
+  it('every campaign dropped gives one alert sentence', () => {
+    const ids = Array.from({ length: 12 }, (_, i) => `cmp_${String(i).padStart(2, '0')}`);
+    const cs = [...ids.map((id) => noBudget(id)), noBudget('cmp_z')];
+    const calls = ids.flatMap((id) => [...on(id, 10, NOW), ...on(id, 40, BEFORE)]);
+    const view = build(calls, cs);
+    expect(view.alerts.flagged).toBe(12);
+    const alerts = view.actions.filter((a) => a.kind === 'review_call_changes');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]!.text.startsWith('12 campaigns changed')).toBe(true);
+    expect(view.factSheet.entities).toHaveLength(1);
+    expect(view.actions[view.actions.length - 1]).toBe(alerts[0]);
+  });
+
+  it('the alert is the headline when nothing else is actionable', () => {
+    const view = build([...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE)]);
+    expect(view.actions[0]!.kind).toBe('review_call_changes');
+    expect(view.bestWorst.reason).not.toBeNull();
+  });
+
+  it('shift, attribution, then the alert', () => {
+    const two = [campaign('cmp_a', 'Best', 'social', 10), campaign('cmp_b', 'Worst', 'display', 10), noBudget('cmp_z')];
+    const calls = [
+      ...campaignCalls('cmp_a', 5, 5, 1000, { localDate: NOW }),
+      ...campaignCalls('cmp_b', 10, 10, 50, { localDate: NOW }),
+      ...on('cmp_b', 60, BEFORE),
+      ...unattributedCalls({ localDate: NOW }),
+    ];
+    const view = build(calls, two);
+    expect(view.actions.map((a) => a.kind)).toEqual(['shift_budget', 'fix_attribution', 'review_call_changes']);
+  });
+
+  it('store order does not change the answer', () => {
+    const calls = [
+      ...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE),
+      ...on('cmp_b', 60, NOW), ...on('cmp_b', 30, BEFORE),
+    ];
+    const x = build(calls, [noBudget('cmp_a', 'Alpha'), noBudget('cmp_b', 'Beta'), noBudget('cmp_z')]);
+    const y = build(calls, [noBudget('cmp_z'), noBudget('cmp_b', 'Beta'), noBudget('cmp_a', 'Alpha')]);
+    expect(x.actions[0]!.text).toBe(y.actions[0]!.text);
+    expect(x.actions[0]!.text).toContain('Alpha moved most');
+  });
+
+  it('a name that looks like markup or a placeholder stays plain text', () => {
+    const name = '{alert.count}<b>x</b>';
+    const view = build(
+      [...on('cmp_a', 60, NOW), ...on('cmp_a', 30, BEFORE)],
+      [noBudget('cmp_a', name), noBudget('cmp_z')],
+    );
+    expect(view.actions[0]!.text).toContain(`Calls to ${name} jumped`);
+    expect(view.actions[0]!.text).not.toContain('1 campaign');
+  });
+});

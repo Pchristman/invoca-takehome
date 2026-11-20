@@ -64,10 +64,11 @@ export function makeFactSheet(view: ViewName, facts: Facts): FactSheet {
 
 export type ActionKind =
   | 'shift_budget' | 'fix_attribution' | 'review_office_answer' | 'review_office_booking' | 'call_back'
-  | 'no_budget_shift' | 'no_office_stands_out' | 'no_office_worse' | 'no_missed_calls' | 'no_callbacks';
+  | 'no_budget_shift' | 'no_office_stands_out' | 'no_office_worse' | 'no_missed_calls' | 'no_callbacks'
+  | 'review_call_changes';
 
 const ACTIONABLE: readonly ActionKind[] = [
-  'shift_budget', 'fix_attribution', 'review_office_answer', 'review_office_booking', 'call_back',
+  'shift_budget', 'fix_attribution', 'review_office_answer', 'review_office_booking', 'call_back', 'review_call_changes',
 ];
 
 export interface ActionLink { view: ViewName; locationId?: string }
