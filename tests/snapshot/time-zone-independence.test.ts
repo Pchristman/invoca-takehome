@@ -13,6 +13,15 @@ const PATHS = [
   '/api/locations?range=all',
   '/api/missed-calls?range=all',
   '/api/missed-calls/callbacks.csv?range=all',
+  // The rolling presets are anchored to the data's last day, so they are checked too.
+  '/api/overview?range=last7',
+  '/api/overview?range=last28',
+  '/api/campaigns?range=last7',
+  '/api/campaigns?range=last28',
+  '/api/locations?range=last7',
+  '/api/locations?range=last28',
+  '/api/missed-calls?range=last7',
+  '/api/missed-calls?range=last28',
 ];
 
 const ORIGINAL_TZ = process.env.TZ;
@@ -47,7 +56,7 @@ describe('process time zone independence', () => {
     'every endpoint returns the same bytes under TZ=%s as under TZ=UTC, on both exports',
     async (zone) => {
       const utc = await bodiesUnder('UTC');
-      expect(utc.every((body) => / 200\n/.test(body.split('\n')[0] + '\n'))).toBe(true);
+      expect(utc.every((body) => / 200$/.test(body.split('\n')[0]))).toBe(true);
       expect(await bodiesUnder(zone)).toEqual(utc);
     },
   );
