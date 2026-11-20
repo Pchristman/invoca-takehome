@@ -34,6 +34,9 @@ test('.gitignore keeps the database file and its journal out of git', () => {
     .map((l) => l.trim());
   expect(lines).toContain('data/*.db');
   expect(lines).toContain('data/*.db-journal');
+  // a DB_PATH anywhere else is covered too
+  expect(lines).toContain('*.db');
+  expect(lines).toContain('*.db-journal');
 });
 
 test('.env.example documents DB_PATH', () => {

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { LoadError } from '../../src/core/errors';
-import { openDatabase, openExistingDatabase, SCHEMA_VERSION } from '../../src/db/database';
+import { convertDatabaseError, openDatabase, openExistingDatabase, SCHEMA_VERSION } from '../../src/db/database';
 import { tempDir } from '../server/helpers';
 
 const TABLES = ['bad_rows', 'campaigns', 'cleaned_calls', 'locations', 'raw_calls', 'reference_issues', 'seeds'];
@@ -137,20 +137,73 @@ describe('openDatabase', () => {
   it('a damaged file is a LoadError that says damaged', () => {
     const file = makeFile(tempDir());
     const bytes = readFileSync(file);
-    const page = 4096;
-    // flip the middle of the second page onwards, then truncate if that did not trip quick_check
-    for (let i = page + 100; i < page * 2 && i < bytes.length; i++) bytes[i] = bytes[i]! ^ 0xff;
+    // keep the header page, wreck the pages after it
+    for (let i = 4096 + 100; i < bytes.length; i++) bytes[i] = bytes[i]! ^ 0xff;
     writeFileSync(file, bytes);
-    try {
-      openDatabase(file).close();
-    } catch {
-      expect(() => openDatabase(file)).toThrow(/damaged|not a valid SQLite/);
-      return;
-    }
-    // quick_check did not notice: truncate to half instead
-    truncateSync(file, Math.floor(statSync(file).size / 2));
-    appendFileSync(file, '');
+    expect(() => openDatabase(file)).toThrow(LoadError);
     expect(() => openDatabase(file)).toThrow(/damaged/);
+  });
+
+  it('call_id is indexed in both row tables, so a re-seed does not scan them for every row', () => {
+    const db = openDatabase(':memory:');
+    const indexes = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as { name: string }[]).map((r) => r.name);
+    expect(indexes).toContain('raw_calls_call_id');
+    expect(indexes).toContain('bad_rows_call_id');
+    db.close();
+  });
+});
+
+describe('convertDatabaseError', () => {
+  const failure = (errcode: number, message: string) => Object.assign(new Error(message), { errcode });
+
+  it('says "in use" for a busy or locked file, and never tells the user to move it aside', () => {
+    for (const code of [5, 6]) {
+      const message = convertDatabaseError('x.db', failure(code, 'database is locked')).message;
+      expect(message).toMatch(/in use by another process/);
+      expect(message).not.toMatch(/damaged|move/i);
+    }
+  });
+
+  it('says "cannot open" and "read-only" for those, and "damaged" only for corruption', () => {
+    expect(convertDatabaseError('x.db', failure(14, 'unable to open database file')).message).toMatch(/Cannot open/);
+    expect(convertDatabaseError('x.db', failure(8, 'attempt to write a readonly database')).message).toMatch(/read-only/);
+    expect(convertDatabaseError('x.db', failure(11, 'database disk image is malformed')).message).toMatch(/damaged/);
+    expect(convertDatabaseError('x.db', failure(26, 'file is not a database')).message).toMatch(/not a valid SQLite/);
+    expect(convertDatabaseError('x.db', failure(10, 'disk I/O error')).message).not.toMatch(/damaged|move/i);
+  });
+
+  it('uses the main result code when SQLite gives an extended one (SQLITE_BUSY_SNAPSHOT is 517)', () => {
+    expect(convertDatabaseError('x.db', failure(517, 'database is locked')).message).toMatch(/in use/);
+  });
+
+  it('a real locked file is "in use", not damaged', () => {
+    const file = makeFile(tempDir());
+    const holder = new DatabaseSync(file);
+    holder.exec('BEGIN EXCLUSIVE');
+    try {
+      const reader = new DatabaseSync(file, { readOnly: true });
+      reader.exec('PRAGMA busy_timeout = 0');
+      let caught: unknown;
+      try {
+        reader.prepare('SELECT COUNT(*) FROM seeds').get();
+      } catch (error) {
+        caught = error;
+      }
+      reader.close();
+      expect(convertDatabaseError(file, caught).message).toMatch(/in use by another process/);
+    } finally {
+      holder.exec('ROLLBACK');
+      holder.close();
+    }
+  });
+
+  it('a directory as the path is "cannot open", and a parent that is a file is a LoadError, not a raw error', () => {
+    const dir = tempDir();
+    expect(() => openExistingDatabase(dir)).toThrow(LoadError);
+    expect(() => openExistingDatabase(dir)).not.toThrow(/damaged/);
+    const blocker = join(dir, 'a-file');
+    writeFileSync(blocker, 'x');
+    expect(() => openDatabase(join(blocker, 'calls.db'))).toThrow(LoadError);
   });
 });
 

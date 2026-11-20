@@ -13,7 +13,7 @@ import {
   type ReferenceIssue,
   type RowResult,
 } from '../core/types';
-import { damagedMessage } from './database';
+import { convertDatabaseError } from './database';
 
 /** What a SQLite row looks like to us: column name to value. */
 type Row = Record<string, string | number | null>;
@@ -63,15 +63,16 @@ function selectAll(db: DatabaseSync, sql: string): Row[] {
   return db.prepare(sql).all() as Row[];
 }
 
-function readTables(db: DatabaseSync): LoadedExport {
-  // Both tables share one seq counter, so merging by seq gives back the order the rows were stored in.
-  const rows = [
-    ...selectAll(db, 'SELECT * FROM raw_calls').map((r) => ({ seq: r.seq as number, row: goodRow(r) })),
-    ...selectAll(db, 'SELECT * FROM bad_rows').map((r) => ({ seq: r.seq as number, row: badRow(r) })),
-  ]
-    .sort((a, b) => a.seq - b.seq)
-    .map((entry) => entry.row);
+/** The notes loadExport gives for an empty file. A table that is empty but has skipped rows (reference issues) was not an empty file. */
+function emptyNotes(calls: number, campaigns: number, locations: number, issues: ReferenceIssue[]): string[] {
+  const notes: string[] = [];
+  if (calls === 0) notes.push('calls.csv is empty: starting with zero calls');
+  if (campaigns === 0 && !issues.some((i) => i.file === 'campaigns.csv')) notes.push('campaigns.csv is empty: starting with zero campaigns');
+  if (locations === 0 && !issues.some((i) => i.file === 'locations.csv')) notes.push('locations.csv is empty: starting with zero locations');
+  return notes;
+}
 
+function readTables(db: DatabaseSync): LoadedExport {
   const campaigns: Campaign[] = selectAll(db, 'SELECT * FROM campaigns ORDER BY rowid').map((r) => ({
     id: text(r.id),
     name: text(r.name),
@@ -91,6 +92,30 @@ function readTables(db: DatabaseSync): LoadedExport {
     detail: text(r.detail),
   }));
 
+  // Both tables share one seq counter, so merging by seq gives back the order the rows were stored in.
+  const storedRows = [
+    ...selectAll(db, 'SELECT * FROM raw_calls').map((r) => ({ seq: r.seq as number, row: goodRow(r) })),
+    ...selectAll(db, 'SELECT * FROM bad_rows').map((r) => ({ seq: r.seq as number, row: badRow(r) })),
+  ]
+    .sort((a, b) => a.seq - b.seq)
+    .map((entry) => entry.row);
+  // A later seed may have replaced an office's time zone with an invalid one. Calls stored under the old, valid zone cannot
+  // be localized any more, so they are bad (the same reason the CSV route gives), not a crash in cleanExport.
+  const invalidZone = new Set(locations.filter((l) => !l.timezoneValid).map((l) => l.id));
+  const rows: RowResult[] = storedRows.map((row) =>
+    row.ok && invalidZone.has(row.call.locationId)
+      ? {
+          ok: false,
+          bad: {
+            rowNumber: row.call.rowNumber,
+            callId: row.call.callId,
+            updatedAt: row.call.updatedAt,
+            reason: 'invalid_timezone',
+            detail: `location "${row.call.locationId}" has an invalid time zone`,
+          },
+        }
+      : row,
+  );
   const badByReason = Object.fromEntries(BAD_REASONS.map((reason) => [reason, 0])) as Record<BadReason, number>;
   let unparseableUpdatedAt = 0;
   let unparseableEndedAt = 0;
@@ -113,7 +138,7 @@ function readTables(db: DatabaseSync): LoadedExport {
     unparseableUpdatedAt,
     unparseableEndedAt,
     referenceIssues,
-    notes: rows.length === 0 ? ['calls.csv is empty: starting with zero calls'] : [],
+    notes: emptyNotes(rows.length, campaigns.length, locations.length, referenceIssues),
   };
 }
 
@@ -122,9 +147,7 @@ export function readLoadedExport(db: DatabaseSync): LoadedExport {
   try {
     return readTables(db);
   } catch (error) {
-    if (error instanceof LoadError) throw error;
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new LoadError(damagedMessage(db.location() ?? ':memory:', detail));
+    throw convertDatabaseError(db.location() ?? ':memory:', error);
   }
 }
 

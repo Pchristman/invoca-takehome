@@ -1,9 +1,8 @@
-import { existsSync, rmSync, statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 import { LoadError } from '../core/errors';
 import { readExportTexts } from '../node/readDataDir';
 import { parseDbPath } from '../server/config';
-import { openDatabase } from './database';
+import { openDatabase, removeQuietly, startsEmpty } from './database';
 import { seedFromTexts } from './prepare';
 
 export interface SeedCommandResult {
@@ -27,7 +26,7 @@ export function runSeed(args: string[], env: NodeJS.ProcessEnv): SeedCommandResu
   let madeFile = false;
   try {
     const texts = readExportTexts(folder); // first, so a missing folder never creates a file
-    madeFile = !existsSync(dbPath) || statSync(dbPath).size === 0;
+    madeFile = startsEmpty(dbPath);
     db = openDatabase(dbPath);
     const report = seedFromTexts(db, texts);
     return {
@@ -42,7 +41,7 @@ export function runSeed(args: string[], env: NodeJS.ProcessEnv): SeedCommandResu
   } catch (error) {
     db?.close();
     db = undefined;
-    if (madeFile) rmSync(dbPath, { force: true }); // only a file this run created
+    if (madeFile) removeQuietly(dbPath); // only a file this run created
     if (error instanceof LoadError) return fail(error.message);
     return fail(error instanceof Error ? error.message : String(error));
   } finally {

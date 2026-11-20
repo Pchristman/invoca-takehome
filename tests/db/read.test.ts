@@ -26,12 +26,12 @@ describe('readStore', () => {
     expect(store).toEqual(cleanExport(loadExport(texts)));
     // the fixture really does exercise the rules it claims to
     expect(store.dataNotes.tiedCalls).toBe(1);
-    expect(store.dataNotes.badCalls).toBeGreaterThanOrEqual(3);
+    expect(store.dataNotes.badCalls).toBe(3);
     expect(store.dataNotes.unattributedCalls).toBe(1);
     expect(store.dataNotes.revenueOnNonBookedCalls).toBe(1);
-    expect(store.dataNotes.pendingCalls).toBeGreaterThanOrEqual(1);
-    expect(store.dataNotes.unparseableUpdatedAt).toBeGreaterThanOrEqual(1);
-    expect(store.dataNotes.unparseableEndedAt).toBeGreaterThanOrEqual(1);
+    expect(store.dataNotes.pendingCalls).toBe(1);
+    expect(store.dataNotes.unparseableUpdatedAt).toBe(1);
+    expect(store.dataNotes.unparseableEndedAt).toBe(1);
   });
 
   it('empty values come back as empty values, not zero or missing', () => {

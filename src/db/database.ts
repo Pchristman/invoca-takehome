@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { LoadError } from '../core/errors';
@@ -58,6 +58,8 @@ CREATE TABLE raw_calls (
   updated_at TEXT
 ) STRICT;
 
+CREATE INDEX raw_calls_call_id ON raw_calls (call_id);
+
 CREATE TABLE bad_rows (
   seq INTEGER PRIMARY KEY,
   row_key TEXT NOT NULL UNIQUE,
@@ -68,6 +70,8 @@ CREATE TABLE bad_rows (
   reason TEXT NOT NULL,
   detail TEXT NOT NULL
 ) STRICT;
+
+CREATE INDEX bad_rows_call_id ON bad_rows (call_id);
 
 CREATE TABLE reference_issues (
   id INTEGER PRIMARY KEY,
@@ -106,22 +110,37 @@ const notSqlite = (path: string) =>
 const damaged = (path: string, detail: string) =>
   new LoadError(`The database ${path} is damaged (${detail}). Move it aside and restart to build a new one from the CSVs.`);
 
-/** The message the read code uses when a query fails on a file that opened fine. */
-export function damagedMessage(path: string, detail: string): string {
-  return damaged(path, detail).message;
-}
-
-/** SQLITE_NOTADB is result code 26. */
-function convertError(path: string, error: unknown): LoadError {
+/**
+ * Turn a node:sqlite error into a LoadError that says what really happened. Only a file that is not SQLite or is
+ * corrupt is called that; a locked, unreadable or read-only file must never tell the user to move it aside, because
+ * the next start would then build a new database and hide what the old one holds.
+ */
+export function convertDatabaseError(path: string, error: unknown): LoadError {
   if (error instanceof LoadError) return error;
   const detail = error instanceof Error ? error.message : String(error);
-  const code = (error as { errcode?: number }).errcode;
+  const code = ((error as { errcode?: number }).errcode ?? 0) & 0xff; // the low byte is the main result code
   if (code === 26 || /not a database/i.test(detail)) return notSqlite(path);
-  return damaged(path, detail);
+  if (code === 5 || code === 6) return new LoadError(`The database ${path} is in use by another process (${detail}). Stop whatever is using it and try again.`);
+  if (code === 14) return new LoadError(`Cannot open the database ${path}: ${detail}. Check that the path is a file this app may read and write.`);
+  if (code === 8) return new LoadError(`The database ${path} is read-only (${detail}). Check the file's permissions.`);
+  if (code === 11 || /malformed/i.test(detail)) return damaged(path, detail);
+  return new LoadError(`Cannot use the database ${path}: ${detail}.`);
 }
 
-function isEmptyFile(path: string): boolean {
-  return path !== IN_MEMORY && existsSync(path) && statSync(path).size === 0;
+/** True when the path is a regular file with no bytes, or does not exist: nothing here to protect, and a file this run would create. */
+export function startsEmpty(path: string): boolean {
+  if (!existsSync(path)) return true;
+  const info = statSync(path);
+  return info.isFile() && info.size === 0;
+}
+
+/** Remove a file this run created after a failed seed. Never throws, so it cannot hide the error that caused it. */
+export function removeQuietly(path: string): void {
+  try {
+    rmSync(path, { force: true });
+  } catch {
+    // leave it; the original error is the one to report
+  }
 }
 
 function hasNothing(db: DatabaseSync, version: number): boolean {
@@ -141,7 +160,7 @@ function createSchema(db: DatabaseSync): void {
     }
     db.exec('COMMIT');
   } catch (error) {
-    db.exec('ROLLBACK');
+    if (db.isTransaction) db.exec('ROLLBACK'); // SQLite may already have rolled back
     throw error;
   }
 }
@@ -166,14 +185,14 @@ function checkIntegrity(db: DatabaseSync, path: string): void {
 function open(path: string, create: boolean): DatabaseSync {
   if (path !== IN_MEMORY) {
     if (!existsSync(path) && !create) throw new LoadError(`Database not found: ${path}`);
-    if (isEmptyFile(path) && !create) throw new LoadError(`The database ${path} is empty. Run "npm run seed" to fill it.`);
-    if (create) mkdirSync(dirname(path), { recursive: true });
+    if (startsEmpty(path) && !create) throw new LoadError(`The database ${path} is empty. Run "npm run seed" to fill it.`);
   } else if (!create) {
     throw new LoadError(`Database not found: ${path}`);
   }
 
   let db: DatabaseSync | undefined;
   try {
+    if (create && path !== IN_MEMORY) mkdirSync(dirname(path), { recursive: true });
     db = new DatabaseSync(path);
     db.exec('PRAGMA busy_timeout = 5000');
     db.exec('PRAGMA foreign_keys = ON');
@@ -192,7 +211,7 @@ function open(path: string, create: boolean): DatabaseSync {
     } catch {
       // already closed or never opened
     }
-    throw convertError(path, error);
+    throw convertDatabaseError(path, error);
   }
 }
 
@@ -206,16 +225,23 @@ export function openExistingDatabase(path: string): DatabaseSync {
   return open(path, false);
 }
 
-/** True when there is nothing in the file to protect: it is missing, has zero bytes, or is a valid SQLite file with no tables. */
+/**
+ * True when there is nothing in the file to protect: it is missing, has zero bytes, is a valid SQLite file with no
+ * tables, or has the schema but no seed ever completed (a first seed that failed). A directory or anything else
+ * is left for the real open to report.
+ */
 export function holdsNothing(path: string): boolean {
-  if (path === IN_MEMORY) return true;
-  if (!existsSync(path)) return true;
-  if (statSync(path).size === 0) return true;
+  if (path === IN_MEMORY || !existsSync(path)) return true;
+  const info = statSync(path);
+  if (!info.isFile()) return false;
+  if (info.size === 0) return true;
   let db: DatabaseSync | undefined;
   try {
     db = new DatabaseSync(path, { readOnly: true });
     const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-    return hasNothing(db, version);
+    if (hasNothing(db, version)) return true;
+    if (version !== SCHEMA_VERSION) return false;
+    return (db.prepare('SELECT COUNT(*) AS n FROM seeds').get() as { n: number }).n === 0;
   } catch {
     return false; // not SQLite or damaged: the real open reports it
   } finally {

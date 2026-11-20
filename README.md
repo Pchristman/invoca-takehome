@@ -10,7 +10,7 @@ A small local web product that helps a marketing manager track inbound call perf
 | `npm test` | available (vitest) |
 | `npm run typecheck` | available |
 | `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
-| `npm run seed [folder]` | available; loads the three CSVs from the folder (default `DATA_DIR`) into the database; see Database below |
+| `npm run seed [folder]` | available; loads the three CSVs from the folder (default `DATA_DIR`, else the current folder) into the database; see Database below |
 | `npm run build` | available; builds the web app into `dist/` |
 | `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (only this command does) (`HOST`, default 127.0.0.1; `PORT`, default 3000; `DATA_DIR`) |
 | `docker compose up --build` | available; builds one image and serves the app at `http://localhost:3000`; see Docker below |
@@ -53,7 +53,7 @@ The loader returns every `calls.csv` row as either a typed call or a bad row, wi
 
 The app keeps its calls in one SQLite file, `DB_PATH` (default `data/calls.db`, gitignored; it holds call data, not keys).
 
-- **`npm run seed [folder]`** loads the three CSVs from the folder (default `DATA_DIR`) into the database.
+- **`npm run seed [folder]`** loads the three CSVs from the folder (default `DATA_DIR`, else the current folder) into the database.
 - **`npm start` seeds when the file is missing** and reads the file afterwards.
 - **Re-seeding the same export changes nothing.** A newer export adds new versions of calls, and the latest `updated_at` wins.
 - **Tables:** `raw_calls`, `bad_rows`, `campaigns`, `locations`, `reference_issues`, `cleaned_calls` and `seeds`. The app reads the raw tables and cleans them with the same code as before; `cleaned_calls` is a derived copy you can query in SQL.
@@ -64,7 +64,10 @@ The app keeps its calls in one SQLite file, `DB_PATH` (default `data/calls.db`, 
 - A running server keeps its snapshot until restart, also after `npm run seed`.
 - One process at a time should write.
 - Moving to another data folder needs `npm run seed <folder>` or moving the file aside; at start the app prints a warning when the folder is not what the database was seeded from.
-- A file from an older schema, or one that is corrupt, stops startup with a message; the app never deletes it.
+- A file from an older schema, or one that is corrupt, stops startup with a message; the app never deletes it. A file that is locked by another process, unreadable or read-only gets its own message, and none of those messages tells you to move the file aside unless it really is damaged.
+- **Seeds are merged in the order they were stored, not re-sorted by the newest file.** The first export fixes the order of calls and which row wins an exact `updated_at` tie; a later export only adds rows it has that are new. So seeding an export whose rows are reordered, or that inserts rows in the middle, can order calls differently from loading that export alone (which also changes the AI snapshot id, so cached takeaways are asked for again). Seeding one export at a time, oldest first, behaves like loading them in sequence.
+- **Campaigns and locations are kept once seen.** A later export that leaves one out does not turn its stored calls bad; a later export that gives an office an invalid time zone makes that office's calls bad (reason `invalid_timezone`), as it would for a single export.
+- **Reference issues** (campaign or location rows that were skipped) describe the latest seed's files only.
 
 ### Extended export (synthetic)
 

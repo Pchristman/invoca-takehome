@@ -60,7 +60,7 @@ export function seedExport(db: DatabaseSync, loaded: LoadedExport, source: SeedS
     db.exec('COMMIT');
     return report;
   } catch (error) {
-    db.exec('ROLLBACK');
+    if (db.isTransaction) db.exec('ROLLBACK'); // SQLite may already have rolled back
     throw error;
   }
 }
@@ -84,6 +84,8 @@ function writeSeed(db: DatabaseSync, loaded: LoadedExport, source: SeedSource, n
   );
   for (const l of loaded.locations) upsertLocation.run(l.id, l.name, l.timezone, l.timezoneValid ? 1 : 0);
 
+  // Reference issues describe the campaigns and locations files as of the latest seed, so older ones are replaced, not piled up.
+  db.exec('DELETE FROM reference_issues');
   const insertIssue = db.prepare('INSERT OR IGNORE INTO reference_issues (seed_id, file, row_number, reason, detail) VALUES (?, ?, ?, ?, ?)');
   for (const i of loaded.referenceIssues) insertIssue.run(seedId, i.file, i.rowNumber, i.reason, i.detail);
 
