@@ -218,3 +218,20 @@ describe('per-day comparison', () => {
     }
   });
 });
+
+describe('TileModel.figure', () => {
+  it('carries the API value and its kind, in tile order', () => {
+    const view = overviewFor('range=last7');
+    const tiles = overviewModel(view).tiles;
+    expect(tiles.map((t) => t.figure?.kind)).toEqual(['count', 'count', 'rate', 'count', 'usd']);
+    tiles.forEach((tile) => expect(tile.figure?.value).toBe(view.tiles[tile.key].current));
+  });
+
+  it('is null, with a blank value, when the API value is null', () => {
+    const view = overviewFor('range=last7');
+    const blanked: OverviewView = { ...view, tiles: { ...view.tiles, answerRate: { ...view.tiles.answerRate, current: null } } };
+    const rate = overviewModel(blanked).tiles.find((t) => t.key === 'answerRate')!;
+    expect(rate.figure).toBeNull();
+    expect(rate.value).toBe(BLANK);
+  });
+});

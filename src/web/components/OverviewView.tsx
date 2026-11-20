@@ -6,6 +6,7 @@ import { overviewModel } from '../models/overviewModel';
 import { TONE_WORD } from '../models/changeModel';
 import { actionHref } from '../urlState';
 import type { UrlState } from '../urlState';
+import { AnimatedNumber } from './AnimatedNumber';
 import { Caveats } from './Caveats';
 import { Link } from './Link';
 
@@ -22,7 +23,9 @@ export function OverviewView({ view, state, span }: { view: OverviewData; state:
         {model.tiles.map((tile) => (
           <div className="tile" key={tile.key}>
             <div className="tile-label">{tile.label}</div>
-            <div className="tile-value">{tile.value}</div>
+            <div className="tile-value">
+              <AnimatedNumber id={tile.key} text={tile.value} figure={tile.figure} />
+            </div>
             {tile.previous !== null && <div className="tile-change muted">{tile.previous}</div>}
             {tile.change !== null && (
               <div className={`tile-change tone-${tile.change.tone}`}>
