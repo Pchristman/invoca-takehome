@@ -12,7 +12,7 @@ import { get, tempDir } from './helpers';
 // start() must not read the real .env when no data folder is given.
 vi.mock('../../src/node/env', () => ({ loadDotEnv: vi.fn() }));
 
-// Built from parts so no test file spells the real database path (tests/repo-hygiene.test.ts checks that).
+// The real database file (the default DB_PATH); a test checks that starting the server does not create it.
 const REAL_DB = join('data', 'calls' + '.db');
 
 const running: RunningServer[] = [];

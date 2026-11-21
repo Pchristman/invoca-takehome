@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { parseDbPath } from '../../src/server/config';
 
-// Built from parts so no test file spells the real database path (tests/repo-hygiene.test.ts checks that).
+// The default database file, used when DB_PATH is unset or blank.
 const DEFAULT_FILE = ['data', 'calls.db'].join('/');
 
 it('unset, blank and spaces give the default file', () => {

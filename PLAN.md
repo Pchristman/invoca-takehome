@@ -114,7 +114,7 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 
 - A table ranked by calls (sortable by any column): campaign, channel, calls, bookings, booking rate, revenue, estimated spend, estimated cost per booking, revenue per budget dollar.
 - "Unattributed" appears as its own row with calls, bookings and revenue; its spend columns are blank.
-- **Best** and **worst** campaign marked by revenue per budget dollar. Only campaigns with a budget above $0 and at least `MIN_BOOKINGS_TO_RANK` bookings in the range are eligible. If fewer than two are eligible, no best/worst is marked and the view says why.
+- **Best** and **worst** campaign marked by revenue per budget dollar. Both need a budget above $0. **Best** is the highest among campaigns with at least `MIN_BOOKINGS_TO_RANK` bookings in the range, so its figure means something. **Worst** is the lowest among campaigns with at least `MIN_CALLS_TO_RANK_WORST` calls in the range, other than the best; a campaign with 0 bookings can be worst, because a campaign that took budget and calls and booked almost nothing is exactly what the marketer needs to see. Nothing is marked when no two different campaigns qualify, or when the worst is not below the best, and the view says which.
 - A calls-per-week chart for one selected campaign (default: the top campaign by calls). Weeks run Monday to Sunday by local date. A week only partly inside the range or the data is visibly marked partial.
 
 **Actions:**
@@ -126,8 +126,9 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 
 - Booking rate: bookings / calls.
 - Estimated spend: `daily_budget_usd` x number of days in the range. Always labeled "est.".
-- Estimated cost per booking: estimated spend / bookings. **Blank** when the budget is $0 or there are no bookings. Never infinity.
-- Revenue per budget dollar: revenue / estimated spend. Blank when spend is $0.
+- Estimated cost per booking: estimated spend / bookings. **Blank** when the budget is $0 or not given, or there are no bookings. Never infinity.
+- Revenue per budget dollar: revenue / estimated spend. Blank when spend is $0 or the budget is not given.
+- A campaign whose budget is not given (blank or unreadable in `campaigns.csv`) also has a blank estimated spend and is never ranked best or worst.
 
 ### 4.3 Locations
 
@@ -168,12 +169,13 @@ All live in one config module with these defaults and are never derived from thi
 
 | Name                      | Default | Used for                                                                               |
 | ------------------------- | ------- | -------------------------------------------------------------------------------------- |
-| `MIN_BOOKINGS_TO_RANK`    | 5       | Best/worst campaign eligibility                                                        |
+| `MIN_BOOKINGS_TO_RANK`    | 5       | Best campaign eligibility                                                              |
+| `MIN_CALLS_TO_RANK_WORST` | 10      | Worst campaign eligibility: calls in the range, so a campaign that booked nothing can be worst |
 | `MIN_CALLS_BEST_CAMPAIGN` | 20      | Best campaign at an office                                                             |
 | `MIN_CALLS_OUTLIER`       | 50      | Office outlier eligibility                                                             |
-| `OUTLIER_Z`               | 2.5     | Office outlier flag. With ~8 offices tested, 2.5 rather than 2 keeps false flags rare. |
+| `OUTLIER_Z`               | 3       | Office outlier flag. About 16 tests per screen (~8 offices x 2 rates) give roughly an 18% chance of a false flag at 2.5, so 3. |
 | `MIN_ANSWERED_FOR_RATE`   | 30      | Missed-call value fallback to channel, then overall                                    |
-| `ALERT_Z`                 | 3       | Campaign call alert (S1). About 12 campaigns are tested at once, so 3 rather than 2.5. |
+| `ALERT_Z`                 | 3       | Campaign call alert (S1). About 12 campaigns are tested at once, so 3, as for offices. |
 | `MIN_CALLS_ALERT`         | 20      | Campaign call alert (S1): calls in both periods added together needed to be tested     |
 
 ---
@@ -184,17 +186,19 @@ All rules live in the pure data core. **Each rule gets its own test** against a 
 
 1. **Loading.** Read `calls.csv`, `campaigns.csv`, `locations.csv` from `DATA_DIR` (default: repo root). Match columns by header name, not position. A missing required column stops startup with a message naming the file and column. Extra columns are ignored. Empty file: start with zero calls and say so.
 2. **Deduplication first.** Group rows by `call_id`; keep the row with the latest `updated_at`. Dedup happens **before** validation chooses rows, so a bad latest row never resurrects an older good one; that call is reported bad. If two rows tie on `updated_at`, keep the later one in the file and count the tie in data notes. A row whose `updated_at` can't be parsed loses to any parseable row of the same call. When no row of a call has a parseable `updated_at`, keep the later one in the file and do not count a tie.
-3. **Validation.** A call is bad, counted by reason and excluded from metrics, if: `started_at` can't be parsed; `location_id` is not in locations; `campaign_id` is non-empty but not in campaigns; `answered` is not a boolean; `outcome` or `marketing_channel` is outside its enum; or duration is negative. An unknown location time zone (not a valid IANA zone) makes that location's calls bad. Bad rows never crash the app.
+3. **Validation.** A call is bad, counted by reason and excluded from metrics, if: the row has fewer cells than the header (`truncated_row`: it was cut off, not left blank); `started_at` can't be parsed, or its year is outside 2000–2100 (`bad_timestamp`: a placeholder date such as 0001-01-01, 1970-01-01 or 9999-12-31 would otherwise stretch the date span; the window is a plausibility check, not this dataset's dates); `location_id` is not in locations; `campaign_id` is non-empty but not in campaigns; `answered` is not a boolean; `outcome` or `marketing_channel` is outside its enum; or duration is negative. An unknown location time zone (not a valid IANA zone) makes that location's calls bad. Bad rows never crash the app.
    - Timestamps are ISO 8601 UTC: end in `Z`, `+00:00` or `-00:00`, with up to 9 fractional digits (keep milliseconds). Reject any other offset and any impossible date or time.
    - Also reject, each with its own reason: `inconsistent_outcome` (answered is true with an outcome of `missed` or `voicemail`, or false with any other non-empty outcome; an unanswered call may have an empty outcome); `bad_revenue` (non-empty but not a non-negative amount); `bad_duration` also covers an empty or non-integer duration.
-   - A `campaigns.csv` row with a bad budget (blank, not a number, or negative) or an unknown channel is not a campaign, but keep its id aside: calls to it are `invalid_campaign`, with a detail naming what is wrong with the row, not `unknown_campaign` ("is not in campaigns" would be false). Report the row itself as a reference issue, as an invalid office time zone is.
+   - A `campaigns.csv` row with an unknown channel is not a campaign, but keep its id aside: calls to it are `invalid_campaign`, with a detail naming what is wrong with the row, not `unknown_campaign` ("is not in campaigns" would be false). Report the row itself as a reference issue, as an invalid office time zone is. Only a bad channel makes a campaign row unusable.
+   - A `campaigns.csv` row whose budget is blank or can't be read (not a plain non-negative number, e.g. `$150.00`, `1,500.00`, `abc` or a negative) stays a campaign with an unknown budget. A blank budget leaves a reference note (`no_budget`); an unreadable one is reported as a reference issue (`bad_budget`). Do not try to read currency formats. Its calls, bookings and revenue count as normal; its estimated spend, estimated cost per booking and revenue per budget dollar are blank, and it is never ranked best or worst.
    - Offices with an invalid time zone get no row in the Locations table or the missed-calls heatmap; their calls are already reported as bad.
+   - A location time zone name that is valid but read as a different zone beyond letter case (an alias such as `EST`, read as `America/Panama`) stays valid; leave a reference note (`timezone_reinterpreted`) naming the zone it was read as, so a wrong guess shows.
    - Report, as reference issues, campaigns with an empty name, a name another campaign already uses (ignoring case), or the name "Unattributed": each makes the AI fact sheet ambiguous. These rows stay valid campaigns, so an upload does not reject them.
 4. **Unattributed.** Empty `campaign_id` becomes the "Unattributed" bucket. These calls are never dropped. An unknown non-empty `campaign_id` is **not** unattributed; it's a bad row (a data error, not a missing campaign).
 5. **Time.** Store UTC. Derive local date, local hour and local weekday from the call's office time zone via the built-in `Intl` API. Every date filter, time-of-day and day-of-week view uses local values.
 6. **Revenue.** Counts only when the current outcome is `booked`. Revenue on any other outcome is ignored and counted in data notes. A booked call with empty revenue counts as a booking with $0 revenue and is counted in data notes.
 7. **Pending outcomes.** An answered call with an empty outcome is "pending": it counts in calls and answer rate, not in bookings, and is excluded from booking-rate denominators used for missed-call value.
-8. **Spend.** Not in the data. Estimated spend = daily budget x days in range; always labeled as an estimate. Cost per booking is blank when budget is $0 or bookings are 0.
+8. **Spend.** Not in the data. Estimated spend = daily budget x days in range; always labeled as an estimate. Cost per booking is blank when budget is $0 or not given, or bookings are 0.
 9. **Comparisons.** Equal length by default; a second range of another length is compared per day and labelled as such. A comparison period not fully covered by the data shows no change and says why. Partial first or last data days are noted (section 3.2).
 10. **Weeks.** Monday to Sunday by local date; partial weeks marked.
 11. **Nothing hard-coded.** No campaign names, office names, IDs, channels-to-campaign maps or dates in code. Enums (`outcome`, `marketing_channel`) are the documented column contract and may live in code.
@@ -243,6 +247,7 @@ CSV files ─▶ load + validate ─▶ clean (dedupe, attribute, localize) ─�
 | `ANTHROPIC_API_KEY`  | Optional. AI is on exactly when this is set. |
 | `AI_SPEND_LIMIT_USD` | Spend guard for the running app. Default 5.  |
 | `DATA_DIR`           | Folder holding the three CSVs.               |
+| `DB_PATH`            | The SQLite database (S6). Default `data/calls.db`; `:memory:` seeds from the CSVs on every start. The Docker image sets its own. |
 | `PORT`               | Default 3000.                                |
 | `HOST`               | Default 127.0.0.1. The Docker image sets 0.0.0.0; Compose publishes only on the host's 127.0.0.1. |
 
@@ -255,11 +260,11 @@ CSV files ─▶ load + validate ─▶ clean (dedupe, attribute, localize) ─�
 
 ### Freshness
 
-The data is a snapshot at startup; the header shows the as-of date. A new export means a restart. Live reload is out of scope.
+The data is a snapshot read at startup; the header shows the as-of date. From S6 the snapshot comes from the database, not the CSVs: a new export means `npm run seed <folder>` and a restart (or moving the database file aside so the next start seeds it), and from S7 an upload in the app updates the snapshot without a restart. Live reload is out of scope.
 
 ### Dependencies
 
-Expected list. **Ask before adding each one, at the start of the phase that needs it:** typescript, tsx, vitest, csv-parse, hono, @hono/node-server, react, react-dom, vite, @vitejs/plugin-react, @types/react, @types/react-dom, recharts, @anthropic-ai/sdk, Framer Motion for S5, and for S6 a SQLite driver only if Node's built-in `node:sqlite` falls short (better-sqlite3). Anything beyond this list needs a reason in `docs/DECISIONS.md`.
+Expected list. **Ask before adding each one, at the start of the phase that needs it:** typescript, tsx, vitest, csv-parse, hono, @hono/node-server, react, react-dom, vite, @vitejs/plugin-react, @types/react, @types/react-dom, recharts, @anthropic-ai/sdk, Framer Motion for S5, and for S6 a SQLite driver only if Node's built-in `node:sqlite` falls short (better-sqlite3). Dev only: happy-dom and @testing-library/react, for the click-through UI tests (section 8), which replaced tests that only matched file text. Anything beyond this list needs a reason in `docs/DECISIONS.md`.
 
 ---
 
@@ -351,7 +356,7 @@ The model fills a fixed filter schema (view, offices, campaigns, weekdays, hours
 - **Server:** in-process requests to every endpoint. Covers valid ranges, bad or missing params (400), an inverted range, a range outside the data, and the CSV download's headers and rows.
 - **AI:** checker tests with crafted good and bad outputs, one per rejection reason. Client, cache and guard are tested with a fake model: a cache hit makes no call; the guard blocks at the limit; every failure mode falls back. **No automated test calls the real API.** A manual script makes one real call when I choose to run it.
 - **Hard-coding guard:** a test runs the core on a fixture export with entirely different campaign names, office names, time zones and dates, and checks every view builds.
-- **Web:** decisions (text, order, blanks, caveat conditions, URL state, request state) live in pure modules with their own tests. Components are kept thin and are tested by rendering them to a string in Node with `react-dom/server` (no DOM, jsdom or testing library), checking what must be present or absent: dev-only elements, blank cells, escaped names, loading and error states. Visual layout, wrapping and charts are not unit tested. Each UI phase also ends with a written click-through checklist, run in the browser and shown to me.
+- **Web:** decisions (text, order, blanks, caveat conditions, URL state, request state) live in pure modules with their own tests. Components are kept thin and are tested by rendering them to a string in Node with `react-dom/server`, checking what must be present or absent: dev-only elements, blank cells, escaped names, loading and error states. Click-through tests (`tests/web/*.dom.test.tsx`) render the whole app in happy-dom with Testing Library and a stubbed `fetch`, then click and type as a user would: navigation, the range control, the ask box and upload. No test matches CSS, Docker or source file text. Visual layout, wrapping and charts are not unit tested. Each UI phase also ends with a written click-through checklist, run in the browser and shown to me.
 
 ---
 
@@ -544,7 +549,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 
 #### S1: Alerts
 
-- **Delivers:** a flag on campaigns whose calls jumped or dropped against the comparison range by more than chance explains. Use a Poisson-style test on counts, `z = (current − previous) / √(current + previous)`, flagged at `|z| >= ALERT_Z` when current + previous reaches `MIN_CALLS_ALERT` (section 4.5). Unattributed is never flagged. Alerts appear on Overview's top actions (one extra entry, section 4.1) and in the Campaigns table. Detail in `docs/plans/s1-alerts.md`.
+- **Delivers:** a flag on campaigns whose calls jumped or dropped against the comparison range by more than chance explains. Use a Poisson-style test on counts, `z = (current − previous) / √(current + previous)`, flagged at `|z| >= ALERT_Z` when current + previous reaches `MIN_CALLS_ALERT` (section 4.5). Unattributed is never flagged. Alerts appear on Overview's top actions (one extra entry, section 4.1) and in the Campaigns table. Detail in `docs/archive/plans/s1-alerts.md`.
 - **Done when:** fixture tests cover jump, drop, no change, and too-small counts; the README covers what this phase added.
 - **Edge cases:**
   - comparison not available (no alerts, say why)
@@ -590,7 +595,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 - **Motion criteria:**
   - view transitions between tabs
   - numbers tweening on range change
-  - charts animating between datasets rather than redrawing
+  - the weekly chart animating in place when only the selected campaign changes; a range change transitions the whole view, so the chart redraws for the new range
   - panels and takeaways entering and leaving smoothly
   - all of it short (about 150–300 ms), eased, and fully disabled under `prefers-reduced-motion`
 - **Approach:** Framer Motion for all motion, so transitions, number tweens and layout changes share one consistent system (ask before adding the package at the start of S5). Its built-in reduced-motion support is used to switch motion off.
@@ -600,7 +605,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 
 - **Delivers:**
   - SQLite as the store of record: one file at `DB_PATH` (default `data/calls.db`, gitignored)
-  - `npm run seed` loads an export through the existing load, validate and clean steps into tables for every raw call row (all versions kept), campaigns, locations, bad rows, and the cleaned calls (latest `updated_at` per `call_id`)
+  - `npm run seed` loads an export through the existing load, validate and clean steps into tables for every raw call row (all versions kept), campaigns, locations and bad rows
   - seeding that is safe to repeat: the same export twice changes nothing; a newer export adds new row versions and the latest one wins
   - the server builds its CallStore from the database instead of reading the CSVs; metrics, view builders and the API don't change
   - `npm start` seeds from `DATA_DIR` when no database exists, so it stays one command
@@ -614,7 +619,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 - **Edge cases:**
   - seeding the same export twice (no duplicates)
   - a newer version of an existing call (latest wins)
-  - bad rows (stored with their reason, never in the cleaned calls)
+  - bad rows (stored with their reason, never counted as calls)
   - a missing or corrupt database file (a clear message, never silently empty data)
   - a database from an older schema version (refuse with a message to reseed)
   - seeding while the server runs (the server keeps its snapshot until restart, and the README says so)

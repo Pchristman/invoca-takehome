@@ -5,13 +5,13 @@
   Look: modeled on Invoca's own design language, read from their public stylesheet
   (invoca.com): near-black evergreen chrome, brand green for primary actions, warm
   "sand" neutrals, near-black text with grey secondary text, white panels with a soft
-  border, weight-500 headings with tight tracking, series colors blue and slate. The brand green is the accent: it marks actions only, and data and status colours stay at least 40 degrees of hue away from it (tested).
+  border, weight-500 headings with tight tracking, series colors blue and slate. The brand green is the accent: it marks actions only, and data and status colours stay at least 40 degrees of hue away from it.
   Their font (Saans) is commercial, so IBM Plex Sans stands in for it, paired with IBM Plex Mono for figures and labels.
   Invoca's brand green (#00b388) is too light for text or 3:1 marks on sand, so text-bearing
   accents use a deeper green and the true brand green stays on the dark chrome.
   Meaning is never carried by color alone (signs, words, badges, hatch).
 
-  Contrast is checked by tests/web/tokens.test.ts:
+  Contrast targets:
     text needs 4.5:1 (text, text-muted, accent, up, down on bg, panel and surface;
     accent on accent-soft; accent-text on accent; notice-text on notice-bg;
     chrome-text and chrome-muted on chrome).

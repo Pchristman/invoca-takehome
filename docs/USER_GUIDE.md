@@ -37,7 +37,7 @@ These controls sit above all four pages. Whatever you choose here stays in the w
 2. **Pick the period.** Last 28 days is the default. Every number on the page follows this choice.
 3. **Or set your own dates.** Fill in a start and end date, then press Apply.
 4. **Compare with another period (optional, on Overview and Campaigns).** Leave it empty and the app compares with the same number of days just before your range.
-5. **The takeaway.** A short summary of the page. The tag shows who wrote it: `AI`, or `TEMPLATE` when AI is off or its text failed the checks. The numbers always come from the app, never from the AI.
+5. **The takeaway.** A short summary of the page. The tag shows who wrote it: `AI`, or `TEMPLATE` when AI is off or its text failed the checks twice (the AI gets one more try before the app falls back to its own sentence). The numbers always come from the app, never from the AI.
 6. **Yellow notes.** They tell you when to read a number with care, for example when the last day may be incomplete.
 7. **Data as of.** The latest date in your data. "Last 7 days" counts back from this date, not from today.
 8. **Ask a question.** Type a question in plain English. See "Ask a question" below.
@@ -83,9 +83,9 @@ The page opens with what to do, then shows the table behind it.
 
 5. **Calls vs comparison.** How each campaign's calls changed against the comparison period.
 6. **"Est." columns.** Anything marked est. is an estimate built from the daily budget, not actual spend.
-7. **A dash means "not applicable".** Campaigns with a $0 budget have no cost per booking, so the cell is left empty on purpose.
+7. **A dash means "not applicable".** Campaigns with a $0 budget, or no budget in the file, have no cost per booking, so the cell is left empty on purpose.
 8. **Best.** Highest estimated revenue per budget dollar among campaigns with a budget above $0 and at least 5 bookings in the range.
-9. **Worst.** Lowest by the same rule. A campaign with fewer than 5 bookings is not ranked, so check small campaigns yourself.
+9. **Worst.** Lowest estimated revenue per budget dollar among campaigns with a budget above $0 and at least 10 calls in the range. A campaign with no bookings at all can be worst. If no two campaigns qualify, or none does worse than the best, nothing is marked and the page says why.
 
 ![Unattributed row with its tracking numbers, and the calls per week chart](user-guide/05-campaigns-chart.png)
 
@@ -100,7 +100,7 @@ Compares offices on how many calls they answer and how many become bookings.
 
 ![Locations page with the action and the office table](user-guide/06-locations.png)
 
-1. **The action.** If an office is doing worse than the rest, it is named here with both rates. "No office stands out" is a real result: it means the differences are within what chance explains.
+1. **The action.** If an office is doing worse than the rest, it is named here with both rates. "No office stands out" is a real result: it means the differences are within what chance explains. The takeaway then sums up all offices together rather than singling one out.
 2. **Best campaign there.** The campaign with the highest booking rate at that office, among campaigns with at least 20 calls there.
 3. **Compared with other offices.** Says "better" or "worse" only when the gap is larger than chance explains and the office has at least 50 calls.
 4. **Sort** by any column, as on Campaigns.
@@ -195,7 +195,7 @@ Add `?dev` to the end of the web address to show a Data notes button. It lists w
 
 - **"Est." means estimate.** Spend is not in the export. It is worked out as daily budget times the number of days, so cost per booking and revenue per budget dollar are estimates too.
 - **Lost value is an upper bound.** It counts every unanswered call. The call-back list total is the more realistic figure, because it counts each caller once.
-- **Best and worst only rank campaigns with at least 5 bookings.** A campaign that spent budget and booked almost nothing can be missing from the ranking, so scan the table as well.
+- **Best and worst do not rank every campaign.** Best needs at least 5 bookings and worst needs at least 10 calls, both with a budget. A campaign below both, or with no budget in the file, is not ranked, so scan the table as well.
 - **Trust the Action line over the takeaway.** An AI takeaway uses only real numbers and names, but the app cannot check that the sentence around them is worded well. The Action lines are written by the app itself.
 - **Recent days can still change.** Bookings and revenue are sometimes recorded a few days after the call. The yellow note tells you when your range is affected.
 - **Times are local to each office.** A 9 AM call in Phoenix and a 9 AM call in New York both show as 9 AM.

@@ -44,12 +44,13 @@ One command: `docker compose up --build`, then open `http://localhost:3000`. A `
 - The database file is on the named volume `calls-db` (mounted at `/app/db`; the image sets `DB_PATH=/app/db/calls.db`, and `.env` cannot change it). The first run seeds it from the mounted data folder.
 - **A different export after a first run:** `DATA_DIR=data/extended docker compose up --build` still serves the first export and prints a warning in `docker compose logs`. The image does not include the `npm run seed` script, so to use another export, start fresh as below and bring it up with that `DATA_DIR`.
 - **Start fresh:** `docker compose down -v`. This also clears the AI cache and the AI call log, so copy `ai-logs` first (`docker compose run --rm app cat logs/ai-calls.jsonl`) if you need the spend history.
+- **After an update that changes the database schema** (this version needs schema version 2), a database from an older version stops the app with `Cannot start: The database /app/db/calls.db has schema version 1; this app needs 2. ...` in `docker compose logs`. The image has no `npm run seed`, so only the "(or restart)" part of that message applies. Remove the database volume alone, which keeps the AI cache and call log: `docker compose down`, then `docker volume rm inbound-calls_calls-db`, then `docker compose up --build`, which seeds a new database from the mounted data folder. Do not use `down -v` for this: it also wipes the spend log.
 
 ## Data
 
 The app reads three CSVs: `calls.csv`, `campaigns.csv` and `locations.csv`. They are loaded into a database (next section) and the app reads the database. They come from the folder named by `DATA_DIR` (set in the shell or in `.env`; the shell wins), or the current directory when it is unset or blank. A relative `DATA_DIR` is relative to the current directory. Columns are matched by header name, so extra or reordered columns are fine; a missing required column stops startup with a message naming the file and column.
 
-The loader returns every `calls.csv` row as either a typed call or a bad row, with bad rows counted by reason (bad timestamp, unknown location, unknown campaign, and so on). Bad rows never crash the app. When several rows share a `call_id`, the one with the latest `updated_at` is the call (see Database below).
+The loader returns every `calls.csv` row as either a typed call or a bad row, with bad rows counted by reason (bad timestamp, a row cut off with fewer cells than the header, unknown location, unknown campaign, and so on). Timestamps must be UTC, ending in `Z`, `+00:00` or `-00:00`, with up to 9 fractional digits. A `started_at` whose year is outside 2000–2100 is a bad timestamp, taken as a placeholder date (0001-01-01, 1970-01-01, 9999-12-31). Bad rows never crash the app. A campaign whose budget is blank or unreadable is kept, with its cost estimates blank and never ranked best or worst; an office time zone written as an alias (`EST`, read as `America/Panama`) is kept, with a note in the data notes naming the zone it was read as. When several rows share a `call_id`, the one with the latest `updated_at` is the call (see Database below).
 
 ## Database
 
@@ -58,7 +59,7 @@ The app keeps its calls in one SQLite file, `DB_PATH` (default `data/calls.db`, 
 - **`npm run seed [folder]`** loads the three CSVs from the folder (default `DATA_DIR`, else the current folder) into the database.
 - **`npm start` seeds when the file is missing** and reads the file afterwards.
 - **Re-seeding the same export stores nothing new.** A newer export adds new versions of calls, and the latest `updated_at` wins.
-- **Tables:** `raw_calls`, `bad_rows`, `campaigns`, `locations`, `reference_issues`, `cleaned_calls` and `seeds`. The app reads the raw tables and cleans them with the same code as before; `cleaned_calls` is a derived copy you can query in SQL.
+- **Tables:** `raw_calls`, `bad_rows`, `campaigns`, `locations`, `reference_issues` and `seeds`. The app reads the raw tables and cleans them with the same code as before.
 - **Views, API and numbers are unchanged** by the database.
 
 ### Limits of the database
@@ -66,11 +67,11 @@ The app keeps its calls in one SQLite file, `DB_PATH` (default `data/calls.db`, 
 - A running server keeps its snapshot until restart after `npm run seed`. An upload (next section) updates it at once; `npm run seed` does not.
 - One process at a time should write.
 - Moving to another data folder needs `npm run seed <folder>` or moving the file aside; at start the app prints a warning when the folder is not what the database was seeded from.
-- A file from an older schema, or one that is corrupt, stops startup with a message; the app never deletes it. A file that is locked by another process, unreadable or read-only gets its own message, and none of those messages tells you to move the file aside unless it really is damaged.
+- A file from an older schema, or one that is corrupt, stops startup with a message; the app never deletes it. A database made before this version (schema version 1) is refused with `Cannot start: The database data/calls.db has schema version 1; this app needs 2. ...`: delete or move `data/calls.db` (or the file `DB_PATH` names) aside and run `npm start`, which seeds a new one from `DATA_DIR` (in Docker, see "Database in Docker"). A file that is locked by another process, unreadable or read-only gets its own message, and none of those messages tells you to move the file aside unless it really is damaged.
 - **Seeds are merged in the order they were seeded, not re-sorted by the newest file.** Each seed's rows count as stored after everything seeded before, including rows it repeats, so the latest seed wins an exact `updated_at` tie and a call broken by a faulty export is fixed by seeding the good one again. So seeding an export whose rows are reordered, or that inserts rows in the middle, can order calls differently from loading that export alone (which also changes the AI snapshot id, so cached takeaways are asked for again). Seeding one export at a time, oldest first, behaves like loading them in sequence.
 - **Campaigns and locations are kept once seen.** A later export that leaves one out does not turn its stored calls bad; a later export that gives an office an invalid time zone makes that office's calls bad (reason `invalid_timezone`), as it would for a single export.
 - **Data notes count every row ever seeded, not just the latest export's.** After a faulty export and then the good one again, the calls match a fresh load of the good export, but rows read, bad rows, duplicates and ties still count the faulty rows, which stay stored as older versions; the same goes for calls stored as bad (an unknown campaign) and stored again once the campaign is added.
-- **Reference issues** (campaign or location rows that were skipped) describe the latest seed's files only.
+- **Reference issues** (campaign or location rows that were skipped, or kept with a note) describe the latest seed's files only.
 
 ### Extended export (synthetic)
 
@@ -85,7 +86,7 @@ It also carries the same mess as the original: duplicate rows, unattributed call
 
 Things to know when reading it:
 
-- Locations flags four offices on this data, not two: the two planted ones (worse) and two ordinary offices (loc_04 on booking rate, loc_08 on answer rate, both "better"). Each office is compared with all the others pooled, and the planted offices pull that pool down, so those two appear as a side effect.
+- Locations flags only the two planted offices, both "worse": over all data, Riverside on booking rate and Canyon on answer rate; over the last 28 days, only Canyon. Each office is compared with all the others pooled, and the planted offices pull that pool down, so ordinary offices drift toward "better", but none reaches the flag threshold (`OUTLIER_Z`, 3). The shipped export flags none.
 - 1,400 invented calls add about 565 distinct callers (2,040 to 2,605); copies reuse real callers at the same share the shipped data shows, so repeat callers are still present.
 - Its cmp_06 has 33 bookings against 27 in the shipped export: the fade plants calls with no bookings, but the other synthetic calls copy from every campaign.
 
@@ -99,7 +100,7 @@ The **Upload data** button in the header opens a panel where you add one CSV to 
 - **Preview first.** After you choose a file the panel shows five counts for its rows: new, new versions, duplicates, conflicts and bad. It lists a few examples of each and writes nothing. The data changes only when you press the **Add** button.
 - **Order to use:** campaigns, then locations, then calls. A call that names a campaign or office the database lacks is reported as bad and not stored, with a hint to upload that file first. Upload the same calls file again afterwards.
 - **Calls** match on `call_id` and `updated_at`. A pair already stored with the same values is a duplicate. **The same pair with different values is a conflict and is not written**, so an upload cannot change a stored call. A known `call_id` with a new `updated_at` is a new version, and the latest `updated_at` wins. A bad row that is a newer version of a stored call is reported and not stored, so the older valid version keeps counting; the preview says how many rows that was.
-- **Campaigns and locations** match on id. The same values are a duplicate. **Different values are a conflict and are not written**, so an upload cannot change a budget or a time zone. A campaign or location row with a problem (for example an invalid time zone) is bad and not written.
+- **Campaigns and locations** match on id. The same values are a duplicate. **Different values are a conflict and are not written**, so an upload cannot change a budget or a time zone. A campaign or location row with a problem (for example an invalid time zone or an unreadable budget such as `$150.00`) is bad and not written. A blank budget is a valid row: the campaign is added and its cost estimates are blank.
 - **Repeats inside the file** are caught: a repeated campaign, location or call (same id and time) keeps its first row and later differing rows are conflicts; several versions of one new call (different `updated_at`) are all new rows.
 - **One transaction.** All new rows are written together, or none are; if the write fails nothing is stored and the server keeps its old data. Pressing **Add** again, or uploading the same file twice, adds nothing the second time.
 - **Views and takeaways update without a restart.** After **Add**, "See the new data" reloads the page on the default range, so the date span, the pickers, every view and every takeaway are fetched again. The takeaway service is rebuilt for the new data, so a takeaway written for the old data is not reused. The AI counters on the dev data notes panel (cache hits, checker failures) restart at 0; the spend is read from the call log and carries over.
@@ -159,7 +160,7 @@ The URL holds the screen, so a link, a refresh or the back button reproduces it:
 | `f_weekday` | repeatable, 0 (Monday) to 6 (Sunday), in the office's local time |
 | `f_hour` | repeatable, 0 to 23, in the office's local time |
 
-To open the extended export: on a first run (no `data/calls.db`) `DATA_DIR=data/extended npm start`; on a later run `npm run seed data/extended`, then restart. There, Locations flags four offices, two of them "better" than the rest, because each office is tested against all others pooled and the two planted weak offices pull that pool down.
+To open the extended export: on a first run (no `data/calls.db`) `DATA_DIR=data/extended npm start`; on a later run `npm run seed data/extended`, then restart. There, Locations flags only the two planted weak offices ("worse"); the shipped export flags none.
 
 ## Ask a question
 
@@ -197,7 +198,7 @@ A campaign is flagged when its calls jumped or dropped against the previous peri
 
 - **Where:** the Campaigns table has a "Calls vs previous" column (change and "was N") and a "Calls jumped" or "Calls dropped" badge on flagged rows. Overview's top actions gain one extra entry, right after the Campaigns entry, naming the biggest mover and how many campaigns changed. However many campaigns are flagged, there is one entry.
 - **The test:** `score = (calls now - calls before) / sqrt(calls now + calls before)`; a campaign is flagged when the score reaches 3 in either direction. A campaign is tested only when its calls across both periods add up to at least 20, so a drop to zero or a jump from zero is caught and a handful of calls is never flagged.
-- **Settings:** `ALERT_Z` (3) and `MIN_CALLS_ALERT` (20) in `src/core/thresholds.ts`. 3 rather than the 2.5 used for offices because about a dozen campaigns are tested at once: at 2.5 some campaign is flagged by luck about 1 time in 7, at 3 about 1 in 30. On the shipped export no campaign is flagged; on the extended export the planted jump and drop are.
+- **Settings:** `ALERT_Z` (3) and `MIN_CALLS_ALERT` (20) in `src/core/thresholds.ts`. 3, as for offices, because about a dozen campaigns are tested at once: at 2.5 some campaign is flagged by luck about 1 time in 7, at 3 about 1 in 30. On the shipped export no campaign is flagged; on the extended export the planted jump and drop are.
 - **Needs a full previous period of equal length.** Over "All data", or with a comparison of another length (compared per day, see Compare any two ranges), nothing is tested and the page says why. A comparison that overlaps the selected range is not tested either (the two periods must be independent); the change column still shows.
 - **Unattributed is never flagged.** It is a bucket, not a campaign; "Fix attribution" covers it. Its row still shows its change.
 - **Known limits:** repeat callers make counts clumpier than the test assumes, so it is somewhat optimistic; a range that is not a whole number of weeks compares unequal weekday mixes; a partly complete first or last day is noted, not corrected.
@@ -216,7 +217,7 @@ A one-page, plain document of the whole app, for paper or PDF.
 
 ### Visual design and motion
 
-- **The look:** evergreen header, sand neutrals, white panels with soft borders and weight-500 headings. The type pairing is IBM Plex Sans for text with IBM Plex Mono for figures and small labels. The accent green marks only what you can act on (links, buttons, the current tab, focus); bars, heat cells and the up and down status colours are a separate blue and red set, kept at least 40 degrees of hue away from the green. Colours, type, spacing and timing are all set in `src/web/styles/tokens.css`, and tests fail on a raw colour or duration anywhere else.
+- **The look:** evergreen header, sand neutrals, white panels with soft borders and weight-500 headings. The type pairing is IBM Plex Sans for text with IBM Plex Mono for figures and small labels. The accent green marks only what you can act on (links, buttons, the current tab, focus); bars, heat cells and the up and down status colours are a separate blue and red set, kept at least 40 degrees of hue away from the green. Colours, type, spacing and timing are all set in `src/web/styles/tokens.css`; keep raw colours and durations out of other files (no test checks this any more).
 - **What moves:** a view change (a short fade and small rise below the range control; the header, tabs and range control stay still), the takeaway line (loading text and sentence swap), the Data notes panel under `?dev`, the Missed calls heatmap when you switch between By office and By weekday, the five Overview tiles (each counts to its new value and ends on the server's exact text), and the Campaigns weekly chart when you change its campaign.
 - **Timing:** every duration is 150 to 300 ms, with one easing curve, set in `tokens.css` (`--motion-*`, `--ease-standard`) and read from there at run time. Animation uses the `motion` package (imported from `motion/react`); the `Reveal` wrapper renders a plain div when motion is off, so nothing can stay half-faded.
 - **Reduced motion:** `prefers-reduced-motion: reduce` turns all of it off at once, and the app follows the setting live, without a reload.
@@ -226,7 +227,7 @@ A one-page, plain document of the whole app, for paper or PDF.
 
 ## AI takeaways
 
-Each view shows one short takeaway line under the date control, marked `AI` or `template`. The template sentence is built in code from the view's computed facts. With `ANTHROPIC_API_KEY` set, Claude Haiku 5.5 writes the sentence instead, using `{placeholders}` for every number and name; code checks the text (no digits, no invented names) and fills in the values. If the check fails, the call fails, the budget is reached or there is no key, the template sentence is shown, and nothing else about the app changes. The views never wait on it.
+Each view shows one short takeaway line under the date control, marked `AI` or `template`. The template sentence is built in code from the view's computed facts. With `ANTHROPIC_API_KEY` set, Claude Haiku 5.5 writes the sentence instead, using `{placeholders}` for every number and name; code checks the text (no digits, no invented names) and fills in the values. If the check fails (after one retry, see below), the call fails, the budget is reached or there is no key, the template sentence is shown, and nothing else about the app changes. The views never wait on it.
 
 - **Off by default:** leave `ANTHROPIC_API_KEY` empty in `.env`. Add `?dev` to the URL to see why a takeaway is a template.
 - **Spend guard:** `AI_SPEND_LIMIT_USD` (default 5). Past it the app stops calling the model and shows template text.
