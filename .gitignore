@@ -9,5 +9,6 @@ dist/
 node_modules/
 data/*.db
 data/*.db-journal
+data/*.bak
 *.db
 *.db-journal

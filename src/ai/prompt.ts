@@ -4,7 +4,7 @@ import { formatFact, type FactSheet, type ViewName } from '../core/views/facts';
 import { cutName } from './question';
 import type { Prompt } from './types';
 
-export const PROMPT_VERSION = '7'; // bump on any change to the prompt text
+export const PROMPT_VERSION = '8'; // bump on any change to the prompt text
 
 export const REPLY_SCHEMA = {
   type: 'object',
@@ -37,8 +37,9 @@ const VIEW_PARAGRAPHS: Record<ViewName, string> = {
     'on the Missed calls page as the place to act. In that case never name an office or call any office better or worse.',
   'missed-calls':
     'This is the Missed calls view: calls nobody answered, the callers worth calling back with an estimated value, and the ' +
-    'busiest slot (office, weekday and hour) when calls were missed. Suggest calling back the callers whose latest call went unanswered,' +
-    'or staffing the busiest missed slot. Values are estimates; say so.',
+    'busiest slot (office, weekday and hour) when calls were missed. Suggest calling back the callers whose latest call went unanswered. ' +
+    'Only when {slot.office}, {slot.weekday} and {slot.hour} are in the data block, you may also suggest staffing that slot, ' +
+    'naming it with those placeholders; otherwise do not mention a busiest slot or staffing. Values are estimates; say so.',
 };
 
 const SHARED_RULES = [

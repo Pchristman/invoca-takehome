@@ -20,7 +20,7 @@ function dataBlock(user: string): { view: string; facts: Record<string, { kind: 
 
 describe('buildPrompt', () => {
   it('has a version', () => {
-    expect(PROMPT_VERSION).toBe('7');
+    expect(PROMPT_VERSION).toBe('8');
   });
 
   it('tells campaigns that the attribution facts cover only calls with no campaign, and no other view', () => {
@@ -118,6 +118,14 @@ describe('buildPrompt', () => {
     const { system } = buildPrompt(sheet(BASIC, 'missed-calls'));
     expect(system).toContain('callers whose latest call went unanswered');
     expect(system).not.toContain('never got through');
+    expect(system).toContain('went unanswered. Only when');
+  });
+
+  it('suggests staffing the busiest missed slot only when its placeholders are in the data block', () => {
+    const { system } = buildPrompt(sheet(BASIC, 'missed-calls'));
+    expect(system).toContain('Only when {slot.office}, {slot.weekday} and {slot.hour} are in the data block');
+    expect(system).toContain('otherwise do not mention a busiest slot or staffing');
+    expect(system).not.toContain('staffing the busiest missed slot');
   });
 
   it('is deterministic whatever order the keys were inserted in', () => {

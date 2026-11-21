@@ -428,6 +428,11 @@ td.num {
   white-space: nowrap;
 }
 
+/* Long number headings wrap onto two lines, so a wide table still fits beside the page gutters. */
+thead th.num {
+  white-space: normal;
+}
+
 tbody tr:last-child th,
 tbody tr:last-child td {
   border-bottom: 0;
@@ -463,12 +468,13 @@ th[aria-sort] {
   color: var(--color-text);
 }
 
+/* A no-break space keeps the arrow beside the last word when a heading wraps. */
 th[aria-sort="descending"] .sort-button::after {
-  content: " \2193";
+  content: "\00a0\2193";
 }
 
 th[aria-sort="ascending"] .sort-button::after {
-  content: " \2191";
+  content: "\00a0\2191";
 }
 
 /* The calls with no campaign: last row, set apart. */
