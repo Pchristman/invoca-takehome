@@ -20,7 +20,6 @@ export type ComparisonResult = { ok: true; comparison: RangeComparison } | { ok:
 
 export interface IncompleteDays {
   includesFirstDay: boolean;
-  includesLastDay: boolean;
 }
 
 function coverageProblem(span: DateRange, previous: DateRange): string | null {
@@ -65,11 +64,10 @@ export function resolveComparison(span: DateRange, current: DateRange, previous?
   };
 }
 
-/** Whether the range contains the first or last day of the data, either of which may be incomplete. */
+/** Whether the range contains the first day of the data, which may be incomplete. */
 export function incompleteDays(span: DateRange, range: DateRange): IncompleteDays {
   return {
     includesFirstDay: range.start <= span.start && span.start <= range.end,
-    includesLastDay: range.start <= span.end && span.end <= range.end,
   };
 }
 

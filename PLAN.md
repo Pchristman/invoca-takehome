@@ -61,7 +61,7 @@ In order: S1 alerts, S2 compare any two date ranges, S3 print-friendly one-page 
 
 - Default comparison range: the same number of days immediately before the selected range. A second range of another length (stretch S2) is compared per day and labelled as such.
 - If any day of the comparison range falls before the first date in the data, **no change is shown**; the tile shows "No full previous period" with a one-line reason. "All data" therefore never shows a change.
-- If the selected range or the comparison range includes the first or last date in the data, a note says that day may be incomplete.
+- If the selected range or the comparison range includes the first date in the data, a note says that day may be incomplete. The last date gets no such note: the data gives no sign that the last day is incomplete, and the outcome-lag note (3.3) already covers recent days.
 - Counts and money show % change. Rates (answer rate, booking rate) show change in percentage points.
 - If the previous value is 0 and the current isn't, the change reads "new", never infinity or NaN. If both are 0, no change is shown.
 - The comparison engine takes **any two ranges** from the start. "Previous period" is only the default second range. Stretch S2 then only adds UI.
@@ -71,7 +71,7 @@ In order: S1 alerts, S2 compare any two date ranges, S3 print-friendly one-page 
 These sit inline on the view they affect, not behind a panel, because the rules in `CLAUDE.md` require them to be visible wherever the number appears:
 
 - **Estimates:** estimated spend, cost per booking, revenue per budget dollar and missed-call value are labeled "est.", with the formula one click away.
-- **Incomplete periods:** the notes from section 3.2 (no full previous period; first or last data day may be incomplete).
+- **Incomplete periods:** the notes from section 3.2 (no full previous period; the first data day may be incomplete; the last data day gets no note, see 3.2).
 - **Outcome lag:** the longest gap seen in this export between a call starting and a later row updating its outcome. If the selected range ends within that many days of the as-of date, a note says recent bookings and revenue may still rise. The gap is measured from the data, never hard-coded.
 - **Skipped rows:** if any rows were bad, one line in the header ("12 rows skipped"). The breakdown lives in the data notes panel.
 - **Takeaway source:** the small "AI" or "template" marker on each takeaway.
@@ -412,7 +412,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - one-day range
   - "all data" has no comparison
   - comparison partly before data start
-  - first and last data day flagged as possibly incomplete
+  - first data day flagged as possibly incomplete; last data day not flagged
   - previous 0 → "new"
   - both 0
   - zero budget (blank cost per booking)

@@ -181,11 +181,6 @@ describe('Campaigns screen caveats for the comparison period', () => {
     expect(html).toContain('<li>The comparison period includes the first day in the data, which may be incomplete.</li>');
   });
 
-  it("says the comparison period includes the last day when it ends on the data's last day", () => {
-    const html = renderFor('start=2026-09-11&end=2026-09-20&compareStart=2026-09-21&compareEnd=2026-09-30');
-    expect(html).toContain('<li>The comparison period includes the last day in the data, which may be incomplete.</li>');
-  });
-
   it('says the comparison period overlaps the selected range', () => {
     const html = renderFor('start=2026-09-11&end=2026-09-20&compareStart=2026-09-16&compareEnd=2026-09-25');
     expect(html).toContain('<li>The comparison period overlaps the selected range.</li>');

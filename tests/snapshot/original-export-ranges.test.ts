@@ -59,9 +59,9 @@ describe('shipped export, ranges and metrics', () => {
     expect(everything.ok && everything.comparison.available).toBe(false);
   });
 
-  test('presets and all data flag the last day as possibly incomplete', () => {
-    expect(incompleteDays(span, last7).includesLastDay).toBe(true);
-    expect(incompleteDays(span, all)).toEqual({ includesFirstDay: true, includesLastDay: true });
+  test('presets flag no incomplete day; all data flags only the first day', () => {
+    expect(incompleteDays(span, last7)).toEqual({ includesFirstDay: false });
+    expect(incompleteDays(span, all)).toEqual({ includesFirstDay: true });
   });
 
   test('the per-week counts for the whole range add up to its calls, and only the end weeks can be partial', () => {

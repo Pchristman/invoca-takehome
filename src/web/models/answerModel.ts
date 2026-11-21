@@ -97,7 +97,7 @@ function linkFor(answer: AnswerResponse): AnswerShow['link'] {
   return { label: `Open ${VIEW_LABELS[filter.view]}`, href: `/${toSearch(target)}` };
 }
 
-/** `span` is the data's first and last date (Meta.span), needed for the first and last day caveats. */
+/** `span` is the data's first and last date (Meta.span), needed for the first-day caveat. */
 export function answerModel(answer: AnswerResponse, span: DateRange): AnswerShow {
   const { totals, groupBy } = answer;
   const nameColumn = groupBy === 'campaign' ? 'Campaign' : 'Office';

@@ -38,7 +38,7 @@ These controls sit above all four pages. Whatever you choose here stays in the w
 3. **Or set your own dates.** Fill in a start and end date, then press Apply.
 4. **Compare with another period (optional, on Overview and Campaigns).** Leave it empty and the app compares with the same number of days just before your range.
 5. **The takeaway.** A short summary of the page. The tag shows who wrote it: `AI`, or `TEMPLATE` when AI is off or its text failed the checks twice (the AI gets one more try before the app falls back to its own sentence). The numbers always come from the app, never from the AI.
-6. **Yellow notes.** They tell you when to read a number with care, for example when the last day may be incomplete.
+6. **Yellow notes.** They tell you when to read a number with care, for example when recent bookings and revenue may still rise.
 7. **Data as of.** The latest date in your data. "Last 7 days" counts back from this date, not from today.
 8. **Ask a question.** Type a question in plain English. See "Ask a question" below.
 9. **Print summary.** A one-page version for reporting up.

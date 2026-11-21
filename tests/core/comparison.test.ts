@@ -175,11 +175,11 @@ describe('resolveComparison checks the current range too', () => {
 });
 
 describe('incompleteDays', () => {
-  test('incompleteDays flags the first and last data day', () => {
-    expect(incompleteDays(span, range('2026-10-23', '2026-10-29'))).toEqual({ includesFirstDay: false, includesLastDay: true });
-    expect(incompleteDays(span, span)).toEqual({ includesFirstDay: true, includesLastDay: true });
-    expect(incompleteDays(span, range('2026-09-10', '2026-09-16'))).toEqual({ includesFirstDay: false, includesLastDay: false });
-    expect(incompleteDays(span, range('2026-09-01', '2026-09-01'))).toEqual({ includesFirstDay: true, includesLastDay: false });
+  test('incompleteDays flags the first data day', () => {
+    expect(incompleteDays(span, range('2026-10-23', '2026-10-29'))).toEqual({ includesFirstDay: false });
+    expect(incompleteDays(span, span)).toEqual({ includesFirstDay: true });
+    expect(incompleteDays(span, range('2026-09-10', '2026-09-16'))).toEqual({ includesFirstDay: false });
+    expect(incompleteDays(span, range('2026-09-01', '2026-09-01'))).toEqual({ includesFirstDay: true });
   });
 });
 

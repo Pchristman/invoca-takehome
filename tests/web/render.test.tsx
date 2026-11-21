@@ -326,7 +326,7 @@ describe('RequestFrame with an unknown error code', () => {
 describe('Caveats', () => {
   it('prints each item and nothing for none', () => {
     const html = renderToStaticMarkup(
-      <Caveats items={[{ id: 'first_day', text: 'First note.' }, { id: 'last_day', text: 'Second note.' }]} />,
+      <Caveats items={[{ id: 'first_day', text: 'First note.' }, { id: 'outcome_lag', text: 'Second note.' }]} />,
     );
     expect(html).toContain('First note.');
     expect(html).toContain('Second note.');
@@ -782,7 +782,7 @@ describe('LocationsView', () => {
     const notes = {
       ...view.notes,
       comparison: { ...view.notes.comparison, available: true, overlaps: true },
-      incompletePrevious: { includesFirstDay: true, includesLastDay: true },
+      incompletePrevious: { includesFirstDay: true },
     };
     const comparisonUrl = parseUrlState('?view=locations&range=all&compareStart=2026-09-01&compareEnd=2026-09-05');
     const withComparison = render({ ...view, notes }, comparisonUrl, storeSpan);
@@ -1043,7 +1043,7 @@ describe('MissedCallsView', () => {
     const notes = {
       ...real.notes,
       comparison: { ...real.notes.comparison, available: true, overlaps: true },
-      incompletePrevious: { includesFirstDay: true, includesLastDay: true },
+      incompletePrevious: { includesFirstDay: true },
     };
     const html = render({ ...real, notes }, `${base}&compareStart=2026-09-01&compareEnd=2026-09-05`);
     expect(html).not.toContain('comparison period');
@@ -1081,7 +1081,6 @@ describe('OverviewView with an alert entry', () => {
   const [campaigns, ...rest] = real.topActions;
   const withAlert: OverviewData = {
     ...real,
-    notes: { ...real.notes, incompleteCurrent: { ...real.notes.incompleteCurrent, includesLastDay: true } },
     topActions: [
       campaigns!,
       { ...campaigns!, action: { ...campaigns!.action, kind: 'review_call_changes', text: alertText, actionable: true } },
@@ -1096,10 +1095,6 @@ describe('OverviewView with an alert entry', () => {
     expect(items).toHaveLength(4);
     expect(items[1]).toContain(alertText);
     expect(items[1]).toContain('Open Campaigns');
-  });
-
-  it('carries the incomplete-day caveat that qualifies it', () => {
-    expect(html).toContain('the last day in the data, may be incomplete.');
   });
 });
 

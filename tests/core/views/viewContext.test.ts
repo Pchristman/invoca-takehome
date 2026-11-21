@@ -32,8 +32,8 @@ describe('makeViewContext', () => {
     expect(ctx.notes.comparison.previous).toEqual({ start: '2026-08-18', end: '2026-08-31' });
     expect(ctx.notes.comparison.reason).toMatch(/^No full previous period/);
     expect(ctx.previous).toBeNull();
-    expect(ctx.notes.incompleteCurrent).toEqual({ includesFirstDay: true, includesLastDay: true });
-    expect(ctx.notes.incompletePrevious).toEqual({ includesFirstDay: false, includesLastDay: false });
+    expect(ctx.notes.incompleteCurrent).toEqual({ includesFirstDay: true });
+    expect(ctx.notes.incompletePrevious).toEqual({ includesFirstDay: false });
   });
 
   test('the caveat flags come from the store', () => {
