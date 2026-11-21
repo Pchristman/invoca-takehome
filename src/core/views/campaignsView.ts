@@ -56,7 +56,7 @@ export interface CampaignsView extends ViewBase {
   /** null when no unattributed call is in range or in the previous period; a row of 0 calls shows a drop to none. */
   unattributed: UnattributedRow | null;
   /** `reason` is set only when nothing is marked. */
-  bestWorst: { eligible: number; reason: string | null };
+  bestWorst: { eligibleBest: number; eligibleWorst: number; reason: string | null };
   weekly: { campaignId: string; name: string; weeks: WeekBucket[] } | null;
   /** `checked` is false when changes are not tested (no comparison, periods of different length, an overlap, or a comparison period that is not before the selected range); `reason` says why, in that order. */
   alerts: { checked: boolean; reason: string | null; flagged: number; z: number; minCalls: number };
@@ -71,9 +71,10 @@ const SHIFT_TEMPLATE =
   'Shift budget from {shift.worst.name} (est. {shift.worst.value} revenue per budget dollar) toward {shift.best.name} (est. {shift.best.value} revenue per budget dollar).';
 const ATTRIBUTION_START = '{attribution.calls} ({attribution.bookings}, {attribution.revenue}) came in on ';
 const ATTRIBUTION_END = ' not tied to any campaign. Assign each to a campaign.';
-const FEW_ELIGIBLE_REASON =
-  'fewer than two campaigns have a daily budget and at least {no_shift.min_bookings} in this range.';
-const SAME_VALUE_REASON = 'the eligible campaigns earn the same revenue per budget dollar.';
+const NO_PAIR_REASON =
+  'no two different campaigns qualify: best needs a daily budget and at least {no_shift.min_bookings}, worst a daily budget and at least {no_shift.min_calls} in this range.';
+const NO_SPREAD_REASON =
+  'no campaign with a daily budget and at least {no_shift.min_calls} earns less per budget dollar than the top campaign with at least {no_shift.min_bookings} in this range.';
 const NO_SHIFT_PREFIX = 'No budget shift is suggested: ';
 
 const BOOKING = ['booking', 'bookings'] as const;
@@ -139,6 +140,7 @@ export function buildCampaigns(
   const picked = pickBestWorst(
     rows.map((r) => ({
       campaignId: r.campaignId!,
+      calls: r.calls,
       bookings: r.bookings,
       estimatedSpendUsd: r.estimatedSpendUsd ?? 0, // $0 keeps an unknown budget out of the ranking, as it does a $0 budget
       revenuePerBudgetDollar: r.revenuePerBudgetDollar,
@@ -167,17 +169,17 @@ export function buildCampaigns(
       },
       { view: 'campaigns' },
     );
-  } else if (picked.eligible < 2) {
-    noShiftReason = FEW_ELIGIBLE_REASON;
+  } else {
+    noShiftReason = picked.reason === 'no_spread' ? NO_SPREAD_REASON : NO_PAIR_REASON;
     noShift = makeAction(
       'no_budget_shift',
-      NO_SHIFT_PREFIX + FEW_ELIGIBLE_REASON,
-      { 'no_shift.min_bookings': { kind: 'count', value: THRESHOLDS.MIN_BOOKINGS_TO_RANK, noun: BOOKING } },
+      NO_SHIFT_PREFIX + noShiftReason,
+      {
+        'no_shift.min_bookings': { kind: 'count', value: THRESHOLDS.MIN_BOOKINGS_TO_RANK, noun: BOOKING },
+        'no_shift.min_calls': { kind: 'count', value: THRESHOLDS.MIN_CALLS_TO_RANK_WORST, noun: ['call', 'calls'] },
+      },
       { view: 'campaigns' },
     );
-  } else {
-    noShiftReason = SAME_VALUE_REASON;
-    noShift = makeAction('no_budget_shift', NO_SHIFT_PREFIX + SAME_VALUE_REASON, {}, { view: 'campaigns' });
   }
 
   let fixAttribution: Action | null = null;
@@ -252,7 +254,7 @@ export function buildCampaigns(
     factSheet: makeFactSheet('campaigns', facts),
     rows,
     unattributed,
-    bestWorst: { eligible: picked.eligible, reason },
+    bestWorst: { eligibleBest: picked.eligibleBest, eligibleWorst: picked.eligibleWorst, reason },
     weekly,
     alerts: {
       checked: context.notes.comparison.available && testable,

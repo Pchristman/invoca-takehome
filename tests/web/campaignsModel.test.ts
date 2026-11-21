@@ -172,12 +172,14 @@ describe('best and worst', () => {
     expect(modelRow(model.rows, view.rows[1]!.campaignId!).marks).toEqual([]);
     expect(model.bestWorstNote).toBeNull();
     expect(model.bestWorstRule).toBe(
-      `Best and worst: the highest and lowest est. revenue per budget $ among the ${view.bestWorst.eligible} campaigns with a budget above $0 and at least ${THRESHOLDS.MIN_BOOKINGS_TO_RANK} bookings in this range.`,
+      'Best and worst by est. revenue per budget $, among campaigns with a budget above $0 in this range: ' +
+        `best is the highest of the ${view.bestWorst.eligibleBest} with at least ${THRESHOLDS.MIN_BOOKINGS_TO_RANK} bookings, ` +
+        `worst the lowest of the ${view.bestWorst.eligibleWorst} with at least ${THRESHOLDS.MIN_CALLS_TO_RANK_WORST} calls.`,
     );
   });
 
-  it('with fewer than two eligible, marks nothing and passes the reason', () => {
-    const view = campaignsFor('range=all', storeWithZeroBudget());
+  it('with no pair to rank, marks nothing and passes the reason', () => {
+    const view = campaignsFor('range=all', storeWithNames(['A']));
     expect(view.bestWorst.reason).not.toBeNull();
     const model = campaignsModel(view, DEFAULT_SORT);
     expect(model.rows.every((r) => r.marks.length === 0)).toBe(true);
@@ -230,13 +232,15 @@ describe('actions', () => {
     const model = campaignsModel(view, DEFAULT_SORT);
     expect(model.actions.map((a) => a.kind)).toEqual(view.actions.map((a) => a.kind));
     expect(model.actions.map((a) => a.text)).toEqual(view.actions.map((a) => a.text));
-    expect(model.actions.map((a) => a.kind)).toEqual(['fix_attribution']);
+    // Idle took budget and 14 calls with no bookings, so it is worst at $0.00 and the shift comes first.
+    expect(model.actions.map((a) => a.kind)).toEqual(['shift_budget', 'fix_attribution']);
   });
 
   it('shift_budget comes before fix_attribution', () => {
     const base = campaignsFor('range=all', storeWithZeroBudget());
     const shift = { ...base.actions[0]!, kind: 'shift_budget' as const, text: 'Shift it.', actionable: true };
-    const model = campaignsModel({ ...base, actions: [shift, ...base.actions] }, DEFAULT_SORT);
+    const rest = base.actions.filter((a) => a.kind !== 'shift_budget');
+    const model = campaignsModel({ ...base, actions: [shift, ...rest] }, DEFAULT_SORT);
     expect(model.actions.map((a) => a.kind)).toEqual(['shift_budget', 'fix_attribution']);
     expect(model.actions[0]!.text).toBe('Shift it.');
   });

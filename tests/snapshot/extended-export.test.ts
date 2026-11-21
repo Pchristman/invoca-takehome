@@ -140,7 +140,7 @@ describe('extended export: Locations', () => {
   });
 
   // Each office is tested against all the others pooled, and the planted offices pull that pooled rate down,
-  // so a couple of ordinary offices can read as "better" (loc_04 on booking rate, loc_08 on answer rate).
+  // so ordinary offices drift toward "better" (loc_04 on booking rate, loc_08 on answer rate, both under OUTLIER_Z).
   // Only "worse" is a planted problem, so that is what this pins. See DECISIONS.md.
   it('no other office is flagged worse on either', () => {
     for (const id of ids.filter((id) => id !== 'loc_06' && id !== 'loc_02')) {
@@ -148,14 +148,13 @@ describe('extended export: Locations', () => {
     }
   });
 
-  // The full flag list, so a new or vanished "better" flag is noticed. The two "better" ones are by-products
-  // (see above); the README says so.
-  it('exactly these four flags appear, and no others', () => {
+  // The full flag list, so a new "better" flag is noticed: only the two planted problems are flagged.
+  it('exactly these two flags appear, and no others', () => {
     const found = ids.flatMap((id) => [
       ...(flags[id]?.answer.flagged ? [`${id} answer ${flags[id]?.answer.direction}`] : []),
       ...(flags[id]?.booking.flagged ? [`${id} booking ${flags[id]?.booking.direction}`] : []),
     ]);
-    expect(found.sort()).toEqual(['loc_02 booking worse', 'loc_04 booking better', 'loc_06 answer worse', 'loc_08 answer better']);
+    expect(found.sort()).toEqual(['loc_02 booking worse', 'loc_06 answer worse']);
   });
 
   it("Canyon's busiest missed slot is on a weekday morning", () => {
@@ -223,7 +222,7 @@ describe('extended export: Campaigns', () => {
       const rows: CampaignPerformance[] = store.campaigns.map((camp) => {
         const mine = tally(callsInRange(store.calls, range).filter((c) => c.campaignId === camp.id));
         const spend = estimatedSpend(camp.dailyBudgetUsd ?? 0, days); // both exports give every campaign a budget
-        return { campaignId: camp.id, bookings: mine.bookings, estimatedSpendUsd: spend, revenuePerBudgetDollar: revenuePerBudgetDollar(mine.revenueUsd, spend) };
+        return { campaignId: camp.id, calls: mine.calls, bookings: mine.bookings, estimatedSpendUsd: spend, revenuePerBudgetDollar: revenuePerBudgetDollar(mine.revenueUsd, spend) };
       });
       const { best, worst } = pickBestWorst(rows);
       return { best: best?.campaignId, worst: worst?.campaignId };

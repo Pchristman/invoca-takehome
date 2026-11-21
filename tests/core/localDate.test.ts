@@ -63,9 +63,10 @@ describe('THRESHOLDS', () => {
   test('THRESHOLDS match the PLAN.md table', () => {
     expect(THRESHOLDS).toEqual({
       MIN_BOOKINGS_TO_RANK: 5,
+      MIN_CALLS_TO_RANK_WORST: 10,
       MIN_CALLS_BEST_CAMPAIGN: 20,
       MIN_CALLS_OUTLIER: 50,
-      OUTLIER_Z: 2.5,
+      OUTLIER_Z: 3,
       MIN_ANSWERED_FOR_RATE: 30,
       ALERT_Z: 3,
       MIN_CALLS_ALERT: 20,

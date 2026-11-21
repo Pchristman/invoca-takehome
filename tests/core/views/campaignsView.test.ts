@@ -102,7 +102,7 @@ describe('buildCampaigns', () => {
     expect(alpha.estimatedCostPerBookingUsd).toBeNull();
     expect(alpha.revenuePerBudgetDollar).toBeNull();
     expect(view.rows.some((r) => r.isBest || r.isWorst)).toBe(false);
-    expect(view.bestWorst.eligible).toBe(1);
+    expect(view.bestWorst).toMatchObject({ eligibleBest: 1, eligibleWorst: 1 });
     expect(view.actions[0]!.kind).toBe('no_budget_shift');
     expectAllFinite(view);
   });
@@ -116,7 +116,7 @@ describe('buildCampaigns', () => {
       expect(byId[id]!.isBest).toBe(false);
       expect(byId[id]!.isWorst).toBe(false);
     }
-    expect(view.bestWorst).toEqual({ eligible: 2, reason: null });
+    expect(view.bestWorst).toEqual({ eligibleBest: 2, eligibleWorst: 2, reason: null });
   });
 
   it('the shift sentence quotes the ranking metric even when cost per booking disagrees', () => {
@@ -197,23 +197,26 @@ describe('buildCampaigns', () => {
     expect(view.actions.some((a) => a.kind === 'fix_attribution')).toBe(false);
   });
 
-  it('fewer than two eligible campaigns marks nothing and says why', () => {
+  it('no pair of campaigns marks nothing and says why', () => {
+    // Beta has the calls to be judged but Alpha, the only best candidate, is the only other; Beta with 9 calls is not judged.
     const calls = [
       ...campaignCalls('cmp_a', 10, 6, 100),
-      ...campaignCalls('cmp_b', 10, 4, 50),
+      ...campaignCalls('cmp_b', 9, 4, 50),
       ...campaignCalls('cmp_c', 8, 8, 100),
       ...campaignCalls('cmp_d', 4, 4, 100),
     ];
-    const reason = 'Fewer than two campaigns have a daily budget and at least 5 bookings in this range.';
+    const reason =
+      'No two different campaigns qualify: best needs a daily budget and at least 5 bookings, worst a daily budget and at least 10 calls in this range.';
 
     const plain = buildCampaigns(makeStore(calls, { campaigns, locations }), fourteen);
     expect(plain.rows.some((r) => r.isBest || r.isWorst)).toBe(false);
-    expect(plain.bestWorst).toEqual({ eligible: 1, reason });
+    expect(plain.bestWorst).toEqual({ eligibleBest: 1, eligibleWorst: 1, reason });
     expect(plain.actions).toHaveLength(1);
     expect(plain.actions[0]!).toMatchObject({
       kind: 'no_budget_shift',
       actionable: false,
-      text: 'No budget shift is suggested: fewer than two campaigns have a daily budget and at least 5 bookings in this range.',
+      text:
+        'No budget shift is suggested: no two different campaigns qualify: best needs a daily budget and at least 5 bookings, worst a daily budget and at least 10 calls in this range.',
     });
 
     const withAttribution = buildCampaigns(store(calls), fourteen);
@@ -228,10 +231,30 @@ describe('buildCampaigns', () => {
     expect(view.rows.some((r) => r.isBest || r.isWorst)).toBe(false);
     expect(view.actions).toHaveLength(1);
     expect(view.actions[0]!.kind).toBe('no_budget_shift');
+    const reason =
+      'no campaign with a daily budget and at least 10 calls earns less per budget dollar than the top campaign with at least 5 bookings in this range.';
+    expect(view.actions[0]!.text).toBe(`No budget shift is suggested: ${reason}`);
+    expect(view.bestWorst).toEqual({ eligibleBest: 2, eligibleWorst: 2, reason: reason.charAt(0).toUpperCase() + reason.slice(1) });
+  });
+
+  it('a budgeted campaign with enough calls but few bookings is worst, even below one with more bookings', () => {
+    // The reported case. Alpha: 40 calls, 6 bookings, 600 / 140 = $4.29. Beta: 12 calls, 1 booking, 50 / 280 = $0.18.
+    // Delta: 5 bookings, 2000 / 70 = $28.57, best. Beta has too few bookings to be best but enough calls to be judged.
+    const calls = [...campaignCalls('cmp_a', 40, 6, 100), ...campaignCalls('cmp_b', 12, 1, 50), ...campaignCalls('cmp_d', 5, 5, 400)];
+    const view = buildCampaigns(makeStore(calls, { campaigns, locations }), fourteen);
+    expect(view.rows.find((r) => r.isBest)!.name).toBe('Delta');
+    expect(view.rows.find((r) => r.isWorst)!.name).toBe('Beta');
+    expect(view.bestWorst).toEqual({ eligibleBest: 2, eligibleWorst: 2, reason: null });
+  });
+
+  it('a campaign with no bookings can be worst, and the sentence quotes $0.00', () => {
+    const calls = [...campaignCalls('cmp_a', 10, 6, 100), ...campaignCalls('cmp_b', 10, 0, 0)];
+    const view = buildCampaigns(makeStore(calls, { campaigns, locations }), fourteen);
+    expect(view.rows.find((r) => r.isWorst)!.name).toBe('Beta');
     expect(view.actions[0]!.text).toBe(
-      'No budget shift is suggested: the eligible campaigns earn the same revenue per budget dollar.',
+      'Shift budget from Beta (est. $0.00 revenue per budget dollar) toward Alpha (est. $4.29 revenue per budget dollar).',
     );
-    expect(view.bestWorst).toEqual({ eligible: 2, reason: 'The eligible campaigns earn the same revenue per budget dollar.' });
+    expect(view.factSheet.facts['shift.worst.value']).toMatchObject({ value: 0 });
   });
 
   it('the weekly chart defaults to the campaign with most calls', () => {

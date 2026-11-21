@@ -33,12 +33,12 @@ const nameOf = (id: string) => store.locations.find((l) => l.id === id)!.name;
 describe('extended export views: Locations', () => {
   const view = buildLocations(store, all);
 
-  it('flags exactly the four known flags', () => {
+  it('flags exactly the two planted flags', () => {
     const found = view.rows.flatMap((r) => [
       ...(r.answerFlag.flagged ? [`${r.locationId} answer ${r.answerFlag.direction}`] : []),
       ...(r.bookingFlag.flagged ? [`${r.locationId} booking ${r.bookingFlag.direction}`] : []),
     ]);
-    expect(found.sort()).toEqual(['loc_02 booking worse', 'loc_04 booking better', 'loc_06 answer worse', 'loc_08 answer better']);
+    expect(found.sort()).toEqual(['loc_02 booking worse', 'loc_06 answer worse']);
   });
 
   it('the locations action is for a planted office', () => {

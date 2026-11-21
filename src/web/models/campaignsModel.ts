@@ -166,8 +166,12 @@ function alertsRuleText({ minCalls, z }: CampaignsView['alerts']): string {
   );
 }
 
-function bestWorstRuleText(eligible: number): string {
-  return `Best and worst: the highest and lowest est. revenue per budget $ among the ${formatCount(eligible)} campaigns with a budget above $0 and at least ${formatCount(THRESHOLDS.MIN_BOOKINGS_TO_RANK)} bookings in this range.`;
+function bestWorstRuleText({ eligibleBest, eligibleWorst }: CampaignsView['bestWorst']): string {
+  return (
+    'Best and worst by est. revenue per budget $, among campaigns with a budget above $0 in this range: ' +
+    `best is the highest of the ${formatCount(eligibleBest)} with at least ${formatCount(THRESHOLDS.MIN_BOOKINGS_TO_RANK)} bookings, ` +
+    `worst the lowest of the ${formatCount(eligibleWorst)} with at least ${formatCount(THRESHOLDS.MIN_CALLS_TO_RANK_WORST)} calls.`
+  );
 }
 
 export function campaignsModel(view: CampaignsView, sort: CampaignSort): CampaignsModel {
@@ -182,7 +186,7 @@ export function campaignsModel(view: CampaignsView, sort: CampaignSort): Campaig
     rows: sortCampaignRows(view.rows, sort).map((r) => rowModel(r, alerts.reason, perDay)),
     unattributed: view.unattributed ? unattributedModel(view.unattributed, alerts.reason, perDay) : null,
     bestWorstNote: marked ? null : view.bestWorst.reason,
-    bestWorstRule: marked ? bestWorstRuleText(view.bestWorst.eligible) : null,
+    bestWorstRule: marked ? bestWorstRuleText(view.bestWorst) : null,
     alertsNote: !alerts.checked ? alerts.reason : alerts.flagged === 0 ? ALL_CLEAR : null,
     alertsRule: alerts.checked ? alertsRuleText(alerts) : null,
     actions: view.actions.map((a) => ({ kind: a.kind, text: a.text, actionable: a.actionable })),

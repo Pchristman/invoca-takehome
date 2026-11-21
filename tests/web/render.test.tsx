@@ -489,7 +489,7 @@ describe('CampaignTable', () => {
       isBest: i === 0,
       isWorst: i === zeroBudget.rows.length - 1,
     }));
-    const html = table({ ...zeroBudget, rows, bestWorst: { eligible: 3, reason: null } });
+    const html = table({ ...zeroBudget, rows, bestWorst: { eligibleBest: 3, eligibleWorst: 3, reason: null } });
     expect(html).toContain('>Best</span>');
     expect(html).toContain('>Worst</span>');
     expect(count(html, 'badge-best')).toBe(1);
@@ -500,7 +500,7 @@ describe('CampaignTable', () => {
   it('shows the reason with its prefix when nothing is marked (hand-edited reason)', () => {
     const reason = 'Fewer than two campaigns had enough calls.';
     const rows = zeroBudget.rows.map((row) => ({ ...row, isBest: false, isWorst: false }));
-    const html = table({ ...zeroBudget, rows, bestWorst: { eligible: 0, reason } });
+    const html = table({ ...zeroBudget, rows, bestWorst: { eligibleBest: 0, eligibleWorst: 0, reason } });
     expect(html).toContain(`No best or worst marked: ${reason}`);
     expect(html).not.toContain('badge-');
   });
@@ -619,7 +619,7 @@ describe('campaign table and weekly chart details', () => {
   it('separates the Best and Worst badge from the name', () => {
     // Hand-edited copy of real data, as in the Best and Worst test above.
     const rows = real.rows.map((row, i) => ({ ...row, isBest: i === 0, isWorst: i === real.rows.length - 1 }));
-    const marked = { ...real, rows, bestWorst: { eligible: 3, reason: null } };
+    const marked = { ...real, rows, bestWorst: { eligibleBest: 3, eligibleWorst: 3, reason: null } };
     const html = renderToStaticMarkup(
       <CampaignTable model={campaignsModel(marked, DEFAULT_SORT)} sort={DEFAULT_SORT} onSort={noop} />,
     );

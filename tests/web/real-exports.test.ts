@@ -56,14 +56,14 @@ describe('shipped export', () => {
 describe('extended export', () => {
   const s = screens(extended);
 
-  it('plants exactly the four flags', () => {
+  it('flags exactly the two planted offices', () => {
     const found = s.locations.rows.flatMap((r) =>
       (['answer', 'booking'] as const)
         .filter((m) => r[`${m}Flag`].flagged)
         .map((m) => `${r.locationId} ${m} ${r[`${m}Flag`].direction}`),
     );
     expect(new Set(found)).toEqual(
-      new Set(['loc_02 booking worse', 'loc_04 booking better', 'loc_06 answer worse', 'loc_08 answer better']),
+      new Set(['loc_02 booking worse', 'loc_06 answer worse']),
     );
     const fromModel = s.locationsModel.rows.flatMap((r) => r.flags.map((f) => `${r.id} ${f.metric} ${f.direction}`));
     expect(new Set(fromModel)).toEqual(new Set(found));
