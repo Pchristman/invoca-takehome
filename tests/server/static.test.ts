@@ -37,6 +37,16 @@ describe('serving the built web app', () => {
     expect((await get(app, '/')).text).toBe('<html>app</html>');
   });
 
+  it('hashed assets are cached for good; the page, its fallback and every API reply are not', async () => {
+    const app = appWithWeb();
+    expect((await get(app, '/assets/app.js')).headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect((await get(app, '/')).headers.get('cache-control')).toBe('no-cache');
+    expect((await get(app, '/campaigns')).headers.get('cache-control')).toBe('no-cache');
+    expect((await get(app, '/api/meta')).headers.get('cache-control')).toBe('no-store');
+    expect((await get(app, '/api/nope')).headers.get('cache-control')).toBe('no-store');
+    expect((await get(app, '/api/meta', { headers: { Host: 'evil.example' } })).headers.get('cache-control')).toBe('no-store');
+  });
+
   it('a refreshed view path returns the app', async () => {
     const app = appWithWeb();
     expect((await get(app, '/campaigns')).text).toBe('<html>app</html>');

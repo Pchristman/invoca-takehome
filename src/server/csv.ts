@@ -3,9 +3,11 @@ import type { CallbackRow } from '../core/views/callbacks';
 type Cell = string | number | null;
 
 // Spreadsheets run a cell that starts with one of these as a formula.
-// A leading ' makes it plain text. It also shows on tracking numbers,
-// which start with +, so they appear as '+1... in the file.
+// A leading ' makes it plain text. A value that is only a phone number
+// (+, then digits, spaces, hyphens, parentheses) calls nothing, so a
+// tracking number is written as it is.
 const FORMULA_STARTS = ['=', '+', '-', '@', '\t', '\r'];
+const PHONE = /^\+[\d\s()-]+$/;
 
 export function csvCell(value: Cell): string {
   if (value === null) return '';
@@ -13,7 +15,7 @@ export function csvCell(value: Cell): string {
     if (!Number.isFinite(value)) throw new Error(`Cannot write ${value} to CSV`);
     return String(value);
   }
-  const safe = FORMULA_STARTS.some((c) => value.startsWith(c)) ? `'${value}` : value;
+  const safe = FORMULA_STARTS.some((c) => value.startsWith(c)) && !PHONE.test(value) ?`'${value}` : value;
   return /[,"\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
 

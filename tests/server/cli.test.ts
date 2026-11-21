@@ -82,4 +82,16 @@ describe('cli', () => {
     expect(await run('0.0.0.0')).toContain('Listening on a non-loopback address (0.0.0.0)');
     expect(await run('127.0.0.1')).not.toContain('non-loopback');
   }, 60_000);
+
+  // Windows has no catchable SIGTERM: child.kill() there ends the process outright.
+  it.skipIf(process.platform === 'win32')('SIGTERM closes the server and exits 0', async () => {
+    const code = await new Promise<number | null>((done) => {
+      const child = spawn(process.execPath, ['--import', TSX, CLI], { env: { ...process.env, DATA_DIR: SHIPPED, PORT: '3973' } });
+      child.stdout.on('data', (chunk) => {
+        if (String(chunk).includes('Serving')) child.kill('SIGTERM');
+      });
+      child.on('exit', (exitCode) => done(exitCode));
+    });
+    expect(code).toBe(0);
+  }, 30_000);
 });

@@ -24,12 +24,16 @@ export function serveWebApp(webRoot: string): MiddlewareHandler {
 
   return async (c) => {
     const served = await files(c, noop);
-    if (served) return served;
+    if (served) {
+      // Built assets have a content hash in their name, so they never change; everything else is checked on each load.
+      served.headers.set('Cache-Control', c.req.path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+      return served;
+    }
     // A path with a file extension is an asset: if it isn't there, say so rather than hide a broken build behind the app.
     if (extname(c.req.path) !== '') return c.text('Not found', 404);
     // Anything else is a view path; the URL holds the view state, so a refresh must return the app.
     try {
-      return c.html(readFileSync(indexPath, 'utf-8'));
+      return c.html(readFileSync(indexPath, 'utf-8'), 200, { 'Cache-Control': 'no-cache' });
     } catch {
       // The build was removed after startup.
       return c.text('Not found', 404);

@@ -17,6 +17,10 @@ async function main(): Promise<void> {
     let line = parts.join(', ');
     if (dataNotes.badRows > 0) line += `, ${dataNotes.badRows} rows skipped`;
     console.log([line, nonLoopbackWarning(server.host), ...server.notices, ...dataNotes.notes].filter(Boolean).join('\n'));
+    // Ctrl+C or `docker stop`: close the server, which closes the database, then exit.
+    const stop = () => void server.close().finally(() => process.exit());
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
   } catch (error) {
     if (error instanceof LoadError || error instanceof ConfigError) {
       console.error(`Cannot start: ${error.message}`);

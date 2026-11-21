@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Hono } from 'hono';
+import { onTestFinished } from 'vitest';
 import type { CallStore, CleanCall } from '../../src/core/types';
 import { callAt, campaign, makeStore, office } from '../core/views/fixtures';
 
@@ -58,8 +59,25 @@ export async function get(
   return { status: response.status, headers: response.headers, text, json };
 }
 
-/** A fresh folder under .cache/ (gitignored). The caller removes it. */
+/**
+ * A fresh folder under .cache/ (gitignored). Made inside a test (or its beforeEach), it is removed when that test
+ * finishes, after its afterEach hooks have closed any server or database using it. Made anywhere else, the caller removes it.
+ */
 export function tempDir(): string {
   mkdirSync('.cache', { recursive: true });
-  return mkdtempSync(join('.cache', 'server-test-'));
+  const dir = mkdtempSync(join('.cache', 'server-test-'));
+  try {
+    onTestFinished(() => removeTempDir(dir));
+  } catch {
+    // not inside a test: the caller removes it
+  }
+  return dir;
+}
+
+function removeTempDir(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+  } catch {
+    // A file still held open (Windows) must not fail the test that already passed; the folder is gitignored.
+  }
 }

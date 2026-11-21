@@ -28,7 +28,7 @@ export interface AppOptions {
   uploads?: UploadService;
   /** Builds the takeaway service for the store an upload produced. Omitted: the service stays as it was. */
   rebuildAi?: (store: CallStore) => TakeawayService;
-  /** Host names (no port) the upload routes accept besides localhost, 127.0.0.1 and [::1]: the address the server was told to bind. */
+  /** Host names (no port) the API accepts besides localhost, 127.0.0.1 and [::1]: the address the server was told to bind. */
   allowedHosts?: string[];
 }
 
@@ -105,23 +105,38 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
   };
 
   /**
-   * For the upload routes, on top of crossSite: a DNS-rebinding page is "same-origin" with 127.0.0.1 and a
-   * multipart POST needs no CORS check, so the Host must be one of ours and an Origin, when sent, must match the Host.
+   * Every API route: a DNS-rebinding page is "same-origin" with 127.0.0.1, so Sec-Fetch-Site alone cannot stop it
+   * reading the data or spending on AI. The Host it sends is its own name, so the Host must be one of ours.
    * A missing Host (the in-process tests; every real HTTP/1.1 client sends one) passes.
    */
+  // Answers come from the data as it is now (uploads change it), so no API response is cached.
+  app.use('/api/*', async (c, next) => {
+    await next();
+    c.header('Cache-Control', 'no-store');
+  });
+
   const allowedHosts = [...LOCAL_HOSTS, ...(options.allowedHosts ?? []).map((h) => h.toLowerCase())];
+  app.use('/api/*', async (c, next) => {
+    const host = c.req.header('Host');
+    if (host === undefined || allowedHosts.includes(hostName(host))) return next();
+    return errorResponse(c, { code: 'forbidden', message: 'Cross-site requests are not allowed.' });
+  });
+
+  /**
+   * For the upload routes, on top of crossSite and the Host check: a multipart POST needs no CORS check, so an Origin,
+   * when sent, must match the Host.
+   */
   const uploadGuard = (c: Context): Response | null => {
     const refused = crossSite(c);
     if (refused) return refused;
     const host = c.req.header('Host');
     const origin = c.req.header('Origin');
-    let ok = host === undefined || allowedHosts.includes(hostName(host));
-    if (ok && origin !== undefined) {
-      try {
-        ok = host !== undefined && new URL(origin).host.toLowerCase() === host.toLowerCase();
-      } catch {
-        ok = false;
-      }
+    if (origin === undefined) return null;
+    let ok: boolean;
+    try {
+      ok = host !== undefined && new URL(origin).host.toLowerCase() === host.toLowerCase();
+    } catch {
+      ok = false;
     }
     return ok ? null : errorResponse(c, { code: 'forbidden', message: 'Cross-site requests are not allowed.' });
   };

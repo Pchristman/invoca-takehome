@@ -53,6 +53,7 @@ describe('GET /api/question', () => {
     ['hour 24', { ...REPLY, hours: [24] }, `${PREFIX}That question names an hour that isn't an hour of the day.`],
     ['hour 9.5', { ...REPLY, hours: [9.5] }, `${PREFIX}That question names an hour that isn't an hour of the day.`],
     ['model-written date', { ...REPLY, range: { start: 'Revenue is $1M', end: '2026-09-02' } }, `${PREFIX}The dates in that question are not valid dates in this data.`],
+    ['empty filter', { ...REPLY, view: 'overview', offices: [], weekdays: [] }, `${PREFIX}That question doesn't narrow the calls or pick a view.`],
   ])('invalid values (%s) give invalid_filter and a checkPassed false log line', async (_name, reply, message) => {
     const app = createApp(serverFixture(), { ai: service(new FakeModel(jsonReply(reply))) });
     const r = await get(app, q('anything'));

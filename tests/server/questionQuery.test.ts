@@ -24,12 +24,21 @@ describe('replyToQuery', () => {
   });
 
   it('leaves out the range for null and passes a preset or a start and end', () => {
-    expect(ask({})).toEqual({ ok: true, value: 'view=overview' });
     expect(ask({ range: { preset: 'last7' } })).toEqual({ ok: true, value: 'view=overview&range=last7' });
     expect(ask({ range: { start: '2026-09-02', end: '2026-09-05' } })).toEqual({
       ok: true,
       value: 'view=overview&start=2026-09-02&end=2026-09-05',
     });
+  });
+
+  it('an empty filter (overview, nothing narrowed, range on screen) is rejected; a range or a view alone is a filter', () => {
+    expect(ask({})).toEqual({ ok: false, detail: "That question doesn't narrow the calls or pick a view." });
+    // "show missed calls last week": a view and a range only.
+    expect(ask({ view: 'missed-calls', range: { preset: 'last7' } })).toEqual({ ok: true, value: 'view=missed-calls&range=last7' });
+    expect(ask({ view: 'locations' })).toEqual({ ok: true, value: 'view=locations' });
+    expect(ask({ range: { preset: 'all' } })).toEqual({ ok: true, value: 'view=overview&range=all' });
+    expect(ask({ includeUnattributed: true })).toEqual({ ok: true, value: 'view=overview&f_unattributed=1' });
+    expect(ask({ hours: [9] })).toEqual({ ok: true, value: 'view=overview&f_hour=9' });
   });
 
   it('names that do not exist are rejected; a name is echoed only if the question itself contains it', () => {

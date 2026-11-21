@@ -2,7 +2,7 @@ import { checkDates, resolveRange } from '../core/ranges';
 import type { DateRange, RangeSpec, ResolvedRange } from '../core/ranges';
 import type { AnswerFilter } from '../core/answer';
 import type { CallStore } from '../core/types';
-import type { ViewName } from '../core/views';
+import { VIEW_NAMES } from '../core/views/facts';
 import { DEFAULT_PRESET, PRESETS, shorten } from './api';
 import type { ApiError } from './api';
 
@@ -137,18 +137,18 @@ export interface AnswerQuery {
   filter: AnswerFilter;
 }
 
-const ANSWER_VIEWS: ViewName[] = ['overview', 'campaigns', 'locations', 'missed-calls'];
+const ANSWER_VIEWS = VIEW_NAMES;
 
 function tooMany(field: string): { ok: false; error: ApiError } {
   return fail({ code: 'bad_param', field, message: `The parameter ${field} may have at most ${ANSWER_LIMITS.maxValues} values.` });
 }
 
-/** Whole numbers from min to max, de-duplicated with order kept, or the first bad value's message. */
+/** Whole numbers from min to max, de-duplicated with order kept, or the first bad value's message. An empty value counts as absent. */
 function parseInts(query: Query, field: string, min: number, max: number): Parsed<number[]> {
   const raw = query[field] ?? [];
   if (raw.length > ANSWER_LIMITS.maxValues) return tooMany(field);
   const numbers: number[] = [];
-  for (const text of raw) {
+  for (const text of raw.filter((t) => t !== '')) {
     const n = /^[0-9]+$/.test(text) ? Number(text) : NaN;
     if (!(n >= min && n <= max)) {
       return fail({ code: 'bad_param', field, message: `"${shorten(text)}" is not a whole number from ${min} to ${max}.` });

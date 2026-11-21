@@ -56,6 +56,12 @@ export function explainListenError(error: NodeJS.ErrnoException, port: number, h
   return error;
 }
 
+/** The bound address as a browser writes it in a Host header (no port): IPv6 in brackets, once, whether HOST had them or not. */
+export function allowedHostFor(host: string): string {
+  const bare = host.replace(/^\[|\]$/g, '');
+  return bare.includes(':') ? `[${bare}]` : bare;
+}
+
 /** True for 127.0.0.0/8 and ::1 (with or without brackets): the addresses only this machine can reach. */
 export function isLoopbackHost(host: string): boolean {
   const text = host.replace(/^\[|\]$/g, '');

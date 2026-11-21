@@ -1,8 +1,9 @@
 import { copyFileSync, rmSync, writeFileSync } from 'node:fs';
+import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LoadError } from '../../src/core/errors';
-import { ConfigError, explainListenError, isLoopbackHost, nonLoopbackWarning, parseHost, parsePort } from '../../src/server/config';
+import { allowedHostFor, ConfigError, explainListenError, isLoopbackHost, nonLoopbackWarning, parseHost, parsePort } from '../../src/server/config';
 import { start } from '../../src/server/start';
 import type { RunningServer } from '../../src/server/start';
 import { loadDotEnv } from '../../src/node/env';
@@ -189,6 +190,13 @@ describe('HOST', () => {
 });
 
 describe('non-loopback warning, IPv6 url and listen errors', () => {
+  it('allowedHostFor: the bound address as a Host header names it; IPv6 gets brackets once, bracketed or not', () => {
+    expect(allowedHostFor('[fe80::1]')).toBe('[fe80::1]');
+    expect(allowedHostFor('fe80::1')).toBe('[fe80::1]');
+    expect(allowedHostFor('192.168.1.5')).toBe('192.168.1.5');
+    expect(allowedHostFor('calls.lan')).toBe('calls.lan');
+  });
+
   it('isLoopbackHost: 127.0.0.0/8 and ::1 only', () => {
     for (const h of ['127.0.0.1', '127.1.2.3', '::1', '[::1]']) expect(isLoopbackHost(h)).toBe(true);
     for (const h of ['0.0.0.0', '::', '192.168.1.5', '10.0.0.2', 'my-machine']) expect(isLoopbackHost(h)).toBe(false);
@@ -201,13 +209,9 @@ describe('non-loopback warning, IPv6 url and listen errors', () => {
     );
   });
 
-  it('an IPv6 loopback host gets a bracketed url', async () => {
-    let server: RunningServer;
-    try {
-      server = await startServer(SHIPPED, 0, '::1');
-    } catch {
-      return; // no IPv6 on this machine
-    }
+  const hasIpv6Loopback = Object.values(networkInterfaces()).some((list) => list?.some((i) => i.address === '::1'));
+  it.skipIf(!hasIpv6Loopback)('an IPv6 loopback host gets a bracketed url', async () => {
+    const server = await startServer(SHIPPED, 0, '::1');
     expect(server.url).toBe(`http://[::1]:${server.port}`);
   });
 

@@ -188,7 +188,7 @@ describe('callbacks CSV', () => {
     const spring = lines.find((l) => l.startsWith('h1,'))!;
     expect(spring).toContain(`"'=HYPERLINK(""x"")"`);
     expect(spring).toContain('"Spring, ""Big"" Sale"');
-    expect(spring).toContain("'+1-555-0190");
+    expect(spring).toContain(',+1-555-0190,');
     expect(lines.find((l) => l.startsWith('h2,'))).toContain(',Café 東京,');
   });
 

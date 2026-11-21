@@ -57,11 +57,22 @@ function fixedDetail(error: { code: string; field?: string }): string {
 }
 
 /**
+ * A reply that changes nothing about the page: the default view, no list narrowed, unattributed calls not asked
+ * for and the range on screen kept. Showing it would present the plain overview as the answer, so it is rejected.
+ * A range alone or a view alone is a real answer ("show missed calls last week"), so either one counts.
+ */
+function isEmptyFilter(reply: FilterReply): boolean {
+  return reply.view === 'overview' && reply.range === null && !reply.includeUnattributed
+    && reply.offices.length === 0 && reply.campaigns.length === 0 && reply.weekdays.length === 0 && reply.hours.length === 0;
+}
+
+/**
  * A model reply as the same query string the URL uses. Names become ids, weekday words become numbers
  * (monday is 0), and the result goes through parseAnswerQuery, so nothing the model said is trusted.
  * `question` is the person's own text: it decides which names may be quoted back.
  */
 export function replyToQuery(store: CallStore, span: DateRange | null, reply: FilterReply, question: string): Result {
+  if (isEmptyFilter(reply)) return { ok: false, detail: "That question doesn't narrow the calls or pick a view." };
   const offices = idsFor(store.locations, reply.offices, 'office', question);
   if (!offices.ok) return offices;
   const campaigns = idsFor(store.campaigns, reply.campaigns, 'campaign', question);

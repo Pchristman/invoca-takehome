@@ -285,3 +285,25 @@ describe('an unexpected error', () => {
     expect((await get(fragileApp, '/api/campaigns')).status).toBe(200);
   });
 });
+
+describe('the Host check (DNS rebinding) on every API route', () => {
+  const paths = ['/api/meta', '/api/overview', '/api/takeaway/overview', '/api/question?q=how%20many', '/api/missed-calls/callbacks.csv'];
+
+  it.each(paths)('%s refuses a foreign Host', async (path) => {
+    const r = await get(app, path, { headers: { Host: 'evil.example:3000' } });
+    expect(r.status).toBe(403);
+    expect(body(r.json).error.code).toBe('forbidden');
+  });
+
+  it.each(paths)('%s accepts a local Host and no Host', async (path) => {
+    for (const headers of [{ Host: 'localhost:3000' }, { Host: '127.0.0.1:3000' }, { Host: '[::1]:3000' }, {}] as Record<string, string>[]) {
+      expect((await get(app, path, { headers })).status).not.toBe(403);
+    }
+  });
+
+  it('accepts the host the server was told to bind', async () => {
+    const lan = createApp(store, { allowedHosts: ['calls.lan'] });
+    expect((await get(lan, '/api/overview', { headers: { Host: 'calls.lan:3000' } })).status).toBe(200);
+    expect((await get(lan, '/api/overview', { headers: { Host: 'other.lan:3000' } })).status).toBe(403);
+  });
+});

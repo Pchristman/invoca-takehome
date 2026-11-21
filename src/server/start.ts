@@ -6,7 +6,7 @@ import { createUploadService } from '../db/upload/service';
 import { createAiFromEnv, knownNamesFrom, snapshotId } from '../ai/fromEnv';
 import type { TakeawayService } from '../ai/service';
 import { createApp } from './app';
-import { explainListenError, parseDbPath, parseHost, parsePort } from './config';
+import { allowedHostFor, explainListenError, parseDbPath, parseHost, parsePort } from './config';
 
 export interface StartOptions {
   /** The export folder. Omitted: DATA_DIR, else the current directory (see readExportFromDir). */
@@ -56,7 +56,7 @@ export async function start(options: StartOptions = {}): Promise<RunningServer> 
       ai,
       uploads: createUploadService(database),
       rebuildAi: options.ai ? undefined : (rebuilt) => ai.withData(knownNamesFrom(rebuilt), snapshotId(rebuilt)),
-      allowedHosts: [requestedHost.replace(/^[|]$/g, '')].map((h) => (h.includes(':') ? `[${h}]` : h)),
+      allowedHosts: [allowedHostFor(requestedHost)],
     });
     server = serve({ fetch: app.fetch, port: requested, hostname: requestedHost });
     await new Promise<void>((resolve, reject) => {

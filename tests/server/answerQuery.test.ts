@@ -48,7 +48,6 @@ describe('parseAnswerQuery', () => {
     ['f_weekday=1.5', { f_weekday: ['1.5'] }, 'bad_param', 'f_weekday'],
     ['f_weekday=abc', { f_weekday: ['abc'] }, 'bad_param', 'f_weekday'],
     ['f_hour=24', { f_hour: ['24'] }, 'bad_param', 'f_hour'],
-    ['f_hour= (empty)', { f_hour: [''] }, 'bad_param', 'f_hour'],
     ['f_unattributed=yes', { f_unattributed: ['yes'] }, 'bad_param', 'f_unattributed'],
     ['view=nope', { view: ['nope'] }, 'unknown_view', 'view'],
     ['51 hours', { f_hour: Array.from({ length: 51 }, () => '1') }, 'bad_param', 'f_hour'],
@@ -57,6 +56,12 @@ describe('parseAnswerQuery', () => {
     const error = failure(query as unknown as Query);
     expect(error.code).toBe(code);
     expect(error.field).toBe(field);
+  });
+
+  it('an empty f_weekday or f_hour counts as absent, like an empty f_office', () => {
+    const r = parse({ f_weekday: [''], f_hour: ['', '9'], f_office: [''] });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.filter).toMatchObject({ weekdays: [], hours: [9], officeIds: [] });
   });
 
   it('a repeated view is a bad_param on view, like a repeated range', () => {

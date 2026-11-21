@@ -88,9 +88,9 @@ export function statusFor(code: ApiErrorCode): 400 | 403 | 404 | 409 | 413 | 500
   return 400;
 }
 
-/** Keep text that came from a URL short in a message: over 40 characters, the first 40 plus "...". Same rule as checkDates. */
-export function shorten(text: string): string {
-  return text.length > 40 ? `${text.slice(0, 40)}...` : text;
+/** Cut text to `max` characters plus "...", so a long value from a URL or a file cannot flood a message. 40 is the rule checkDates uses. */
+export function shorten(text: string, max = 40): string {
+  return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
 /** The body of POST /api/upload/preview. */

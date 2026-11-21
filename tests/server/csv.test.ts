@@ -23,13 +23,18 @@ describe('csvCell', () => {
 
   it.each([
     ['=SUM(A1)', "'=SUM(A1)"],
-    ['+1-555-0190', "'+1-555-0190"],
+    ['+1+cmd', "'+1+cmd"],
+    ['+SUM(A1)', "'+SUM(A1)"],
     ['-2+3', "'-2+3"],
     ['@cmd', "'@cmd"],
     ['\tx', "'\tx"],
     ['\rx', "\"'\rx\""],
   ])('neutralises %j', (input, expected) => {
     expect(csvCell(input)).toBe(expected);
+  });
+
+  it.each(['+1-555-0190', '+1 (555) 019-0190', '+44 20 7946 0958'])('writes the phone number %j as it is', (phone) => {
+    expect(csvCell(phone)).toBe(phone);
   });
 
   it('leaves later formula characters alone', () => {
@@ -81,7 +86,7 @@ describe('callbacksToCsv', () => {
 
   it('writes one row per callback', () => {
     expect(callbacksToCsv([row(20)])).toBe(
-      `${header}\r\nh_1,3,2026-09-10 09:00,Office A,"Spring, ""Big"" Sale",'+1-555-0190,20.00\r\n`,
+      `${header}\r\nh_1,3,2026-09-10 09:00,Office A,"Spring, ""Big"" Sale",+1-555-0190,20.00\r\n`,
     );
   });
   it('writes the value with two decimals', () => {
