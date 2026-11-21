@@ -3,11 +3,12 @@
 // Run by hand: npm run ai:try -- all   or   npm run ai:try -- --question "..."
 // (a second run is the cache-hit check). Never run by a test.
 import { createAiFromEnv } from '../src/ai/fromEnv';
-import { cleanExport } from '../src/core/clean';
 import { dataSpan } from '../src/core/ranges';
+import { holdsNothing } from '../src/db/database';
+import { loadStore } from '../src/db/prepare';
 import { loadDotEnv } from '../src/node/env';
-import { readExportFromDir } from '../src/node/readDataDir';
 import { createApp } from '../src/server/app';
+import { parseDbPath } from '../src/server/config';
 import { questionContext, replyToQuery } from '../src/server/questionQuery';
 import { formatQuestionResult, formatTryResult, parseTryArgs } from './tryArgs';
 
@@ -26,7 +27,12 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const store = cleanExport(readExportFromDir());
+  // The database the server reads; with none yet, the data folder in memory, so no file is created.
+  const dbPath = parseDbPath(process.env.DB_PATH);
+  const fromFile = !holdsNothing(dbPath);
+  const { store, database } = loadStore({ dbPath: fromFile ? dbPath : ':memory:', dataDir: process.env.DATA_DIR });
+  database.close();
+  console.log(fromFile ? `Reading ${dbPath}.` : `Reading the CSVs in the data folder (no database at ${dbPath} yet).`);
   const ai = createAiFromEnv(store, process.env);
   const span = dataSpan(store.calls);
   if (args.questions.length > 0) {
@@ -44,7 +50,7 @@ async function main(): Promise<void> {
       console.log(formatQuestionResult(i + 1, outcome, cost));
       if (!result.ok && result.reason !== 'unanswerable') process.exitCode = 1;
     }
-    console.log(`  spend so far: ${ai.status().spendUsd.toFixed(6)}`);
+    console.log(`  spend so far: $${ai.status().spendUsd.toFixed(6)}`);
     return;
   }
   const app = createApp(store, { ai });

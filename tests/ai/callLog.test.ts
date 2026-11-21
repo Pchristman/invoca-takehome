@@ -78,6 +78,15 @@ describe('call log', () => {
     expect(summary.skippedLines).toBe(5);
   });
 
+  it('a line appended after a torn last line is still counted', () => {
+    mkdirSync(join(dir, 'logs'), { recursive: true });
+    appendFileSync(path, JSON.stringify(line()).slice(0, 30)); // a crash mid-write: no newline at the end
+    appendLogLine(path, line());
+    const summary = loadLog(path);
+    expect(summary.spendNanoUsd).toBe(300000);
+    expect(summary.skippedLines).toBe(1);
+  });
+
   it('an unreadable log is not zero spend', () => {
     mkdirSync(path, { recursive: true }); // the log path is a directory
     expect(() => loadLog(path)).toThrow(LogUnavailableError);

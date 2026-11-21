@@ -2,17 +2,19 @@
 // names, weekday words and hours. It never sees calls and never writes text the user reads; code validates
 // every value afterwards.
 
+import { VIEW_NAMES } from '../core/views/facts';
+import { PRESETS } from '../server/api';
+import type { Prompt } from './types';
+
 export const QUESTION_PROMPT_VERSION = '1'; // bump on any change to the prompt text or the schema
 
-const MAX_NAME_CHARS = 80; // names are cut in the prompt only, never in the data
+const MAX_NAME_CHARS = 80; // names are cut in prompts only, never in the data
 
-export const VIEWS = ['overview', 'campaigns', 'locations', 'missed-calls'] as const;
 export const WEEKDAY_WORDS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
-export const PRESETS = ['last7', 'last28', 'all'] as const;
 
 export interface FilterReply {
   answerable: boolean;
-  view: (typeof VIEWS)[number];
+  view: (typeof VIEW_NAMES)[number];
   offices: string[];
   campaigns: string[];
   includeUnattributed: boolean;
@@ -32,7 +34,7 @@ export const FILTER_SCHEMA = {
   type: 'object',
   properties: {
     answerable: { type: 'boolean' },
-    view: { type: 'string', enum: [...VIEWS] },
+    view: { type: 'string', enum: [...VIEW_NAMES] },
     offices: { type: 'array', items: { type: 'string' } },
     campaigns: { type: 'array', items: { type: 'string' } },
     includeUnattributed: { type: 'boolean' },
@@ -73,11 +75,12 @@ const SYSTEM_LINES = [
   'Leave a list empty when the question does not restrict it.',
 ];
 
+/** A name as a prompt shows it: cut to MAX_NAME_CHARS. The takeaway and question prompts both use it. */
 export function cutName(text: string): string {
   return text.length > MAX_NAME_CHARS ? text.slice(0, MAX_NAME_CHARS) : text;
 }
 
-export function buildQuestionPrompt(question: string, context: QuestionContext): { system: string; user: string } {
+export function buildQuestionPrompt(question: string, context: QuestionContext): Prompt {
   const system = SYSTEM_LINES.join('\n');
   const user = JSON.stringify({
     question,
@@ -88,7 +91,7 @@ export function buildQuestionPrompt(question: string, context: QuestionContext):
       campaigns: context.campaigns.map(cutName),
     },
   }, null, 2);
-  return { system, user };
+  return { system, user, schema: FILTER_SCHEMA };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -121,7 +124,7 @@ export function parseFilterReply(raw: string): FilterReply | null {
   if (!isRecord(data)) return null;
   if (!hasKeys(data, ['answerable', 'view', 'offices', 'campaigns', 'includeUnattributed', 'weekdays', 'hours', 'range'])) return null;
   if (typeof data.answerable !== 'boolean' || typeof data.includeUnattributed !== 'boolean') return null;
-  if (!isOneOf(VIEWS, data.view)) return null;
+  if (!isOneOf(VIEW_NAMES, data.view)) return null;
   if (!isStrings(data.offices) || !isStrings(data.campaigns)) return null;
   if (!Array.isArray(data.weekdays) || !data.weekdays.every((w) => isOneOf(WEEKDAY_WORDS, w))) return null;
   if (!Array.isArray(data.hours) || !data.hours.every((h) => typeof h === 'number' && Number.isFinite(h))) return null;

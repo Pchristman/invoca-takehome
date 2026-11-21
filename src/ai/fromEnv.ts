@@ -23,8 +23,10 @@ export function parseSpendLimit(value: string | undefined): number {
 }
 
 /**
- * Identifies the data a takeaway was written for: a hash of each call's id, outcome, revenue and
- * localized date. The store keeps calls in file order, which is stable, so the order is part of the hash.
+ * Identifies the data a takeaway or a question reply was written for: a hash of each call's id, outcome,
+ * revenue and localized date, and of every campaign and location (the question prompt lists their names, and
+ * budgets and time zones change the numbers). A reference-only upload therefore changes the id too.
+ * The store keeps rows in file order, which is stable, so the order is part of the hash.
  */
 export function snapshotId(store: CallStore): string {
   const hash = createHash('sha256');
@@ -32,6 +34,9 @@ export function snapshotId(store: CallStore): string {
     hash.update(JSON.stringify([call.callId, call.outcome, call.revenueUsd, call.localDate]));
     hash.update('\n');
   }
+  // Each section is tagged, so a row can never be read as one from another section.
+  for (const c of store.campaigns) hash.update(`campaign ${JSON.stringify([c.id, c.name, c.channel, c.dailyBudgetUsd])}\n`);
+  for (const l of store.locations) hash.update(`location ${JSON.stringify([l.id, l.name, l.timezone])}\n`);
   return hash.digest('hex');
 }
 

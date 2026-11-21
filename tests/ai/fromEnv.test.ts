@@ -50,6 +50,19 @@ describe('snapshotId', () => {
     expect(snapshotId(store([call('a', { localDate: '2025-01-02' }), call('b')]))).not.toBe(base);
     expect(snapshotId(store([call('a'), call('b'), call('c')]))).not.toBe(base);
   });
+  it('changes when only the campaigns or locations change (a reference-only upload), since the question prompt lists their names', () => {
+    const base = snapshotId(store());
+    const withCampaigns = (campaigns: CallStore['campaigns']) => snapshotId({ ...store(), campaigns });
+    const withLocations = (locations: CallStore['locations']) => snapshotId({ ...store(), locations });
+    const camp = store().campaigns[0]!;
+    const loc = store().locations[0]!;
+    expect(withCampaigns([{ ...camp, name: 'Alpha Renamed' }])).not.toBe(base);
+    expect(withCampaigns([camp, { ...camp, id: 'c2', name: 'Beta Camp' }])).not.toBe(base);
+    expect(withCampaigns([{ ...camp, dailyBudgetUsd: 20 }])).not.toBe(base);
+    expect(withLocations([{ ...loc, name: 'South Office' }])).not.toBe(base);
+    expect(withLocations([{ ...loc, timezone: 'America/New_York' }])).not.toBe(base);
+    expect(withCampaigns([{ ...camp }])).toBe(base);
+  });
   it('does not confuse a null outcome with the text "null"-free neighbours', () => {
     expect(snapshotId(store([call('a', { outcome: null })]))).not.toBe(snapshotId(store([call('a', { outcome: 'missed' })])));
   });

@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MODEL_ID, worstCaseNanoUsd } from '../../src/ai/pricing';
-import { buildQuestionPrompt, type FilterReply, type QuestionContext } from '../../src/ai/question';
+import { buildQuestionPrompt, FILTER_SCHEMA, type FilterReply, type QuestionContext } from '../../src/ai/question';
 import { createTakeawayService, offService, type ServiceOptions } from '../../src/ai/service';
 import { ModelError } from '../../src/ai/types';
 import { CHANNELS } from '../../src/core/types';
@@ -68,6 +68,12 @@ describe('interpret', () => {
     const raw = readFileSync(paths().logPath, 'utf8');
     expect(raw).not.toContain('Fridays');
     expect(raw).not.toContain('Alpha Office');
+  });
+
+  it('asks the model for the filter shape, not the takeaway shape', async () => {
+    const model = new FakeModel(jsonReply(REPLY));
+    await make(model).interpret(QUESTION, CONTEXT, accept);
+    expect(model.requests[0]!.schema).toBe(FILTER_SCHEMA);
   });
 
   it('a repeat, also in other case and spacing, is a cache hit that is validated again', async () => {
@@ -230,17 +236,31 @@ describe('interpret', () => {
       });
     }
 
-    it('a timeout and an API error are not remembered', async () => {
+    it('a timeout is remembered for the session; an API error is not', async () => {
       const timeout = new FakeModel(new ModelError('timeout', 'x'));
       const a = make(timeout);
       expect(await a.interpret(QUESTION, CONTEXT, accept)).toMatchObject({ reason: 'timeout' });
-      await a.interpret(QUESTION, CONTEXT, accept);
-      expect(timeout.calls).toBe(2);
+      expect(await a.interpret(QUESTION, CONTEXT, accept)).toMatchObject({ reason: 'timeout' });
+      expect(timeout.calls).toBe(1);
       const failing = new FakeModel(new ModelError('api_error', 'x'));
       const b = make(failing);
       expect(await b.interpret(QUESTION, CONTEXT, accept)).toMatchObject({ reason: 'api_error' });
       await b.interpret(QUESTION, CONTEXT, accept);
       expect(failing.calls).toBe(2);
+    });
+
+    it('a reply cut off at max_tokens is malformed to the user and logged as truncated with its paid usage', async () => {
+      const model = new FakeModel({ kind: 'truncated', usage: paid });
+      const service = make(model);
+      expect(await service.interpret(QUESTION, CONTEXT, accept)).toEqual({ ok: false, reason: 'malformed', detail: null });
+      expect(await service.interpret(QUESTION, CONTEXT, accept)).toMatchObject({ reason: 'malformed' });
+      expect(model.calls).toBe(1);
+      expect(logLines()[0]).toMatchObject({ purpose: 'question', failure: 'truncated', checkPassed: false, costUsd: 0.0003 });
+    });
+
+    it('a timeout is logged at the worst case reserved for it', async () => {
+      await make(new FakeModel(new ModelError('timeout', 'x'))).interpret(QUESTION, CONTEXT, accept);
+      expect(logLines()[0]).toMatchObject({ failure: 'timeout', inputTokens: 0, outputTokens: 0, costUsd: worstQuestion(QUESTION) / 1e9 });
     });
   });
 

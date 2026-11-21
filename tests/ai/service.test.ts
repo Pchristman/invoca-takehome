@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildPrompt } from '../../src/ai/prompt';
+import { buildPrompt, REPLY_SCHEMA } from '../../src/ai/prompt';
 import { worstCaseNanoUsd, MODEL_ID } from '../../src/ai/pricing';
 import { createTakeawayService, offService, type ServiceOptions } from '../../src/ai/service';
 import { ModelError } from '../../src/ai/types';
@@ -64,6 +64,12 @@ describe('takeaway service', () => {
     expect(() => readFileSync(paths().logPath)).toThrow();
   });
 
+  it('asks the model for the takeaway shape', async () => {
+    const model = new FakeModel(textReply(GOOD));
+    await make(model).takeaway(sheet(), TEMPLATE);
+    expect(model.requests[0]!.schema).toBe(REPLY_SCHEMA);
+  });
+
   it('a good reply is filled and logged', async () => {
     const model = new FakeModel(textReply(GOOD));
     const result = await make(model).takeaway(sheet(), TEMPLATE);
@@ -111,6 +117,7 @@ describe('takeaway service', () => {
       ['malformed JSON', rawText('not json'), 'malformed', 'malformed', false],
       ['cut-off JSON', rawText('{"takeaway":"Move bud'), 'malformed', 'malformed', false],
       ['wrong JSON shape', rawText('{"text":"x"}'), 'malformed', 'malformed', false],
+      ['cut off at max_tokens', { kind: 'truncated', usage: { inputTokens: 1500, outputTokens: 300 } }, 'malformed', 'truncated', false],
       ['refusal', { kind: 'refusal', usage: { inputTokens: 1500, outputTokens: 300 } }, 'refusal', 'refusal', null],
     ];
     for (const [name, step, reason, failure, checkPassed] of cases) {
@@ -118,8 +125,11 @@ describe('takeaway service', () => {
         const result = await make(new FakeModel(step)).takeaway(sheet(), TEMPLATE);
         expect(result).toEqual({ text: TEMPLATE, source: 'template', reason });
         const lines = logLines();
-        expect(lines).toHaveLength(1);
-        expect(lines[0]).toMatchObject({ failure, checkPassed, cached: false, inputTokens: 1500, outputTokens: 300, costUsd: 0.0003 });
+        // A checker rejection is retried once (the fake repeats its reply); every other failure is not.
+        expect(lines).toHaveLength(reason === 'check_failed' ? 2 : 1);
+        for (const line of lines) {
+          expect(line).toMatchObject({ failure, checkPassed, cached: false, inputTokens: 1500, outputTokens: 300, costUsd: 0.0003 });
+        }
       });
     }
 
@@ -128,7 +138,8 @@ describe('takeaway service', () => {
       const result = await make(model, { timeoutMs: 20 }).takeaway(sheet(), TEMPLATE);
       expect(result).toEqual({ text: TEMPLATE, source: 'template', reason: 'timeout' });
       expect(model.sawAbort).toBe(true);
-      expect(logLines()[0]).toMatchObject({ failure: 'timeout', checkPassed: null, inputTokens: 0, outputTokens: 0, costUsd: 0 });
+      // An aborted request may still be billed, so a timeout is logged at the worst case that was reserved for it.
+      expect(logLines()[0]).toMatchObject({ failure: 'timeout', checkPassed: null, inputTokens: 0, outputTokens: 0, costUsd: worst(sheet()) / 1e9 });
     });
 
     it('API error', async () => {
@@ -215,16 +226,96 @@ describe('takeaway service', () => {
     await service.takeaway(sheet(), TEMPLATE);
     const again = await service.takeaway(sheet(), TEMPLATE);
     expect(again.reason).toBe('check_failed');
-    expect(model.calls).toBe(1);
-    expect(logLines()).toHaveLength(1);
+    expect(model.calls).toBe(2); // the first call and its one retry
+    expect(logLines()).toHaveLength(2);
 
     const fresh = new FakeModel(bad);
     await make(fresh).takeaway(sheet(), TEMPLATE);
-    expect(fresh.calls).toBe(1);
+    expect(fresh.calls).toBe(2);
   });
 
-  it('a timeout is not remembered', async () => {
+  describe('a takeaway the checker rejects is retried once with the reason', () => {
+    const FIRST = textReply('Call those callers back first.');
+    const DETAIL = 'The text contains the number word "first"';
+
+    it('reject then pass: the retry is shown, both calls are logged', async () => {
+      const model = new FakeModel(FIRST, textReply(GOOD));
+      const result = await make(model).takeaway(sheet(), TEMPLATE);
+      expect(result).toEqual({ text: filled(sheet()), source: 'ai', reason: null });
+      expect(model.calls).toBe(2);
+      const lines = logLines();
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toMatchObject({ checkPassed: false, failure: 'number_word', costUsd: 0.0003 });
+      expect(lines[1]).toMatchObject({ checkPassed: true, failure: null, costUsd: 0.0003 });
+    });
+
+    it('the retry prompt carries the checker detail; the first does not; nothing else changes', async () => {
+      const model = new FakeModel(FIRST, textReply(GOOD));
+      await make(model).takeaway(sheet(), TEMPLATE);
+      const [first, retry] = model.requests;
+      expect(first!.system).not.toContain(DETAIL);
+      expect(retry!.system).toBe(`${first!.system}\nYour last answer was rejected: ${DETAIL}. Write the takeaway again without that.`);
+      expect(retry!.user).toBe(first!.user);
+      expect(retry!.schema).toBe(REPLY_SCHEMA);
+    });
+
+    it('reject then reject: template check_failed, remembered, no third call', async () => {
+      const model = new FakeModel(FIRST, textReply('Move 5 now.'), textReply(GOOD));
+      const service = make(model);
+      expect(await service.takeaway(sheet(), TEMPLATE)).toEqual({ text: TEMPLATE, source: 'template', reason: 'check_failed' });
+      expect(model.calls).toBe(2);
+      expect(await service.takeaway(sheet(), TEMPLATE)).toMatchObject({ reason: 'check_failed' });
+      expect(model.calls).toBe(2);
+      expect(logLines().map((l) => l.checkPassed)).toEqual([false, false]);
+    });
+
+    it('no retry when it could pass the spend limit', async () => {
+      const model = new FakeModel(FIRST, textReply(GOOD));
+      // Room for the first call's worst case only: the retry's check counts that reservation and the retry's own worst case.
+      const result = await make(model, { limitUsd: worst(sheet()) / 1e9 }).takeaway(sheet(), TEMPLATE);
+      expect(result).toEqual({ text: TEMPLATE, source: 'template', reason: 'check_failed' });
+      expect(model.calls).toBe(1);
+      expect(logLines()).toHaveLength(1);
+    });
+
+    it.each([
+      ['malformed', { kind: 'text', text: 'not json', usage: { inputTokens: 1500, outputTokens: 300 } } as Step, {}, 'malformed'],
+      ['timeout', 'hang' as Step, { timeoutMs: 20 }, 'timeout'],
+    ])('no retry after %s', async (_name, step, extra, reason) => {
+      const model = new FakeModel(step, textReply(GOOD));
+      const result = await make(model, extra).takeaway(sheet(), TEMPLATE);
+      expect(result.reason).toBe(reason);
+      expect(model.calls).toBe(1);
+    });
+
+    it('two simultaneous requests share the one flow, retry included', async () => {
+      const model = new FakeModel(FIRST, textReply(GOOD));
+      let open!: () => void;
+      model.gate = new Promise<void>((resolve) => { open = resolve; });
+      const service = make(model);
+      const a = service.takeaway(sheet(), TEMPLATE);
+      const b = service.takeaway(sheet(), TEMPLATE);
+      open();
+      const results = await Promise.all([a, b]);
+      expect(results[0]).toEqual(results[1]);
+      expect(results[0]!.source).toBe('ai');
+      expect(model.calls).toBe(2);
+    });
+  });
+
+  it('a timeout is remembered: the same takeaway is not sent again this session, another one still is', async () => {
     const model = new FakeModel(new ModelError('timeout', 'x'));
+    const service = make(model);
+    await service.takeaway(sheet(), TEMPLATE);
+    expect(await service.takeaway(sheet(), TEMPLATE)).toEqual({ text: TEMPLATE, source: 'template', reason: 'timeout' });
+    expect(model.calls).toBe(1);
+    expect(logLines()).toHaveLength(1);
+    await service.takeaway(sheet(2), TEMPLATE);
+    expect(model.calls).toBe(2);
+  });
+
+  it('an API error is not remembered', async () => {
+    const model = new FakeModel(new ModelError('api_error', 'x'));
     const service = make(model);
     await service.takeaway(sheet(), TEMPLATE);
     await service.takeaway(sheet(), TEMPLATE);
@@ -317,7 +408,7 @@ describe('takeaway service', () => {
   describe('the reservation is released after every kind of failure', () => {
     const oneMoreCall = (spentNano: number) => (spentNano + worst(sheet(1))) / 1e9;
     const cases: Array<[string, Step, number, Partial<ServiceOptions>]> = [
-      ['a timeout', 'hang', 0, { timeoutMs: 20 }],
+      ['a timeout', 'hang', worst(sheet(1)), { timeoutMs: 20 }],
       ['an API error', new ModelError('api_error', 'x'), 0, {}],
       ['a refusal', { kind: 'refusal', usage: { inputTokens: 1500, outputTokens: 300 } }, 300000, {}],
       ['a failed check', textReply('Move 5 now.'), 300000, {}],
@@ -427,9 +518,9 @@ describe('takeaway service', () => {
       await first.takeaway(sheet(), TEMPLATE); // cache hit
       await first.takeaway(sheet(3), TEMPLATE); // spends again, same reply passes
       const bad = make(new FakeModel(textReply('Move 5.')));
-      await bad.takeaway(sheet(4), TEMPLATE); // checker failure
+      await bad.takeaway(sheet(4), TEMPLATE); // checker failure, then its retry fails too
       const restarted = make(new FakeModel(textReply(GOOD))).status();
-      expect(restarted).toEqual({ status: 'on', spendUsd: 0.0009, cacheHits: 1, checkerFailures: 1 });
+      expect(restarted).toEqual({ status: 'on', spendUsd: 0.0012, cacheHits: 1, checkerFailures: 2 });
     });
   });
 
@@ -529,5 +620,22 @@ describe('a service rebuilt for new data shares the spend ledger', () => {
 
   it('the off service rebuilds to itself', () => {
     expect(offService().withData(known, 'x').status().status).toBe('off');
+  });
+});
+
+describe('the cache across a rebuild for new data', () => {
+  it('is one cache: a call still running in the old service does not overwrite what the new one saved', async () => {
+    const model = new FakeModel(textReply(GOOD));
+    let open!: () => void;
+    model.gate = new Promise<void>((resolve) => { open = resolve; });
+    const old = make(model);
+    const running = old.takeaway(sheet(1), TEMPLATE);
+    const rebuilt = old.withData({ campaigns: ['Alpha'], offices: ['Office A'], channels: CHANNELS }, 'snap2');
+    const second = rebuilt.takeaway(sheet(2), TEMPLATE);
+    open();
+    await Promise.all([running, second]);
+    expect(Object.keys(JSON.parse(readFileSync(paths().cachePath, 'utf8')))).toHaveLength(2);
+    expect((await rebuilt.takeaway(sheet(2), TEMPLATE)).source).toBe('ai');
+    expect(model.calls).toBe(2);
   });
 });

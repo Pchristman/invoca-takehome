@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createAnthropicModel, newAnthropicClient } from '../../src/ai/anthropicModel';
 import { MODEL_ID } from '../../src/ai/pricing';
 import { REPLY_SCHEMA } from '../../src/ai/prompt';
+import { FILTER_SCHEMA } from '../../src/ai/question';
 import { ModelError } from '../../src/ai/types';
 
 type Params = Record<string, unknown>;
@@ -25,7 +26,9 @@ function throwingClient(error: unknown) {
 }
 
 const usage = { input_tokens: 10, output_tokens: 5 };
-const request = () => ({ system: 'sys', user: 'usr', maxOutputTokens: 300, signal: new AbortController().signal });
+const request = () => ({
+  system: 'sys', user: 'usr', schema: REPLY_SCHEMA, maxOutputTokens: 300, signal: new AbortController().signal,
+});
 
 describe('anthropicModel', () => {
   it('maps a text reply', async () => {
@@ -46,12 +49,12 @@ describe('anthropicModel', () => {
     });
   });
 
-  it('returns the cut-off text for max_tokens so the parser calls it malformed', async () => {
+  it('reports a max_tokens stop as truncated, keeping the usage and never the cut-off text', async () => {
     const { client } = stubClient({
       stop_reason: 'max_tokens', content: [{ type: 'text', text: '{"takeaw' }], usage,
     });
     expect(await createAnthropicModel(client).generate(request())).toEqual({
-      kind: 'text', text: '{"takeaw', usage: { inputTokens: 10, outputTokens: 5 },
+      kind: 'truncated', usage: { inputTokens: 10, outputTokens: 5 },
     });
   });
 
@@ -78,6 +81,14 @@ describe('anthropicModel', () => {
     for (const key of ['temperature', 'top_p', 'top_k', 'thinking']) {
       expect(params).not.toHaveProperty(key);
     }
+  });
+
+  it('sends the schema the request carries, not a fixed one', async () => {
+    const { client, calls } = stubClient({ stop_reason: 'end_turn', content: [], usage });
+    await createAnthropicModel(client).generate({ ...request(), schema: FILTER_SCHEMA });
+    expect(calls[0]!.params.output_config).toEqual({
+      effort: 'low', format: { type: 'json_schema', schema: FILTER_SCHEMA },
+    });
   });
 
   it('turns an abort or timeout error into ModelError timeout', async () => {

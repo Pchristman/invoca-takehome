@@ -76,8 +76,7 @@ describe('checkTakeaway', () => {
   });
 
   it('rejects names that are not on the sheet, whole word and case-insensitive', () => {
-    for (const text of ['Try Gamma now', 'Call Delta Office back', 'Look at direct traffic', 'Try paid search',
-      'Try Social', 'try gamma']) {
+    for (const text of ['Try Gamma now', 'Call Delta Office back', 'try gamma']) {
       expect(reasonOf(text), text).toBe('off_sheet_name');
     }
     expect(reasonOf('Gammas are fine')).toBe('ok');
@@ -139,5 +138,63 @@ describe('checkTakeaway', () => {
 
   it('reports the first failing check: digit before number word', () => {
     expect(reasonOf('3 calls, one office')).toBe('digit');
+  });
+});
+
+describe('checkTakeaway: text normalised before scanning', () => {
+  it('rejects more quantity and ordinal words', () => {
+    for (const text of [
+      'Millions of calls', 'billions of dollars', 'tens of callers', 'Calls quadrupled', 'the eleventh campaign',
+      'the twelfth office', 'calls quintupled',
+    ]) {
+      expect(reasonOf(text), text).toBe('number_word');
+    }
+  });
+
+  it('keeps ordinary words that only look like numbers', () => {
+    for (const text of ['Calls this month', 'The south office', 'The path to booking', 'Both offices', 'Call back with care',
+      'Health checks', 'Phones ring', 'Someone called', 'Worth a look', 'Weigh the options', 'Tension is high', 'English callers',
+      'Finish the review', 'Lead score is unused']) {
+      expect(reasonOf(text), text).toBe('ok');
+    }
+  });
+
+  it('rejects number words hidden by fullwidth letters or zero-width characters', () => {
+    expect(reasonOf('ｔｗｏ offices')).toBe('number_word');
+    expect(reasonOf('t\u200Bwo offices')).toBe('number_word');
+    expect(reasonOf('tw\u00ADo offices')).toBe('number_word');
+    expect(reasonOf('t\u2060wo offices')).toBe('number_word');
+  });
+
+  it('rejects a fullwidth brace that is not a real placeholder', () => {
+    expect(reasonOf('See ｛shift.worst.name｝.')).toBe('bad_placeholder');
+  });
+
+  it('rejects off-sheet names written with odd spacing, no space or decomposed accents', () => {
+    const k: KnownNames = { campaigns: ['Alpha', 'Summer Blast', 'Café Promo'], offices: ['Beta Office'], channels: [] };
+    for (const text of ['Try Summer\u00A0Blast', 'Try Summer  Blast', 'Try SummerBlast', 'Try summer\nblast',
+      'Try Cafe\u0301 Promo', 'Try Ｓｕｍｍｅｒ Blast', 'Try Sum\u200Bmer Blast']) {
+      expect(reasonOf(text, sheet, k), text).toBe('off_sheet_name');
+    }
+  });
+
+  it('accepts an on-sheet name written with the same variants', () => {
+    const s = sheetWith(['Café Promo', 'Beta Office']);
+    const k: KnownNames = { campaigns: ['Café Promo', 'Alpha'], offices: ['Beta Office'], channels: [] };
+    expect(reasonOf('Keep Cafe\u0301\u00A0Promo going.', s, k)).toBe('ok');
+    expect(reasonOf('Call Beta  Office.', s, k)).toBe('ok');
+  });
+});
+
+describe('checkTakeaway: channels', () => {
+  const k: KnownNames = { campaigns: ['Alpha'], offices: ['Beta Office'], channels: ['paid_search', 'social', 'display', 'organic', 'direct', 'referral'] };
+  it('does not treat channel words as names: no channel is ever on a fact sheet', () => {
+    for (const text of ['Look at direct traffic', 'Try paid search', 'Social posts', 'A display ad', 'Organic callers',
+      'A referral program']) {
+      expect(reasonOf(text, sheet, k), text).toBe('ok');
+    }
+  });
+  it('still rejects a channel written as its data code', () => {
+    expect(reasonOf('Move budget to paid_search', sheet, k)).toBe('off_sheet_name');
   });
 });

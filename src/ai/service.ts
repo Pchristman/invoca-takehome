@@ -9,7 +9,7 @@ import { costNanoUsd, MAX_OUTPUT_TOKENS, nanoToUsd, worstCaseNanoUsd } from './p
 import { buildPrompt, parseReply, PROMPT_VERSION } from './prompt';
 import { buildQuestionPrompt, parseFilterReply, QUESTION_PROMPT_VERSION, type FilterReply, type QuestionContext } from './question';
 import {
-  ModelError, type ModelReply, type QuestionReason, type TakeawayModel, type TakeawayReason, type TakeawayResult, type Usage,
+  MODEL_TIMEOUT_MS, ModelError, type ModelReply, type Prompt, type QuestionReason, type TakeawayModel, type TakeawayReason, type TakeawayResult, type Usage,
 } from './types';
 
 /** What the caller's validator says about a model reply: a value, or a detail the user may read. */
@@ -35,7 +35,7 @@ export interface ServiceOptions {
   limitUsd: number;
   cachePath: string | null;
   logPath: string | null;
-  timeoutMs?: number; // default 8000
+  timeoutMs?: number; // default MODEL_TIMEOUT_MS
   now?: () => Date;
 }
 
@@ -44,7 +44,6 @@ const UNANSWERABLE_REPLY: FilterReply = {
   answerable: false, view: 'overview', offices: [], campaigns: [], includeUnattributed: false, weekdays: [], hours: [], range: null,
 };
 
-const DEFAULT_TIMEOUT_MS = 8000;
 const TYPICAL_PROMPT_CHARS = 4000; // for status(): "is there room for one more call?"
 
 function templateResult(template: string, reason: TakeawayReason): TakeawayResult {
@@ -63,18 +62,27 @@ export function offService(): TakeawayService {
 
 /**
  * What every service built for the same app shares, so a rebuild for new data cannot forget a call still
- * running in the old service: the spend so far, the worst case of every call in flight, and whether the log works.
+ * running in the old service: the spend so far, the worst case of every call in flight, whether the log works,
+ * and the one cache (two caches on the same file would each save their own copy over the other's).
  */
 interface Ledger {
   summary: LogSummary;
   reservedNano: number; // worst case of every call in flight
   logUsable: boolean;
+  cache: TakeawayCache;
 }
 
 export function createTakeawayService(options: ServiceOptions): TakeawayService {
   const { model, logPath } = options;
   // Spend comes from the log, so a log we cannot read means unknown spend: fail closed.
-  const ledger: Ledger = { summary: { spendNanoUsd: 0, cacheHits: 0, checkerFailures: 0, skippedLines: 0 }, reservedNano: 0, logUsable: true };
+  const ledger: Ledger = {
+    summary: { spendNanoUsd: 0, cacheHits: 0, checkerFailures: 0, skippedLines: 0 },
+    reservedNano: 0,
+    logUsable: true,
+    cache: new TakeawayCache(options.cachePath),
+  };
+  // Damage found at start-up: one line per kind, fixed text (counts only), never file contents.
+  if (ledger.cache.loadProblem !== null) console.error(`AI cache problem: ${ledger.cache.loadProblem}`);
   // A log we can read but not write is just as bad: a paid call would go unrecorded. Check before any call.
   if (logPath !== null) {
     try {
@@ -98,13 +106,13 @@ export function createTakeawayService(options: ServiceOptions): TakeawayService 
 
 function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService {
   const { model, known, snapshotId, logPath } = options;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? MODEL_TIMEOUT_MS;
   const now = options.now ?? (() => new Date());
   const limitNano = Math.round(options.limitUsd * 1e9);
-  const cache = new TakeawayCache(options.cachePath);
+  const { cache } = ledger;
 
   const inFlight = new Map<string, Promise<unknown>>(); // takeaway and question calls share it; their keys never collide
-  const rememberedFailures = new Map<string, TakeawayReason>(); // this session only; never timeouts or API errors
+  const rememberedFailures = new Map<string, TakeawayReason>(); // this session only: not asked again until restart. Never API errors.
   const rememberedQuestionFailures = new Map<string, { reason: QuestionReason; detail: string | null }>(); // same rule
 
   /** Record a log line and keep the in-memory summary in step. A log that cannot be written turns AI off. */
@@ -129,8 +137,10 @@ function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService 
     console.error('AI takeaways could not be saved to the cache file; they are kept in memory for this session only.');
   }
 
-  // Damage found at start-up: one line per kind, fixed text (counts only), never file contents.
-  if (cache.loadProblem !== null) console.error(`AI cache problem: ${cache.loadProblem}`);
+  /** The most this prompt's call could cost: what the guard reserves, and what a timeout is logged at. */
+  function worstNanoFor(activeModel: TakeawayModel, prompt: Prompt): number {
+    return worstCaseNanoUsd(activeModel.id, prompt.system.length + prompt.user.length);
+  }
 
   function logLine(purpose: CallLogLine['purpose'], fields: Partial<CallLogLine>): CallLogLine {
     return {
@@ -140,11 +150,11 @@ function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService 
     };
   }
 
-  type Prompt = { system: string; user: string };
   type PaidFields = Pick<CallLogLine, 'inputTokens' | 'outputTokens' | 'costUsd'>;
   type CallOutcome =
     | { kind: 'error'; reason: 'timeout' | 'api_error' } // already logged
     | { kind: 'refusal' } // already logged
+    | { kind: 'truncated' } // already logged; the caller treats it as malformed
     | { kind: 'text'; text: string; paid: PaidFields }; // the caller checks it and logs
 
   function paidFields(modelId: string, usage: Usage): PaidFields {
@@ -171,7 +181,10 @@ function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService 
     } catch (error) {
       // Only the code is kept: an SDK message can hold request details.
       const reason = error instanceof ModelError ? error.code : 'api_error';
-      record(logLine(purpose, { failure: reason }));
+      // An aborted request may still be billed and reports no usage, so a timeout is logged at its worst case
+      // (tokens stay 0). A failed request is not billed: $0.
+      const costUsd = reason === 'timeout' ? nanoToUsd(worstNanoFor(activeModel, prompt)) : 0;
+      record(logLine(purpose, { failure: reason, costUsd }));
       return { kind: 'error', reason };
     } finally {
       clearTimeout(timer);
@@ -181,6 +194,10 @@ function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService 
     if (reply.kind === 'refusal') {
       record(logLine(purpose, { ...paid, failure: 'refusal' }));
       return { kind: 'refusal' };
+    }
+    if (reply.kind === 'truncated') {
+      record(logLine(purpose, { ...paid, checkPassed: false, failure: 'truncated' }));
+      return { kind: 'truncated' };
     }
     return { kind: 'text', text: reply.text, paid };
   }
@@ -194,7 +211,7 @@ function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService 
     const running = inFlight.get(key) as Promise<R> | undefined;
     if (running) return running;
 
-    const worstNano = worstCaseNanoUsd(model!.id, prompt.system.length + prompt.user.length);
+    const worstNano = worstNanoFor(model!, prompt);
     if (ledger.summary.spendNanoUsd + ledger.reservedNano + worstNano > limitNano) return overBudget;
 
     ledger.reservedNano += worstNano;
@@ -208,13 +225,50 @@ function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService 
     return call;
   }
 
-  /** The model call for a takeaway and the checks on its reply. The caller has already reserved the budget. */
+  /**
+   * The takeaway flow: one call and, only if the checker rejects its text, one retry told what was wrong.
+   * The guard has reserved the first call; the retry is checked against the limit and reserved the same way.
+   */
   async function callModel(activeModel: TakeawayModel, key: string, sheet: FactSheet, template: string, prompt: Prompt): Promise<TakeawayResult> {
+    const first = await attempt(activeModel, key, sheet, template, prompt);
+    if (!('rejected' in first)) return first;
+
+    const retry: Prompt = {
+      ...prompt,
+      system: `${prompt.system}\nYour last answer was rejected: ${first.rejected}. Write the takeaway again without that.`,
+    };
+    // No await between this limit check and its reservation. The first call's reservation is still held.
+    const retryWorstNano = worstNanoFor(activeModel, retry);
+    let second: TakeawayResult | { rejected: string } = first;
+    if (ledger.summary.spendNanoUsd + ledger.reservedNano + retryWorstNano <= limitNano) {
+      ledger.reservedNano += retryWorstNano;
+      try {
+        second = await attempt(activeModel, key, sheet, template, retry);
+      } finally {
+        ledger.reservedNano -= retryWorstNano;
+      }
+    }
+    if (!('rejected' in second)) return second;
+    rememberedFailures.set(key, 'check_failed');
+    return templateResult(template, 'check_failed');
+  }
+
+  /** One model call for a takeaway and the checks on its reply. A checker rejection is logged and returned for the caller to retry. */
+  async function attempt(
+    activeModel: TakeawayModel, key: string, sheet: FactSheet, template: string, prompt: Prompt,
+  ): Promise<TakeawayResult | { rejected: string }> {
     const outcome = await callWithTimeout(activeModel, sheet.view, prompt);
-    if (outcome.kind === 'error') return templateResult(template, outcome.reason);
+    if (outcome.kind === 'error') {
+      if (outcome.reason === 'timeout') rememberedFailures.set(key, 'timeout'); // a hanging model is not sent the same prompt again
+      return templateResult(template, outcome.reason);
+    }
     if (outcome.kind === 'refusal') {
       rememberedFailures.set(key, 'refusal');
       return templateResult(template, 'refusal');
+    }
+    if (outcome.kind === 'truncated') {
+      rememberedFailures.set(key, 'malformed');
+      return templateResult(template, 'malformed');
     }
 
     // The call is paid for: whatever happens below, its line must be written. A throw counts as a failed check.
@@ -241,8 +295,7 @@ function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService 
     }
     if (!check.ok) {
       record(logLine(sheet.view, { ...paid, checkPassed: false, failure: check.reason }));
-      rememberedFailures.set(key, 'check_failed');
-      return templateResult(template, 'check_failed');
+      return { rejected: check.detail }; // the detail goes to the model, never to the log
     }
 
     record(logLine(sheet.view, { ...paid, checkPassed: true }));
@@ -260,8 +313,11 @@ function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService 
     };
 
     const outcome = await callWithTimeout(activeModel, 'question', prompt);
-    if (outcome.kind === 'error') return { ok: false, reason: outcome.reason, detail: null };
+    if (outcome.kind === 'error') {
+      return outcome.reason === 'timeout' ? remember('timeout', null) : { ok: false, reason: outcome.reason, detail: null };
+    }
     if (outcome.kind === 'refusal') return remember('refusal', null);
+    if (outcome.kind === 'truncated') return remember('malformed', null);
 
     // The call is paid for: whatever happens below, its line must be written. A throw counts as an invalid filter.
     const { paid } = outcome;

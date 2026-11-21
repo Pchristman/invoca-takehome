@@ -1,5 +1,5 @@
 // The call log: one JSON line per model call. Spend, cache hits and checker failures are read back from it.
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { ViewName } from '../core/views/facts';
 
@@ -9,10 +9,10 @@ export interface CallLogLine {
   purpose: ViewName | 'question';
   inputTokens: number;
   outputTokens: number;
-  costUsd: number;
+  costUsd: number; // a timeout has 0 tokens but the worst-case cost reserved for it: an aborted request may be billed
   cached: boolean;
   checkPassed: boolean | null; // null when no output was produced (timeout, API error)
-  failure: string | null; // a CheckFailure, a TakeawayReason, or null; never an SDK message
+  failure: string | null; // a CheckFailure, a TakeawayReason, 'truncated', or null; never an SDK message
 }
 
 export interface LogSummary {
@@ -33,7 +33,9 @@ export class LogUnavailableError extends Error {
 export function appendLogLine(path: string, line: CallLogLine): void {
   try {
     mkdirSync(dirname(path), { recursive: true });
-    appendFileSync(path, JSON.stringify(line) + '\n');
+    // After a torn last line (a crash mid-write), start on a new line so this one is not lost with it.
+    const separator = endsWithoutNewline(path) ? '\n' : '';
+    appendFileSync(path, separator + JSON.stringify(line) + '\n');
   } catch {
     throw new LogUnavailableError('The AI call log cannot be written.');
   }
@@ -50,6 +52,21 @@ export function checkLogWritable(path: string): void {
   } catch {
     throw new LogUnavailableError('The AI call log cannot be written.');
   }
+}
+
+/** True when the file has content whose last byte is not a newline. */
+function endsWithoutNewline(path: string): boolean {
+  if (!existsSync(path)) return false;
+  const size = statSync(path).size;
+  if (size === 0) return false;
+  const last = Buffer.alloc(1);
+  const fd = openSync(path, 'r');
+  try {
+    readSync(fd, last, 0, 1, size - 1);
+  } finally {
+    closeSync(fd);
+  }
+  return last[0] !== 0x0a;
 }
 
 export function loadLog(path: string): LogSummary {

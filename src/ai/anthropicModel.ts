@@ -1,8 +1,7 @@
 // The real model. This is the only file that imports '@anthropic-ai/sdk'.
 import Anthropic from '@anthropic-ai/sdk';
 import { MODEL_ID } from './pricing';
-import { REPLY_SCHEMA } from './prompt';
-import { ModelError, type ModelReply, type ModelRequest, type TakeawayModel } from './types';
+import { MODEL_TIMEOUT_MS, ModelError, type ModelReply, type ModelRequest, type TakeawayModel } from './types';
 
 /** The part of the SDK client we use, so tests can pass a stub. */
 export interface AnthropicLikeClient {
@@ -16,11 +15,9 @@ interface RawReply {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
-const TIMEOUT_MS = 8000;
-
 /** Builds the SDK client: no retries (a retry doubles cost and wait). The caller passes the already trimmed key. */
 export function newAnthropicClient(apiKey: string): AnthropicLikeClient {
-  return new Anthropic({ apiKey, maxRetries: 0, timeout: TIMEOUT_MS });
+  return new Anthropic({ apiKey, maxRetries: 0, timeout: MODEL_TIMEOUT_MS });
 }
 
 export function createAnthropicModel(client: AnthropicLikeClient): TakeawayModel {
@@ -35,7 +32,7 @@ export function createAnthropicModel(client: AnthropicLikeClient): TakeawayModel
             max_tokens: request.maxOutputTokens,
             system: request.system,
             messages: [{ role: 'user', content: request.user }],
-            output_config: { effort: 'low', format: { type: 'json_schema', schema: REPLY_SCHEMA } },
+            output_config: { effort: 'low', format: { type: 'json_schema', schema: request.schema } },
           },
           { signal: request.signal },
         )) as RawReply;
@@ -47,6 +44,7 @@ export function createAnthropicModel(client: AnthropicLikeClient): TakeawayModel
         outputTokens: reply.usage?.output_tokens ?? 0,
       };
       if (reply.stop_reason === 'refusal') return { kind: 'refusal', usage };
+      if (reply.stop_reason === 'max_tokens') return { kind: 'truncated', usage };
       const text = (reply.content ?? [])
         .filter((block) => block.type === 'text')
         .map((block) => block.text ?? '')
