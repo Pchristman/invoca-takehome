@@ -79,12 +79,13 @@ describe('readExportFromDir', () => {
     expect(readExportFromDir().rowsRead).toBe(1);
   });
 
-  test('DATA_DIR set in .env is used when the shell does not set it', () => {
+  test('does not read .env itself: each entry point loads it first, so tests never pick up a developer .env', () => {
     const dataDir = join(dir, 'data');
     writeExport(dataDir);
     writeFileSync(join(dir, '.env'), `DATA_DIR=${dataDir}\n`);
     vi.stubEnv('DATA_DIR', undefined);
     vi.spyOn(process, 'cwd').mockReturnValue(dir);
-    expect(readExportFromDir().rowsRead).toBe(1);
+    expect(() => readExportFromDir()).toThrow(/calls\.csv/);
+    expect(process.env.DATA_DIR).toBeUndefined();
   });
 });

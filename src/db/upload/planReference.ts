@@ -3,11 +3,11 @@ import type { Table } from '../../core/csv';
 import { parseCampaigns, parseLocations } from '../../core/reference';
 import type { Campaign, Location, ReferenceIssue } from '../../core/types';
 import { readCampaigns, readLocations } from '../read';
+import { shorten } from '../../server/api';
 import type { ParsedUpload } from './detect';
 import {
   EXAMPLES_PER_CLASS,
   NOTE_MAX,
-  shorten,
   type RowClass,
   type UploadCounts,
   type UploadExample,
@@ -26,6 +26,9 @@ interface Spec<T extends { id: string }> {
   differences(stored: T, incoming: T): Diff[];
 }
 
+/** A budget as a conflict note shows it; a blank one says so rather than "null". */
+const budgetText = (budget: number | null) => (budget === null ? 'blank' : String(budget));
+
 const campaignSpec: Spec<Campaign> = {
   idColumn: 'campaign_id',
   readStored: readCampaigns,
@@ -37,7 +40,7 @@ const campaignSpec: Spec<Campaign> = {
     [
       { field: 'name', stored: a.name, incoming: b.name },
       { field: 'channel', stored: a.channel, incoming: b.channel },
-      { field: 'budget', stored: String(a.dailyBudgetUsd), incoming: String(b.dailyBudgetUsd) },
+      { field: 'budget', stored: budgetText(a.dailyBudgetUsd), incoming: budgetText(b.dailyBudgetUsd) },
     ].filter((d) => d.stored !== d.incoming),
 };
 

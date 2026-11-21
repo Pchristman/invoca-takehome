@@ -6,7 +6,7 @@ import { LoadError } from '../../src/core/errors';
 import { convertDatabaseError, openDatabase, openExistingDatabase, SCHEMA_VERSION } from '../../src/db/database';
 import { tempDir } from '../server/helpers';
 
-const TABLES = ['bad_rows', 'campaigns', 'cleaned_calls', 'locations', 'raw_calls', 'reference_issues', 'seeds'];
+const TABLES = ['bad_rows', 'campaigns', 'locations', 'raw_calls', 'reference_issues', 'seeds'];
 
 function tableNames(db: DatabaseSync): string[] {
   const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[];
@@ -62,7 +62,7 @@ describe('driver: node:sqlite does the job on this Node', () => {
 });
 
 describe('openDatabase', () => {
-  it('an in-memory database has all seven tables and the schema version', () => {
+  it('an in-memory database has all six tables and the schema version', () => {
     const db = openDatabase(':memory:');
     expect(tableNames(db)).toEqual(TABLES);
     expect(userVersion(db)).toBe(SCHEMA_VERSION);
@@ -124,6 +124,26 @@ describe('openDatabase', () => {
     expect(attempt).toThrow(/move|delete/i);
     expect(attempt).toThrow(/reseed|npm run seed/);
     expect(readFileSync(file).equals(before)).toBe(true);
+  });
+
+  it('a version 1 file (budget NOT NULL, a cleaned_calls table) is refused, unchanged, by both opens', () => {
+    const file = makeFile(tempDir());
+    const raw = new DatabaseSync(file);
+    raw.exec('PRAGMA user_version = 1');
+    raw.close();
+    const before = readFileSync(file);
+    const message = `The database ${file} has schema version 1; this app needs 2. Move or delete the file, then run "npm run seed" (or restart) to build a new one.`;
+    expect(() => openDatabase(file)).toThrow(message);
+    expect(() => openExistingDatabase(file)).toThrow(message);
+    expect(readFileSync(file).equals(before)).toBe(true);
+  });
+
+  it("our schema version with none of our tables gives the same move-or-delete advice, not \"no such table\"", () => {
+    const file = join(tempDir(), 'other.db');
+    const raw = new DatabaseSync(file);
+    raw.exec(`CREATE TABLE other (a TEXT); PRAGMA user_version = ${SCHEMA_VERSION}`);
+    raw.close();
+    expect(() => openDatabase(file)).toThrow(/not its tables. Move or delete the file/);
   });
 
   it('a newer schema is refused', () => {

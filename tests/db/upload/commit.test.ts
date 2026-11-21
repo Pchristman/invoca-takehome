@@ -24,7 +24,7 @@ const campaignsFile = (lines: string[], name = 'campaigns.csv') => readUpload(na
 const locationsFile = (lines: string[], name = 'locations.csv') => readUpload(name, csvOf(LOCATIONS_HEADER, lines));
 
 const database = () => seeded({ calls: [callLine({ call_id: 'c_1' })] });
-const TABLES = ['raw_calls', 'bad_rows', 'seeds', 'cleaned_calls', 'campaigns', 'locations', 'reference_issues'];
+const TABLES = ['raw_calls', 'bad_rows', 'seeds', 'campaigns', 'locations', 'reference_issues'];
 const counted = (db: ReturnType<typeof database>) => Object.fromEntries(TABLES.map((t) => [t, count(db, t)]));
 const booked = (extra: Record<string, string> = {}) => ({ answered: 'true', outcome: 'booked', revenue_usd: '300', ...extra });
 
@@ -37,7 +37,6 @@ describe('commitUpload', () => {
     expect(result.written).toBe(1);
     expect(result.store?.calls.map((c) => c.callId)).toContain('c_new');
     expect(count(db, 'raw_calls')).toBe(before.raw_calls! + 1);
-    expect(count(db, 'cleaned_calls')).toBe(before.cleaned_calls! + 1);
     expect(count(db, 'seeds')).toBe(before.seeds! + 1);
     const seed = db.prepare('SELECT * FROM seeds ORDER BY id DESC LIMIT 1').get() as Record<string, unknown>;
     expect(seed.label).toBe('upload: more.csv');
@@ -102,9 +101,16 @@ describe('commitUpload', () => {
     expect(after.start).toBe(before.start);
   });
 
+  test('a campaign with a blank budget is stored with no budget and read back as null', () => {
+    const db = database();
+    const result = commitUpload(db, campaignsFile([campaignLine('cmp_new', 'Gamma', 'paid_search', '')]));
+    expect(result.written).toBe(1);
+    expect(db.prepare("SELECT daily_budget_usd FROM campaigns WHERE id = 'cmp_new'").get()).toEqual({ daily_budget_usd: null });
+    expect(result.store?.campaigns.find((c) => c.id === 'cmp_new')?.dailyBudgetUsd).toBeNull();
+  });
+
   test('campaigns and locations are written and the store lists them', () => {
     const db = database();
-    const cleanedBefore = count(db, 'cleaned_calls');
     const c = commitUpload(db, campaignsFile([campaignLine('cmp_new', 'Gamma', 'paid_search', '75')]));
     expect(c.written).toBe(1);
     expect(c.store?.campaigns.map((x) => x.id)).toContain('cmp_new');
@@ -112,7 +118,6 @@ describe('commitUpload', () => {
     const l = commitUpload(db, locations);
     expect(l.written).toBe(1);
     expect(l.store?.locations.map((x) => x.id)).toContain('loc_new');
-    expect(count(db, 'cleaned_calls')).toBe(cleanedBefore);
     const seed = db.prepare('SELECT * FROM seeds ORDER BY id DESC LIMIT 1').get() as Record<string, unknown>;
     expect(seed.locations_sha256).toBe(locations.textSha256);
   });
@@ -173,7 +178,8 @@ describe('commitUpload', () => {
     test('a failure while rebuilding the store also rolls back', () => {
       const db = database();
       const before = counted(db);
-      db.exec(`CREATE TRIGGER boom BEFORE INSERT ON cleaned_calls WHEN NEW.call_id = 'c_boom' BEGIN SELECT RAISE(ABORT, 'boom'); END`);
+      // The write itself succeeds, but an office time zone no clock can read makes the store fail to build.
+      db.exec(`CREATE TRIGGER boom AFTER INSERT ON raw_calls WHEN NEW.call_id = 'c_boom' BEGIN UPDATE locations SET timezone = 'Mars/Olympus'; END`);
       expect(() => commitUpload(db, callsFile(lines()))).toThrow(/nothing was stored/);
       expect(counted(db)).toEqual(before);
       expect(db.isTransaction).toBe(false);
@@ -258,7 +264,7 @@ describe('commitUpload', () => {
         other.exec('BEGIN IMMEDIATE');
         const file = callsFile([callLine({ call_id: 'c_new' })]);
         expect(() => commitUpload(db, file)).toThrow(UploadFailed);
-        expect(() => commitUpload(db, file)).toThrow(/nothing was stored/);
+        expect(() => commitUpload(db, file)).toThrow(/nothing was stored: The database is in use by another process/);
         expect(db.isTransaction).toBe(false);
         other.exec('ROLLBACK');
         expect(count(other, 'raw_calls')).toBe(1);

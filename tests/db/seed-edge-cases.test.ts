@@ -113,6 +113,37 @@ describe('references kept from an earlier seed', () => {
     expect(store.dataNotes.tiedCalls).toBe(0);
     expect(store.campaigns.map((c) => c.id)).toEqual(['cmp_a', 'cmp_b']);
   });
+
+  it('a newer export with reordered columns that leaves a stored campaign and office out keeps them and their calls', () => {
+    const db = memoryDb();
+    const call = callLine({ call_id: 'c_1', campaign_id: 'cmp_b', marketing_channel: 'display', location_id: 'loc_b' });
+    seedFromTexts(db, asTexts(csvTexts({ calls: [call] })));
+    const reordered = {
+      ...csvTexts({ calls: [call] }),
+      campaigns: 'name,daily_budget_usd,campaign_id,channel\nAlpha,100,cmp_a,social\n',
+      locations: 'timezone,location_id,name\nAmerica/Phoenix,loc_a,Office A\n',
+    };
+    const report = seedFromTexts(db, asTexts(reordered));
+    expect(report).toMatchObject({ newRows: 0, badRowsNew: 0 });
+    expect(count(db, 'bad_rows')).toBe(0);
+    expect(count(db, 'reference_issues')).toBe(0);
+    const store = readStore(db);
+    expect(store.calls.map((c) => c.callId)).toEqual(['c_1']);
+    expect(store.campaigns.find((c) => c.id === 'cmp_b')).toMatchObject({ name: 'Beta', channel: 'display', dailyBudgetUsd: 50 });
+    expect(store.locations.find((l) => l.id === 'loc_b')).toMatchObject({ name: 'Office B', timezone: 'America/Denver' });
+  });
+
+  it('a re-seed with zero-byte campaigns and locations files works as a first seed would, keeping the stored ones', () => {
+    const db = memoryDb();
+    const call = callLine({ call_id: 'c_1' });
+    seedFromTexts(db, asTexts(csvTexts({ calls: [call] })));
+    const report = seedFromTexts(db, asTexts({ ...csvTexts({ calls: [call] }), campaigns: '', locations: '' }));
+    expect(report).toMatchObject({ newRows: 0, badRowsNew: 0 });
+    const store = readStore(db);
+    expect(store.calls.map((c) => c.callId)).toEqual(['c_1']);
+    expect(store.campaigns.map((c) => c.id)).toEqual(['cmp_a', 'cmp_b']);
+    expect(store.locations.map((l) => l.id)).toEqual(['loc_a', 'loc_b']);
+  });
 });
 
 describe('bad and good rows of one call keep their file order', () => {
@@ -207,5 +238,89 @@ describe('transactions', () => {
     row.call.durationSeconds = Number.NaN;
     expect(() => seedExport(db, broken, noSource)).toThrow(/NOT NULL|constraint/i);
     expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe('a call made bad by a faulty export recovers when the good export is seeded again', () => {
+  const good = csvTexts({ calls: [callLine({ call_id: 'c_1' }), callLine({ call_id: 'c_2', location_id: 'loc_b', campaign_id: 'cmp_b', marketing_channel: 'display' })] });
+  const notesOf = (db: DatabaseSync) => {
+    const { calls, dataNotes: n } = readStore(db);
+    return { calls: calls.map((c) => c.callId), badCalls: n.badCalls };
+  };
+  const fresh = () => {
+    const db = memoryDb();
+    seedFromTexts(db, asTexts(good));
+    return notesOf(db);
+  };
+
+  it('after an invalid time zone: good, faulty, good ends with the calls a fresh load of the good export has', () => {
+    const db = memoryDb();
+    seedFromTexts(db, asTexts(good));
+    const faulty = { ...good, locations: csvTexts({ locations: [locationLine('loc_a', 'Office A', 'Mars/Olympus'), locationLine('loc_b', 'Office B', 'America/Denver')] }).locations };
+    seedFromTexts(db, asTexts(faulty));
+    expect(readStore(db).dataNotes.badRows).toBe(1); // c_1 once: its stored bad row, not also its old good row
+    const report = seedFromTexts(db, asTexts(good));
+    expect(report).toMatchObject({ newRows: 0, duplicateRows: 2 });
+    expect(notesOf(db)).toEqual(fresh());
+  });
+
+  it('after an unusable campaign budget: good, faulty, good ends with the calls a fresh load of the good export has', () => {
+    const db = memoryDb();
+    seedFromTexts(db, asTexts(good));
+    const faulty = { ...good, campaigns: csvTexts({ campaigns: [campaignLine('cmp_a', 'Alpha', 'social', 'abc'), campaignLine('cmp_b', 'Beta', 'display', '50')] }).campaigns };
+    seedFromTexts(db, asTexts(faulty));
+    seedFromTexts(db, asTexts(good));
+    expect(notesOf(db)).toEqual(fresh());
+  });
+
+  it('A, then B with the same updated_at, then A again: A wins, as the later row does', () => {
+    const db = memoryDb();
+    const a = csvTexts({ calls: [callLine({ outcome: 'missed' })] });
+    const b = csvTexts({ calls: [callLine({ answered: 'true', outcome: 'not_qualified' })] });
+    seedFromTexts(db, asTexts(a));
+    seedFromTexts(db, asTexts(b));
+    expect(readStore(db).calls[0]!.outcome).toBe('not_qualified');
+    expect(seedFromTexts(db, asTexts(a))).toMatchObject({ newRows: 0, duplicateRows: 1, newVersions: 0 });
+    expect(readStore(db).calls[0]!.outcome).toBe('missed');
+  });
+
+  it('the same holds for bad rows: good, bad, good again leaves the call good; bad again makes it bad', () => {
+    const db = memoryDb();
+    const goodRow = csvTexts({ calls: [callLine()] });
+    const badRow = csvTexts({ calls: [callLine({ answered: 'maybe' })] });
+    for (const texts of [goodRow, badRow, goodRow]) seedFromTexts(db, asTexts(texts));
+    expect(readStore(db).calls).toHaveLength(1);
+    seedFromTexts(db, asTexts(badRow));
+    expect(readStore(db).dataNotes.badCalls).toBe(1);
+  });
+});
+
+describe('a call re-checked against a stored office', () => {
+  it('names a campaign the file has as unusable invalid_campaign, as the CSV route does', () => {
+    const db = memoryDb();
+    seedFromTexts(db, asTexts(csvTexts()));
+    const later = csvTexts({
+      calls: [callLine({ location_id: 'loc_b', campaign_id: 'cmp_x' })],
+      campaigns: [campaignLine('cmp_x', 'Broken', 'tv', '10')],
+      locations: [locationLine('loc_a', 'Office A', 'America/Phoenix')],
+    });
+    seedFromTexts(db, asTexts(later));
+    expect(readStore(db).dataNotes.badRowsByReason).toMatchObject({ invalid_campaign: 1, unknown_campaign: 0, unknown_location: 0 });
+  });
+});
+
+describe('a campaign with no budget', () => {
+  it('survives a seed: stored as null, its calls count, and the note is kept', () => {
+    const db = memoryDb();
+    const texts = csvTexts({
+      calls: [callLine({ campaign_id: 'cmp_a' })],
+      campaigns: [campaignLine('cmp_a', 'Alpha', 'social', ''), campaignLine('cmp_b', 'Beta', 'display', '$150.00')],
+    });
+    seedFromTexts(db, asTexts(texts));
+    const store = readStore(db);
+    expect(store.campaigns.map((c) => [c.id, c.dailyBudgetUsd])).toEqual([['cmp_a', null], ['cmp_b', null]]);
+    expect(store.calls.map((c) => c.campaignId)).toEqual(['cmp_a']);
+    expect(store.dataNotes.referenceIssues.map((i) => i.reason)).toEqual(['no_budget', 'bad_budget']);
+    expect(store).toEqual(cleanExport(loadExport(texts)));
   });
 });

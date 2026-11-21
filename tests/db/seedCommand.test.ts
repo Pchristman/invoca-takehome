@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runSeed } from '../../src/db/seedCommand';
 import { start, type RunningServer } from '../../src/server/start';
@@ -134,4 +135,20 @@ describe('runSeed', () => {
     const dir = folder([callLine({ call_id: 'c_1' })]);
     expect(runSeed([], { DB_PATH: file, DATA_DIR: dir }).lines[0]).toContain(dir);
   });
+});
+
+describe('runSeed against a locked file', () => {
+  it('says the database is in use, not the raw "database is locked"', () => {
+    const file = join(tempDir(), 'calls.db');
+    expect(runSeed([folder([callLine()])], { DB_PATH: file }).exitCode).toBe(0);
+    const holder = new DatabaseSync(file);
+    holder.exec('BEGIN EXCLUSIVE');
+    try {
+      const result = runSeed([folder([callLine({ call_id: 'c_2' })])], { DB_PATH: file });
+      expect(result.lines[0]).toMatch(/^Cannot seed: The database .* is in use by another process/);
+    } finally {
+      holder.exec('ROLLBACK');
+      holder.close();
+    }
+  }, 20_000);
 });

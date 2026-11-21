@@ -5,7 +5,7 @@ import { LoadError } from '../core/errors';
 import { CHANNELS, OUTCOMES } from '../core/types';
 
 /** Bump when a table changes. A file with another version is refused, never migrated or deleted. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const IN_MEMORY = ':memory:';
 
@@ -27,7 +27,7 @@ CREATE TABLE campaigns (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   channel TEXT NOT NULL CHECK (channel IN (${quoted(CHANNELS)})),
-  daily_budget_usd REAL NOT NULL
+  daily_budget_usd REAL
 ) STRICT;
 
 CREATE TABLE locations (
@@ -81,27 +81,6 @@ CREATE TABLE reference_issues (
   reason TEXT NOT NULL,
   detail TEXT NOT NULL,
   UNIQUE (file, row_number, reason, detail)
-) STRICT;
-
-CREATE TABLE cleaned_calls (
-  call_id TEXT PRIMARY KEY,
-  started_at TEXT NOT NULL,
-  duration_seconds INTEGER NOT NULL,
-  caller_hash TEXT NOT NULL,
-  tracking_number TEXT NOT NULL,
-  campaign_id TEXT,
-  unattributed INTEGER NOT NULL,
-  channel TEXT NOT NULL,
-  location_id TEXT NOT NULL,
-  answered INTEGER NOT NULL,
-  outcome TEXT,
-  booked INTEGER NOT NULL,
-  pending INTEGER NOT NULL,
-  revenue_usd REAL NOT NULL,
-  agent_id TEXT,
-  local_date TEXT NOT NULL,
-  local_hour INTEGER NOT NULL,
-  local_weekday INTEGER NOT NULL
 ) STRICT;
 `;
 
@@ -203,6 +182,9 @@ function open(path: string, create: boolean): DatabaseSync {
       return db;
     }
     checkVersion(path, version);
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'seeds'").get()) {
+      throw new LoadError(`The database ${path} has this app's schema version but not its tables. Move or delete the file, then run "npm run seed" (or restart) to build a new one.`);
+    }
     checkIntegrity(db, path);
     return db;
   } catch (error) {

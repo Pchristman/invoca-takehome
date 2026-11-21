@@ -49,8 +49,8 @@ describe('seedExport', () => {
     expect(report).toMatchObject({ rowsRead: 4, newRows: 1, duplicateRows: 3, newVersions: 1 });
     expect(count(db, 'raw_calls')).toBe(4);
     const seqs = (db.prepare('SELECT seq FROM raw_calls ORDER BY seq').all() as { seq: number }[]).map((r) => r.seq);
-    expect(seqs).toEqual([1, 2, 3, 4]);
-    expect(db.prepare('SELECT outcome FROM raw_calls WHERE seq = 4').get()).toEqual({ outcome: 'booked' });
+    expect(seqs).toEqual([4, 5, 6, 7]); // the three already stored move up to this seed's place, in file order
+    expect(db.prepare('SELECT outcome FROM raw_calls WHERE seq = 7').get()).toEqual({ outcome: 'booked' });
   });
 
   it('all versions are kept', () => {

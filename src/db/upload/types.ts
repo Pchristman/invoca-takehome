@@ -11,14 +11,8 @@ export const UPLOAD_COLUMNS: Record<UploadKind, readonly string[]> = {
   locations: LOCATION_COLUMNS,
 };
 
-export type UploadRejectReason =
-  | 'empty'
-  | 'not_csv'
-  | 'unknown_columns'
-  | 'ambiguous_columns'
-  | 'bad_csv'
-  | 'too_large'
-  | 'no_file';
+/** Why a file was refused: what the detect step checks, so tests can tell the refusals apart. */
+export type UploadRejectReason = 'empty' | 'unknown_columns' | 'ambiguous_columns' | 'bad_csv';
 
 /** The file cannot be used. The message is the full sentence for the user. */
 export class UploadRejected extends Error {
@@ -50,9 +44,6 @@ export interface UploadExample {
 }
 
 export const EXAMPLES_PER_CLASS = 5;
-
-/** Cut text to `max` characters plus "...", so a huge cell cannot flood a preview. */
-export const shorten = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}...` : text);
 
 /** The longest a note or a quoted cell may be in a preview. */
 export const NOTE_MAX = 100;

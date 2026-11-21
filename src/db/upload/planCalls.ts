@@ -4,7 +4,8 @@ import type { Call } from '../../core/types';
 import { readCampaigns, readLocations } from '../read';
 import { rowHash } from '../seed';
 import type { ParsedUpload } from './detect';
-import { EXAMPLES_PER_CLASS, NOTE_MAX, shorten, type RowClass, type UploadExample, type UploadPlan } from './types';
+import { shorten } from '../../server/api';
+import { EXAMPLES_PER_CLASS, NOTE_MAX, type RowClass, type UploadExample, type UploadPlan } from './types';
 
 export type CallsPlan = Extract<UploadPlan, { kind: 'calls' }>;
 

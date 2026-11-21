@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import type { LoadedExport, RowResult } from '../core/types';
-import { refreshCleanedCalls } from './cleaned';
+import { readStore } from './read';
 
 export interface SeedSource {
   /** The folder as shown to the user. */
@@ -20,7 +20,7 @@ export interface SeedReport {
   /** New rows whose call_id already had a stored row before this seed. */
   newVersions: number;
   badRowsNew: number;
-  /** Calls in cleaned_calls after this seed. */
+  /** Calls in the database after this seed, after cleaning. */
   callsAfter: number;
 }
 
@@ -45,23 +45,28 @@ function rowFields(row: RowResult): unknown[] {
   ];
 }
 
-const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
+/** SHA-256 hex of the text exactly as given. Seeds and uploads store these, so the input must not change. */
+export const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 
 /** The SHA-256 part of a row's row_key (the key is this hash, then # and the occurrence in the file). */
 export function rowHash(row: RowResult): string {
   return sha256(JSON.stringify(rowFields(row)));
 }
 
-/** The two statements that store a row, each skipping a row_key that is already there. */
+/**
+ * The two statements that store a row. A row_key already stored is not stored twice: it moves to the new seq, so a row
+ * seeded again is the latest copy and wins an updated_at tie, as the later row in a file does. Each returns the row's
+ * seed_id: the given one for a new row, an older one for a row that was already stored.
+ */
 export function prepareRowInserts(db: DatabaseSync): { insertGood: StatementSync; insertBad: StatementSync } {
   const insertGood = db.prepare(
     `INSERT INTO raw_calls (seq, row_key, seed_id, row_number, call_id, started_at, ended_at, duration_seconds, caller_hash, tracking_number,
        campaign_id, channel, location_id, answered, outcome, revenue_usd, agent_id, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(row_key) DO NOTHING`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(row_key) DO UPDATE SET seq = excluded.seq RETURNING seed_id`,
   );
   const insertBad = db.prepare(
     `INSERT INTO bad_rows (seq, row_key, seed_id, row_number, call_id, updated_at, reason, detail)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(row_key) DO NOTHING`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(row_key) DO UPDATE SET seq = excluded.seq RETURNING seed_id`,
   );
   return { insertGood, insertBad };
 }
@@ -75,7 +80,8 @@ export function seedExport(db: DatabaseSync, loaded: LoadedExport, source: SeedS
   db.exec('BEGIN IMMEDIATE');
   try {
     const report = writeSeed(db, loaded, source, now);
-    report.callsAfter = refreshCleanedCalls(db);
+    // Built before COMMIT: a store that cannot be built undoes the seed.
+    report.callsAfter = readStore(db).calls.length;
     db.exec('COMMIT');
     return report;
   } catch (error) {
@@ -109,12 +115,10 @@ function writeSeed(db: DatabaseSync, loaded: LoadedExport, source: SeedSource, n
   for (const i of loaded.referenceIssues) insertIssue.run(seedId, i.file, i.rowNumber, i.reason, i.detail);
 
   const { insertGood, insertBad } = prepareRowInserts(db);
-  const hadCall = db.prepare('SELECT 1 FROM raw_calls WHERE call_id = ? AND seq <= ? UNION ALL SELECT 1 FROM bad_rows WHERE call_id = ? AND seq <= ?');
+  const hadCall = db.prepare('SELECT 1 FROM raw_calls WHERE call_id = ? AND seed_id < ? UNION ALL SELECT 1 FROM bad_rows WHERE call_id = ? AND seed_id < ?');
 
-  const maxBefore = (
-    db.prepare('SELECT MAX(COALESCE((SELECT MAX(seq) FROM raw_calls), 0), COALESCE((SELECT MAX(seq) FROM bad_rows), 0)) AS m').get() as { m: number }
-  ).m;
-  let nextSeq = maxBefore + 1;
+  let nextSeq =
+    (db.prepare('SELECT MAX(COALESCE((SELECT MAX(seq) FROM raw_calls), 0), COALESCE((SELECT MAX(seq) FROM bad_rows), 0)) AS m').get() as { m: number }).m + 1;
   const seen = new Map<string, number>();
   const report: SeedReport = { seedId, rowsRead: loaded.rowsRead, newRows: 0, duplicateRows: 0, newVersions: 0, badRowsNew: 0, callsAfter: 0 };
 
@@ -124,30 +128,32 @@ function writeSeed(db: DatabaseSync, loaded: LoadedExport, source: SeedSource, n
     seen.set(hash, occurrence + 1);
     const rowKey = `${hash}#${occurrence}`;
 
-    const changes = row.ok ? insertGoodRow(insertGood, row, nextSeq, rowKey, seedId) : insertBadRow(insertBad, row, nextSeq, rowKey, seedId);
-    if (changes === 0) {
+    const storedBy = row.ok ? insertGoodRow(insertGood, row, nextSeq, rowKey, seedId) : insertBadRow(insertBad, row, nextSeq, rowKey, seedId);
+    nextSeq += 1;
+    if (storedBy !== seedId) {
       report.duplicateRows += 1;
       continue;
     }
-    nextSeq += 1;
     report.newRows += 1;
     if (!row.ok) report.badRowsNew += 1;
     const callId = row.ok ? row.call.callId : row.bad.callId;
-    if (callId !== '' && hadCall.get(callId, maxBefore, callId, maxBefore)) report.newVersions += 1;
+    if (callId !== '' && hadCall.get(callId, seedId, callId, seedId)) report.newVersions += 1;
   }
   return report;
 }
 
+/** The seed_id the statement returned (see prepareRowInserts). */
+const seedIdOf = (result: unknown) => (result as { seed_id: number }).seed_id;
+
 function insertGoodRow(stmt: StatementSync, row: GoodRow, seq: number, rowKey: string, seedId: number): number {
   const c = row.call;
-  const result = stmt.run(
+  return seedIdOf(stmt.get(
     seq, rowKey, seedId, c.rowNumber, c.callId, c.startedAt.toISOString(), iso(c.endedAt), c.durationSeconds, c.callerHash, c.trackingNumber,
     c.campaignId, c.channel, c.locationId, c.answered ? 1 : 0, c.outcome, c.revenueUsd, c.agentId, iso(c.updatedAt),
-  );
-  return Number(result.changes);
+  ));
 }
 
 function insertBadRow(stmt: StatementSync, row: BadRowResult, seq: number, rowKey: string, seedId: number): number {
   const b = row.bad;
-  return Number(stmt.run(seq, rowKey, seedId, b.rowNumber, b.callId, iso(b.updatedAt), b.reason, b.detail).changes);
+  return seedIdOf(stmt.get(seq, rowKey, seedId, b.rowNumber, b.callId, iso(b.updatedAt), b.reason, b.detail));
 }

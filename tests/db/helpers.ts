@@ -53,7 +53,7 @@ export const count = (db: DatabaseSync, table: string): number =>
 
 export const noSource = { label: 'test', hashes: { calls: '', campaigns: '', locations: '' } };
 
-/** A small export that exercises every cleaning rule at once. Shared by the read and cleaned_calls tests. */
+/** A small export that exercises every cleaning rule at once. Shared by the read tests. */
 export function messyTexts() {
   const calls = [
     // c_multi: three rows arriving out of order; the 10:30 one is the latest

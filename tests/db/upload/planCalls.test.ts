@@ -217,7 +217,7 @@ describe('planUpload on calls', () => {
 
   test('it never writes', () => {
     const db = database();
-    const tables = ['seeds', 'raw_calls', 'bad_rows', 'campaigns', 'locations', 'cleaned_calls', 'reference_issues'];
+    const tables = ['seeds', 'raw_calls', 'bad_rows', 'campaigns', 'locations', 'reference_issues'];
     const before = tables.map((t) => count(db, t));
     planUpload(db, upload([callLine({ call_id: 'n' }), callLine({ call_id: 'c_1', updated_at: '2026-09-05T00:00:00Z' }), callLine({ call_id: 'b', location_id: 'zz' })]));
     expect(tables.map((t) => count(db, t))).toEqual(before);

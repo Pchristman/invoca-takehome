@@ -1,8 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { LoadError } from '../core/errors';
 import { readExportTexts } from '../node/readDataDir';
 import { parseDbPath } from '../server/config';
-import { openDatabase, removeQuietly, startsEmpty } from './database';
+import { convertDatabaseError, openDatabase, removeQuietly, startsEmpty } from './database';
 import { seedFromTexts } from './prepare';
 
 export interface SeedCommandResult {
@@ -42,7 +41,7 @@ export function runSeed(args: string[], env: NodeJS.ProcessEnv): SeedCommandResu
     db?.close();
     db = undefined;
     if (madeFile) removeQuietly(dbPath); // only a file this run created
-    if (error instanceof LoadError) return fail(error.message);
+    if (error instanceof Error && 'errcode' in error) return fail(convertDatabaseError(dbPath, error).message); // e.g. a lock timeout
     return fail(error instanceof Error ? error.message : String(error));
   } finally {
     db?.close(); // an open handle would lock the file on Windows

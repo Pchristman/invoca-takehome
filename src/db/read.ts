@@ -78,7 +78,7 @@ export function readCampaigns(db: DatabaseSync): Campaign[] {
     id: text(r.id),
     name: text(r.name),
     channel: r.channel as Channel,
-    dailyBudgetUsd: r.daily_budget_usd as number,
+    dailyBudgetUsd: r.daily_budget_usd as number | null,
   }));
 }
 
@@ -110,22 +110,16 @@ function readTables(db: DatabaseSync): LoadedExport {
     .sort((a, b) => a.seq - b.seq)
     .map((entry) => entry.row);
   // A later seed may have replaced an office's time zone with an invalid one. Calls stored under the old, valid zone cannot
-  // be localized any more, so they are bad (the same reason the CSV route gives), not a crash in cleanExport.
+  // be localized any more, so they are bad (the same reason the CSV route gives), not a crash in cleanExport. A call that
+  // already has a stored bad row (the seed that broke the zone stores one) is reported by that row alone, not twice.
   const invalidZone = new Set(locations.filter((l) => !l.timezoneValid).map((l) => l.id));
-  const rows: RowResult[] = storedRows.map((row) =>
-    row.ok && invalidZone.has(row.call.locationId)
-      ? {
-          ok: false,
-          bad: {
-            rowNumber: row.call.rowNumber,
-            callId: row.call.callId,
-            updatedAt: row.call.updatedAt,
-            reason: 'invalid_timezone',
-            detail: `location "${row.call.locationId}" has an invalid time zone`,
-          },
-        }
-      : row,
-  );
+  const storedBadCalls = new Set(storedRows.flatMap((row) => (row.ok ? [] : [row.bad.callId])));
+  const rows: RowResult[] = storedRows.flatMap((row): RowResult[] => {
+    if (!row.ok || !invalidZone.has(row.call.locationId)) return [row];
+    if (storedBadCalls.has(row.call.callId)) return [];
+    const { rowNumber, callId, updatedAt, locationId } = row.call;
+    return [{ ok: false, bad: { rowNumber, callId, updatedAt, reason: 'invalid_timezone', detail: `location "${locationId}" has an invalid time zone` } }];
+  });
   const badByReason = Object.fromEntries(BAD_REASONS.map((reason) => [reason, 0])) as Record<BadReason, number>;
   let unparseableUpdatedAt = 0;
   let unparseableEndedAt = 0;

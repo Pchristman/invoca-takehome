@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { LoadError } from '../core/errors';
 import { loadExport } from '../core/loadExport';
 import type { LoadedExport } from '../core/types';
-import { loadDotEnv } from './env';
 
 function readCsv(path: string): string {
   try {
@@ -15,13 +14,12 @@ function readCsv(path: string): string {
 }
 
 /**
- * The folder to read: the explicit argument, else DATA_DIR (from the environment or `.env`),
- * else the current directory. Blank values count as unset. A relative path is relative to the current directory.
+ * The folder to read: the explicit argument, else DATA_DIR, else the current directory. Blank values count as unset.
+ * A relative path is relative to the current directory. `.env` is not read here: each entry point loads it first.
  */
 function resolveDataDir(dir?: string): string {
   const explicit = dir?.trim();
   if (explicit) return explicit;
-  loadDotEnv();
   return process.env.DATA_DIR?.trim() || process.cwd();
 }
 

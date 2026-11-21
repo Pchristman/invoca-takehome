@@ -16,6 +16,20 @@ const counts = (c: Partial<Record<string, number>>) => ({
 });
 
 describe('planReferenceUpload: campaigns', () => {
+  it('a campaign with a blank budget is a new row with no budget; an unreadable budget is a bad row', () => {
+    const p = plan(['cmp_c,Gamma,paid_search,', 'cmp_d,Delta,social,$150.00']);
+    expect(p.preview.counts).toEqual(counts({ rowsRead: 2, newRows: 1, bad: 1 }));
+    expect(p.preview.badByReason).toEqual({ bad_budget: 1 });
+    expect(p.kind === 'campaigns' && p.campaigns).toEqual([
+      { id: 'cmp_c', name: 'Gamma', channel: 'paid_search', dailyBudgetUsd: null },
+    ]);
+  });
+
+  it('a stored budget against a blank one is a conflict that says blank', () => {
+    const p = plan(['cmp_a,Alpha,social,']);
+    expect(p.preview.examples.conflict[0]?.note).toBe('budget is 100 in the database, blank in this file');
+  });
+
   it('a new campaign is a new row', () => {
     const p = plan(['cmp_c,Gamma,paid_search,75']);
     expect(p.preview.counts).toEqual(counts({ rowsRead: 1, newRows: 1 }));

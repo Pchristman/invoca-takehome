@@ -1,13 +1,14 @@
-import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { readTable } from '../core/csv';
 import { loadExport } from '../core/loadExport';
-import { convertDatabaseError } from './database';
-import type { CallStore } from '../core/types';
+import type { BadReason, CallStore, LoadedExport } from '../core/types';
+import { CAMPAIGN_COLUMNS, parseCampaigns } from '../core/reference';
+import { buildReferences, CALL_COLUMNS, validateCall } from '../core/validate';
 import { readExportTexts, type ExportTexts } from '../node/readDataDir';
 import { createFileHandle, createMemoryHandle, type DatabaseHandle } from './handle';
-import { holdsNothing, openDatabase, openExistingDatabase, removeQuietly, startsEmpty } from './database';
-import { readStore } from './read';
-import { seedExport, type SeedReport } from './seed';
+import { convertDatabaseError, holdsNothing, openDatabase, openExistingDatabase, removeQuietly, startsEmpty } from './database';
+import { readCampaigns, readLocations, readStore } from './read';
+import { seedExport, sha256, type SeedReport } from './seed';
 
 export interface LoadedStore {
   store: CallStore;
@@ -18,32 +19,50 @@ export interface LoadedStore {
 }
 
 // Line endings are normalised so a checkout that only changed CRLF to LF is not mistaken for a different export.
-const sha256 = (text: string) => createHash('sha256').update(text.replaceAll('\r\n', '\n')).digest('hex');
+const textHash = (text: string) => sha256(text.replaceAll('\r\n', '\n'));
 
-const hashesOf = (texts: ExportTexts) => ({ calls: sha256(texts.calls), campaigns: sha256(texts.campaigns), locations: sha256(texts.locations) });
+const hashesOf = (texts: ExportTexts) => ({ calls: textHash(texts.calls), campaigns: textHash(texts.campaigns), locations: textHash(texts.locations) });
 
-const csvCell = (value: string) => (/[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
+/** The stored records whose id `have` lacks, in stored order. */
+function missingFrom<T extends { id: string }>(stored: T[], have: T[]): T[] {
+  const ids = new Set(have.map((x) => x.id));
+  return stored.filter((x) => !ids.has(x.id));
+}
+
+/** The only reasons a stored campaign or office can fix, so the only bad rows worth checking again. */
+const FIXED_BY_STORED: ReadonlySet<BadReason> = new Set(['unknown_campaign', 'unknown_location']);
 
 /**
- * Load the three texts through the normal load step, checking calls against the campaigns and locations already stored
- * as well as the ones in the file (stored ones are kept for good, so an export that leaves one out must not turn its
- * calls bad). Stored ids the file lacks are added as extra rows at the end; rows the file has win.
+ * Load the three texts through the normal load step, then check calls against the campaigns and locations already
+ * stored as well as the ones in the files (stored ones are kept for good, so an export that leaves one out must not
+ * turn its calls bad). Rows the files have win. Stored ones the files lack are added as typed records, never as CSV
+ * text, so a file's column order, or a zero-byte file, reads the same as on a first seed.
  */
-function loadWithStoredReferences(db: DatabaseSync, texts: ExportTexts) {
+function loadWithStoredReferences(db: DatabaseSync, texts: ExportTexts): LoadedExport {
   const loaded = loadExport(texts);
-  const haveCampaigns = new Set(loaded.campaigns.map((c) => c.id));
-  const haveLocations = new Set(loaded.locations.map((l) => l.id));
-  const storedCampaigns = (db.prepare('SELECT id, name, channel, daily_budget_usd FROM campaigns ORDER BY rowid').all() as Record<string, string | number>[]).filter(
-    (c) => !haveCampaigns.has(String(c.id)),
-  );
-  const storedLocations = (db.prepare('SELECT id, name, timezone FROM locations ORDER BY rowid').all() as Record<string, string>[]).filter((l) => !haveLocations.has(String(l.id)));
-  if (storedCampaigns.length === 0 && storedLocations.length === 0) return loaded;
-  const append = (text: string, lines: string[]) => (lines.length === 0 ? text : (text.endsWith('\n') ? text : text + '\n') + lines.join('\n') + '\n');
-  return loadExport({
-    calls: texts.calls,
-    campaigns: append(texts.campaigns, storedCampaigns.map((c) => [c.id, c.name, c.channel, c.daily_budget_usd].map((v) => csvCell(String(v))).join(','))),
-    locations: append(texts.locations, storedLocations.map((l) => [l.id, l.name, l.timezone].map((v) => csvCell(String(v))).join(','))),
+  const extraCampaigns = missingFrom(readCampaigns(db), loaded.campaigns);
+  const extraLocations = missingFrom(readLocations(db), loaded.locations);
+  if (extraCampaigns.length === 0 && extraLocations.length === 0) return loaded;
+
+  const campaigns = [...loaded.campaigns, ...extraCampaigns];
+  const locations = [...loaded.locations, ...extraLocations];
+  // The file's unusable campaigns, so a re-checked call names them as the CSV route does (invalid_campaign, not unknown).
+  const { invalidCampaigns } = parseCampaigns(readTable(texts.campaigns, 'campaigns.csv', CAMPAIGN_COLUMNS));
+  const refs = buildReferences(campaigns, locations, invalidCampaigns);
+  const rawRows = readTable(texts.calls, 'calls.csv', CALL_COLUMNS).rows;
+  // Only rows the file alone called unknown are checked again; the counts move with them. updated_at is read the
+  // same way for good and bad rows, so the unparseable updated_at count cannot change.
+  const badByReason = { ...loaded.badByReason };
+  let unparseableEndedAt = loaded.unparseableEndedAt;
+  const rows = loaded.rows.map((row, index) => {
+    if (row.ok || !FIXED_BY_STORED.has(row.bad.reason)) return row;
+    const checked = validateCall(rawRows[index]!, index + 1, refs);
+    badByReason[row.bad.reason] -= 1;
+    if (!checked.ok) badByReason[checked.bad.reason] += 1;
+    else if (checked.call.endedAt === null) unparseableEndedAt += 1;
+    return checked;
   });
+  return { ...loaded, campaigns, locations, rows, badByReason, unparseableEndedAt };
 }
 
 /** Load the three texts and write them into the database. */
@@ -52,7 +71,7 @@ export function seedFromTexts(db: DatabaseSync, texts: ExportTexts): SeedReport 
 }
 
 /** A message when the data folder holds an export no seed came from; null when it matches or cannot be read. */
-export function staleSeedWarning(db: DatabaseSync, texts: ExportTexts | null, dbPath: string): string | null {
+function staleSeedWarning(db: DatabaseSync, texts: ExportTexts | null, dbPath: string): string | null {
   if (texts === null) return null;
   const h = hashesOf(texts);
   const match = db

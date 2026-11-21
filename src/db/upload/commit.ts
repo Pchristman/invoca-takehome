@@ -1,7 +1,6 @@
 import { resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CallStore } from '../../core/types';
-import { rebuildCleanedCalls } from '../cleaned';
 import { convertDatabaseError } from '../database';
 import { readStore } from '../read';
 import { prepareRowInserts, rowHash } from '../seed';
@@ -60,7 +59,7 @@ function writeRows(db: DatabaseSync, plan: UploadPlan, seedId: number): void {
 export function withoutPath(message: string, path: string | null | undefined): string {
   if (!path || path === ':memory:') return message;
   let out = message;
-  for (const p of new Set([path, resolve(path)])) out = out.split(`the database ${p}`).join('the database').split(p).join('the database file');
+  for (const p of new Set([path, resolve(path)])) out = out.split(`the database ${p}`).join('the database').split(`The database ${p}`).join('The database').split(p).join('the database file');
   return out;
 }
 
@@ -79,8 +78,8 @@ export function commitUpload(db: DatabaseSync, upload: ParsedUpload, now: Date =
       return { preview: plan.preview, written: 0, store: null };
     }
     writeRows(db, plan, insertSeed(db, upload, counts.rowsRead, now));
-    // Built before COMMIT: a store that cannot be built undoes the write. Calls rebuild cleaned_calls from the same read.
-    const store = plan.kind === 'calls' ? rebuildCleanedCalls(db) : readStore(db);
+    // Built before COMMIT: a store that cannot be built undoes the write.
+    const store = readStore(db);
     db.exec('COMMIT');
     return { preview: plan.preview, written, store };
   } catch (error) {

@@ -1,7 +1,8 @@
-import { createHash } from 'node:crypto';
 import { readTable, type Table } from '../../core/csv';
 import { LoadError } from '../../core/errors';
-import { shorten, UPLOAD_COLUMNS, UploadRejected, type UploadKind } from './types';
+import { sha256 } from '../seed';
+import { shorten } from '../../server/api';
+import { UPLOAD_COLUMNS, UploadRejected, type UploadKind } from './types';
 
 export interface ParsedUpload {
   kind: UploadKind;
@@ -59,6 +60,6 @@ export function readUpload(fileName: string, text: string): ParsedUpload {
     fileName,
     // Parsed again with the kind's columns so a repeated column gets the usual message.
     table: readOrReject(text, fileName, UPLOAD_COLUMNS[kind]),
-    textSha256: createHash('sha256').update(text).digest('hex'),
+    textSha256: sha256(text),
   };
 }
