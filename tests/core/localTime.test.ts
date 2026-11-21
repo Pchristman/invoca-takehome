@@ -55,6 +55,19 @@ describe('localParts', () => {
     }
   });
 
+  test('when clocks spring forward, no call lands in the skipped hour', () => {
+    // Denver, 2026-03-08: 02:00 MST jumps to 03:00 MDT, so local hour 2 does not exist that day.
+    expect(at('2026-03-08T08:59:00Z', 'America/Denver')).toEqual({ date: '2026-03-08', hour: 1, weekday: 6 });
+    expect(at('2026-03-08T09:00:00Z', 'America/Denver')).toEqual({ date: '2026-03-08', hour: 3, weekday: 6 });
+    expect(at('2026-03-08T09:30:00Z', 'America/Denver').hour).toBe(3);
+    expect(localDateTime(new Date('2026-03-08T09:00:00Z'), 'America/Denver')).toBe('2026-03-08 03:00');
+  });
+
+  test('a year before 1000 is padded to four digits, so dates still sort as text', () => {
+    expect(at('0998-12-31T18:00:00Z', 'UTC').date).toBe('0998-12-31');
+    expect(localDateTime(new Date('0998-12-31T18:00:00Z'), 'UTC')).toBe('0998-12-31 18:00');
+  });
+
   test('year boundary', () => {
     expect(at('2027-01-01T03:00:00Z', 'America/New_York')).toEqual({ date: '2026-12-31', hour: 22, weekday: 3 });
   });

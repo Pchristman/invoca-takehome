@@ -7,7 +7,8 @@ export interface Campaign {
   id: string;
   name: string;
   channel: Channel;
-  dailyBudgetUsd: number;
+  /** null: blank or unreadable in campaigns.csv. Its calls still count; every budget-based estimate is blank. */
+  dailyBudgetUsd: number | null;
 }
 
 export interface Location {
@@ -21,10 +22,12 @@ export interface Location {
 /** In the order the checks run; the first failing check names the reason. */
 export const BAD_REASONS = [
   'missing_call_id',
+  'truncated_row',
   'bad_timestamp',
   'unknown_location',
   'invalid_timezone',
   'unknown_campaign',
+  'invalid_campaign',
   'bad_boolean',
   'bad_outcome',
   'inconsistent_outcome',

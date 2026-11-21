@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import {
-  isValidTimeZone,
   normalizeTimeZone,
   parseBoolean,
   parseEnum,
@@ -14,6 +13,16 @@ describe('parseTimestamp', () => {
     expect(parseTimestamp(s)?.toISOString().slice(0, 19)).toBe(s.slice(0, 19));
   });
 
+  test.each([
+    ['2026-09-01T00:39:12+00:00', Date.UTC(2026, 8, 1, 0, 39, 12)],
+    ['2026-09-01T00:39:12-00:00', Date.UTC(2026, 8, 1, 0, 39, 12)],
+    ['2026-09-01T00:39:12.123456Z', Date.UTC(2026, 8, 1, 0, 39, 12, 123)],
+    ['2026-09-01T00:39:12.123456789+00:00', Date.UTC(2026, 8, 1, 0, 39, 12, 123)],
+    ['2026-09-01T00:39:12.5-00:00', Date.UTC(2026, 8, 1, 0, 39, 12, 500)],
+  ])('accepts the UTC offset or long fraction in %s', (s, ms) => {
+    expect(parseTimestamp(s)?.getTime()).toBe(ms);
+  });
+
   test('accepts surrounding whitespace and returns the exact UTC instant', () => {
     expect(parseTimestamp('  2026-09-01T00:39:12Z ')?.getTime()).toBe(Date.UTC(2026, 8, 1, 0, 39, 12));
   });
@@ -24,6 +33,13 @@ describe('parseTimestamp', () => {
     '2026-09-01 00:39:12',
     '2026-09-01T00:39:12',
     '2026-09-01T00:39:12+02:00',
+    '2026-09-01T00:39:12-05:00',
+    '2026-09-01T00:39:12+00:30',
+    '2026-09-01T00:39:12+0000',
+    '2026-09-01T00:39:12.1234567890Z',
+    '2026-09-01T00:39:12.Z',
+    '2026-02-30T10:00:00+00:00',
+    '2026-09-01T24:00:00.000000-00:00',
     '2026-02-30T10:00:00Z',
     '2026-13-01T00:00:00Z',
     '2026-09-01T24:00:00Z',
@@ -88,19 +104,6 @@ describe('parseMoney', () => {
   });
 });
 
-describe('isValidTimeZone', () => {
-  test.each(['America/Phoenix', 'America/New_York', 'UTC'])('accepts %s', (tz) => {
-    expect(isValidTimeZone(tz)).toBe(true);
-  });
-  test.each(['Mars/Olympus', '', '   ', '+05:00', '-0700', '+05', '-08:00'])('rejects %j', (tz) => {
-    expect(isValidTimeZone(tz)).toBe(false);
-  });
-  test('accepts tzdb aliases (they are IANA identifiers)', () => {
-    expect(isValidTimeZone('EST')).toBe(true);
-    expect(isValidTimeZone('US/Arizona')).toBe(true);
-  });
-});
-
 describe('normalizeTimeZone', () => {
   test('returns the canonical IANA spelling', () => {
     expect(normalizeTimeZone('america/phoenix')).toBe('America/Phoenix');
@@ -110,6 +113,16 @@ describe('normalizeTimeZone', () => {
     expect(normalizeTimeZone('+05:00')).toBeNull();
     expect(normalizeTimeZone('Mars/Olympus')).toBeNull();
     expect(normalizeTimeZone('')).toBeNull();
+  });
+  test.each(['America/Phoenix', 'America/New_York', 'UTC'])('accepts %s', (tz) => {
+    expect(normalizeTimeZone(tz)).toBe(tz);
+  });
+  test.each(['Mars/Olympus', '', '   ', '+05:00', '-0700', '+05', '-08:00'])('rejects %j', (tz) => {
+    expect(normalizeTimeZone(tz)).toBeNull();
+  });
+  test('accepts tzdb aliases (they are IANA identifiers)', () => {
+    expect(normalizeTimeZone('EST')).not.toBeNull();
+    expect(normalizeTimeZone('US/Arizona')).not.toBeNull();
   });
 });
 

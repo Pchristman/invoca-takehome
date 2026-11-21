@@ -78,6 +78,12 @@ describe('dedupeRows', () => {
       goodRow({ agent_id: 'garbage', updated_at: 'garbage' }),
     ]);
     expect(goodCall(result.winners[0]!).agentId).toBe('parsed');
+    const reversed = dedupe([
+      goodRow({ agent_id: 'garbage', updated_at: 'garbage' }),
+      goodRow({ agent_id: 'parsed', updated_at: '2026-03-01T08:00:00Z' }),
+    ]);
+    expect(goodCall(reversed.winners[0]!).agentId).toBe('parsed');
+    expect(reversed.tiedCalls).toBe(0);
   });
 
   test('all rows unparseable keeps the later row and does not count a tie', () => {

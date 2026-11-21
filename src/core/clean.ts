@@ -1,6 +1,7 @@
 import { dedupeRows } from './dedupe';
 import { localParts } from './localTime';
 import { measureOutcomeLagDays } from './outcomeLag';
+import { compareText } from './text';
 import { BAD_REASONS, type BadReason, type CallStore, type CleanCall, type LoadedExport } from './types';
 
 /** Turn a loaded export into one localized call per call_id, plus the data notes. */
@@ -69,7 +70,7 @@ export function cleanExport(loaded: LoadedExport): CallStore {
 
   const unattributedTrackingNumbers = [...trackingCounts]
     .map(([trackingNumber, count]) => ({ trackingNumber, calls: count }))
-    .sort((a, b) => b.calls - a.calls || (a.trackingNumber < b.trackingNumber ? -1 : a.trackingNumber > b.trackingNumber ? 1 : 0));
+    .sort((a, b) => b.calls - a.calls || compareText(a.trackingNumber, b.trackingNumber));
 
   return {
     calls,

@@ -49,7 +49,7 @@ export function localDateTime(instant: Date, timeZone: string): string {
   }
   const parts: Record<string, string> = {};
   for (const part of formatter.formatToParts(instant)) parts[part.type] = part.value;
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+  return `${parts.year!.padStart(4, '0')}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 /** The office's local date, hour and weekday for a UTC instant. `timeZone` is a valid IANA name. */
@@ -59,7 +59,7 @@ export function localParts(instant: Date, timeZone: string): LocalParts {
   const weekday = WEEKDAYS.indexOf(parts.weekday!);
   if (weekday === -1) throw new Error(`unexpected weekday "${parts.weekday}" for zone ${timeZone}`);
   return {
-    date: `${parts.year}-${parts.month}-${parts.day}`,
+    date: `${parts.year!.padStart(4, '0')}-${parts.month}-${parts.day}`, // a year before 1000 would sort wrong unpadded
     hour: Number(parts.hour),
     weekday,
   };

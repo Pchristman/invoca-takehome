@@ -11,7 +11,7 @@ const locations: Location[] = [
   { id: 'loc_den', name: 'Denver', timezone: 'America/Denver', timezoneValid: true },
   { id: 'loc_bad', name: 'Nowhere', timezone: 'Mars/Olympus', timezoneValid: false },
 ];
-const refs = buildReferences(campaigns, locations);
+const refs = buildReferences(campaigns, locations, new Map([['cmp_bad', 'channel "tv" is not a known marketing channel']]));
 
 const goodRow = (over: Record<string, string> = {}): Record<string, string> => ({
   call_id: 'call_1',
@@ -47,6 +47,7 @@ describe('validateCall: bad rows', () => {
     ['unknown location', { location_id: 'loc_zzz' }, 'unknown_location'],
     ['invalid IANA zone location', { location_id: 'loc_bad' }, 'invalid_timezone'],
     ['unknown non-empty campaign', { campaign_id: 'cmp_zzz' }, 'unknown_campaign'],
+    ['campaign whose campaigns.csv row is unusable', { campaign_id: 'cmp_bad' }, 'invalid_campaign'],
     ['bad answered', { answered: 'maybe' }, 'bad_boolean'],
     ['empty answered', { answered: '' }, 'bad_boolean'],
     ['bad outcome enum', { outcome: 'won' }, 'bad_outcome'],
@@ -87,6 +88,38 @@ describe('validateCall: bad rows', () => {
   test('a bad outcome is reported before an answered/outcome mismatch', () => {
     const result = validateCall(goodRow({ answered: 'false', outcome: 'won' }), 1, refs);
     expect(result.ok === false && result.bad.reason).toBe('bad_outcome');
+  });
+
+  test.each(['0001-01-01T00:00:00Z', '1970-01-01T00:00:00Z', '1999-12-31T23:59:59Z', '2101-01-01T00:00:00Z', '9999-12-31T23:59:59Z'])(
+    'a started_at of %s is outside the plausible years, so the row is a bad timestamp',
+    (startedAt) => {
+      const result = validateCall(goodRow({ started_at: startedAt }), 1, refs);
+      expect(result.ok === false && result.bad.reason).toBe('bad_timestamp');
+      expect(result.ok === false && result.bad.detail).toBe(`started_at "${startedAt}" is outside the years 2000 to 2100, so it is taken as a placeholder date`);
+    },
+  );
+
+  test.each(['2000-01-01T00:00:00Z', '2100-12-31T23:59:59Z'])('a started_at of %s is inside the plausible years', (startedAt) => {
+    expect(validateCall(goodRow({ started_at: startedAt }), 1, refs).ok).toBe(true);
+  });
+
+  test('a row with no cell for a column (the line was cut off) is truncated_row, naming the first missing column', () => {
+    const { revenue_usd: _r, agent_id: _a, updated_at: _u, ...cut } = goodRow();
+    const result = validateCall(cut, 4, refs);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.bad).toEqual({
+      rowNumber: 4,
+      callId: 'call_1',
+      updatedAt: null,
+      reason: 'truncated_row',
+      detail: 'the row ends early: it has no cell for revenue_usd or any column after it',
+    });
+  });
+
+  test('a row cut off before call_id is still missing_call_id', () => {
+    const result = validateCall({}, 1, refs);
+    expect(result.ok === false && result.bad.reason).toBe('missing_call_id');
   });
 
   test('a bad row with an unparseable updated_at carries null', () => {

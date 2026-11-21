@@ -5,7 +5,10 @@ export interface Table {
   file: string;
   /** The trimmed header names, in file order. Empty for a zero-byte file. */
   header: string[];
-  /** One record per data row, keyed by trimmed header name. Missing cells are "". */
+  /**
+   * One record per data row, keyed by trimmed header name. A row with fewer cells than the header has no key for
+   * the missing ones (read them with `?? ''`), so a reader can tell a cut-off row from an empty cell.
+   */
   rows: Record<string, string>[];
   /** True when there are no data rows (zero-byte file, or header only). */
   isEmpty: boolean;
@@ -45,7 +48,8 @@ export function readTable(text: string, file: string, required: readonly string[
   const rows = records.slice(1).map((cells) => {
     const row: Record<string, string> = {};
     header.forEach((name, i) => {
-      row[name] = cells[i] ?? '';
+      const cell = cells[i];
+      if (cell !== undefined) row[name] = cell;
     });
     return row;
   });

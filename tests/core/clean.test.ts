@@ -201,8 +201,9 @@ describe('cleanExport', () => {
     const store = clean([
       goodRow({ call_id: 'r1', outcome: 'qualified_lead', revenue_usd: '0.10' }),
       goodRow({ call_id: 'r2', outcome: 'qualified_lead', revenue_usd: '0.20' }),
+      goodRow({ call_id: 'r3', outcome: 'qualified_lead', revenue_usd: '0.29' }), // 0.29 * 100 is 28.999…: rounds, not truncates
     ]);
-    expect(store.dataNotes.revenueOnNonBookedUsd).toBe(0.3);
+    expect(store.dataNotes.revenueOnNonBookedUsd).toBe(0.59);
   });
 
   test('an explicit 0 revenue on a non-booked call is not an anomaly', () => {
@@ -229,7 +230,7 @@ describe('cleanExport', () => {
   });
 
   test('Phase 1 reference issues, raw bad-row counts and ended_at count survive cleaning', () => {
-    const campaigns = CAMPAIGNS + 'cmp_x,Broken,social,abc\n';
+    const campaigns = CAMPAIGNS + 'cmp_x,Broken,tv,10\n';
     const loaded = loadFixture(
       [goodRow({ ended_at: 'garbage' }), goodRow({ call_id: 'c2', campaign_id: 'cmp_x' })],
       campaigns,
@@ -238,7 +239,7 @@ describe('cleanExport', () => {
     expect(loaded.referenceIssues.some((i) => i.file === 'campaigns.csv')).toBe(true);
     expect(dataNotes.referenceIssues).toEqual(loaded.referenceIssues);
     expect(dataNotes.badRows).toBe(1);
-    expect(dataNotes.badRowsByReason.unknown_campaign).toBe(1);
+    expect(dataNotes.badRowsByReason.invalid_campaign).toBe(1);
     expect(dataNotes.unparseableEndedAt).toBe(1);
   });
 

@@ -20,9 +20,9 @@ export function loadExport(texts: { calls: string; campaigns: string; locations:
   noteIfEmpty(campaignTable, 'campaigns');
   noteIfEmpty(locationTable, 'locations');
 
-  const { campaigns, issues: campaignIssues } = parseCampaigns(campaignTable);
-  const { locations, issues: locationIssues } = parseLocations(locationTable);
-  const refs = buildReferences(campaigns, locations);
+  const { campaigns, invalidCampaigns, issues: campaignIssues, notes: campaignNotes } = parseCampaigns(campaignTable);
+  const { locations, issues: locationIssues, notes: locationNotes } = parseLocations(locationTable);
+  const refs = buildReferences(campaigns, locations, invalidCampaigns);
 
   const rows = callTable.rows.map((raw, index) => validateCall(raw, index + 1, refs));
 
@@ -47,7 +47,11 @@ export function loadExport(texts: { calls: string; campaigns: string; locations:
     badByReason,
     unparseableUpdatedAt,
     unparseableEndedAt,
-    referenceIssues: [...campaignIssues, ...locationIssues],
+    // Each file's issues and notes in row order (a row can have both kinds), campaigns first.
+    referenceIssues: [
+      ...[...campaignIssues, ...campaignNotes].sort((a, b) => a.rowNumber - b.rowNumber),
+      ...[...locationIssues, ...locationNotes].sort((a, b) => a.rowNumber - b.rowNumber),
+    ],
     notes,
   };
 }

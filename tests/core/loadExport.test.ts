@@ -54,6 +54,7 @@ describe('loadExport', () => {
   });
 
   test('badByReason counts every reason per raw row and sums to the bad rows', () => {
+    const campaigns = `${CAMPAIGNS}cmp_x,Broken,tv,10\n`;
     const result = load([
       goodRow(),
       goodRow({ call_id: '' }),
@@ -67,13 +68,16 @@ describe('loadExport', () => {
       goodRow({ call_id: 'c9', duration_seconds: '-3' }),
       goodRow({ call_id: 'c10', revenue_usd: 'abc' }),
       goodRow({ call_id: 'c11', answered: 'false' }),
-    ]);
+      goodRow({ call_id: 'c12', campaign_id: 'cmp_x' }),
+    ], campaigns);
     const reasons: BadReason[] = [
       'missing_call_id',
+      'truncated_row',
       'bad_timestamp',
       'unknown_location',
       'invalid_timezone',
       'unknown_campaign',
+      'invalid_campaign',
       'bad_boolean',
       'bad_outcome',
       'inconsistent_outcome',
@@ -82,10 +86,10 @@ describe('loadExport', () => {
       'bad_revenue',
     ];
     expect(Object.keys(result.badByReason).sort()).toEqual([...reasons].sort());
-    for (const reason of reasons) expect(result.badByReason[reason]).toBe(1);
+    for (const reason of reasons.filter((r) => r !== 'truncated_row')) expect(result.badByReason[reason]).toBe(1);
     const badTotal = result.rows.filter((r) => !r.ok).length;
     expect(Object.values(result.badByReason).reduce((a, b) => a + b, 0)).toBe(badTotal);
-    expect(result.rowsRead).toBe(12);
+    expect(result.rowsRead).toBe(13);
   });
 
   test('unparseable updated_at (any row) and ended_at (valid rows) are counted', () => {
@@ -112,7 +116,7 @@ describe('loadExport', () => {
 
   test('all reasons are present with 0 when nothing is bad', () => {
     const result = load([goodRow()]);
-    expect(Object.values(result.badByReason)).toHaveLength(11);
+    expect(Object.values(result.badByReason)).toHaveLength(13);
     expect(Object.values(result.badByReason).every((n) => n === 0)).toBe(true);
   });
 
@@ -150,19 +154,40 @@ describe('loadExport', () => {
     expect(result.rows[0]?.ok).toBe(true);
   });
 
-  test('reference issues flow through; calls to a skipped campaign are unknown_campaign', () => {
-    const campaigns = 'campaign_id,name,channel,daily_budget_usd\ncmp_a,Alpha,social,10\ncmp_x,Broken,social,abc\n';
+  test('a call to a campaign whose row is unusable is invalid_campaign, and the detail says why', () => {
+    const campaigns = 'campaign_id,name,channel,daily_budget_usd\ncmp_a,Alpha,social,10\ncmp_x,Broken,tv,10\n';
+    const result = load([goodRow({ campaign_id: 'cmp_x' })], campaigns);
+    expect(result.campaigns.map((c) => c.id)).toEqual(['cmp_a']);
+    expect(result.badByReason.unknown_campaign).toBe(0);
+    expect(result.badByReason.invalid_campaign).toBe(1);
+    const row = result.rows[0]!;
+    expect(row.ok ? '' : row.bad.detail).toBe(
+      'campaign_id "cmp_x" has an unusable row in campaigns: channel "tv" is not a known marketing channel',
+    );
+  });
+
+  test('campaign name issues reach the reference issues', () => {
+    const campaigns = 'campaign_id,name,channel,daily_budget_usd\ncmp_a,Alpha,social,10\ncmp_b,Alpha,social,10\n';
+    const result = load([goodRow()], campaigns);
+    expect(result.referenceIssues).toContainEqual(
+      expect.objectContaining({ file: 'campaigns.csv', rowNumber: 2, reason: 'duplicate_name' }),
+    );
+  });
+
+  test('reference issues flow through; calls to a skipped campaign are invalid_campaign', () => {
+    const campaigns = 'campaign_id,name,channel,daily_budget_usd\ncmp_a,Alpha,social,10\ncmp_x,Broken,tv,10\n';
     const result = load([goodRow(), goodRow({ call_id: 'c2', campaign_id: 'cmp_x' })], campaigns);
-    // One from campaigns.csv (bad budget) and one from the shared LOCATIONS fixture (invalid zone).
+    // One from campaigns.csv (bad channel) and one from the shared LOCATIONS fixture (invalid zone).
     expect(result.referenceIssues).toHaveLength(2);
     expect(result.referenceIssues).toContainEqual(
-      expect.objectContaining({ file: 'campaigns.csv', rowNumber: 2, reason: 'bad_budget' }),
+      expect.objectContaining({ file: 'campaigns.csv', rowNumber: 2, reason: 'bad_channel' }),
     );
     expect(result.referenceIssues).toContainEqual(
       expect.objectContaining({ file: 'locations.csv', rowNumber: 3, reason: 'invalid_timezone' }),
     );
     expect(result.rows[1]?.ok).toBe(false);
-    expect(result.badByReason.unknown_campaign).toBe(1);
+    expect(result.badByReason.invalid_campaign).toBe(1);
+    expect(result.badByReason.unknown_campaign).toBe(0);
   });
 
   test('CRLF line endings and a quoted comma in a campaign name load end to end', () => {
@@ -172,5 +197,47 @@ describe('loadExport', () => {
     expect(result.campaigns[0]?.name).toBe('Search, Brand');
     expect(result.locations[0]?.timezone).toBe('America/Phoenix');
     expect(result.rows[0]?.ok).toBe(true);
+  });
+});
+
+describe('loadExport: rows and dates that cannot be trusted', () => {
+  test('a calls row with fewer cells than the header is truncated_row; one with extra cells loads as before', () => {
+    const cut = CALL_COLUMNS.slice(0, 10).map((c) => goodRow({ call_id: 'c1' })[c]).join(',');
+    const extra = CALL_COLUMNS.map((c) => goodRow({ call_id: 'c3' })[c]).join(',') + ',surplus';
+    const calls = [CALL_COLUMNS.join(','), cut, CALL_COLUMNS.map((c) => goodRow({ call_id: 'c2' })[c]).join(','), extra].join('\n');
+    const result = loadExport({ calls, campaigns: CAMPAIGNS, locations: LOCATIONS });
+    expect(result.badByReason.truncated_row).toBe(1);
+    const [short, ok, long] = result.rows;
+    expect(short?.ok === false && short.bad.detail).toBe('the row ends early: it has no cell for outcome or any column after it');
+    expect(ok?.ok).toBe(true);
+    expect(long?.ok).toBe(true);
+  });
+
+  test('a placeholder call date is a bad timestamp and never becomes a call', () => {
+    const result = load([goodRow(), goodRow({ call_id: 'c2', started_at: '1970-01-01T00:00:00Z' })]);
+    expect(result.badByReason.bad_timestamp).toBe(1);
+    expect(result.rows.filter((r) => r.ok)).toHaveLength(1);
+  });
+
+  test('a time zone name read as another zone stays valid and reaches the reference issues as a note', () => {
+    const locations = ['location_id,name,timezone', 'loc_1,One,EST'].join('\n');
+    const result = load([goodRow()], CAMPAIGNS, locations);
+    expect(result.rows[0]?.ok).toBe(true);
+    expect(result.locations[0]).toMatchObject({ timezone: 'America/Panama', timezoneValid: true });
+    expect(result.referenceIssues).toEqual([
+      { file: 'locations.csv', rowNumber: 1, reason: 'timezone_reinterpreted', detail: 'time zone "EST" was read as America/Panama' },
+    ]);
+  });
+});
+
+describe('loadExport: a campaign with no usable budget', () => {
+  test.each(['', '$150.00', '-5'])('budget %j: the campaign is kept and its calls count', (budget) => {
+    const campaigns = ['campaign_id,name,channel,daily_budget_usd', `cmp_a,Alpha,social,"${budget}"`].join('\n');
+    const result = load([goodRow()], campaigns);
+    expect(result.campaigns).toEqual([{ id: 'cmp_a', name: 'Alpha', channel: 'social', dailyBudgetUsd: null }]);
+    expect(result.rows[0]?.ok).toBe(true);
+    expect(result.badByReason.invalid_campaign).toBe(0);
+    const reasons = result.referenceIssues.filter((i) => i.file === 'campaigns.csv').map((i) => i.reason);
+    expect(reasons).toEqual([budget === '' ? 'no_budget' : 'bad_budget']);
   });
 });

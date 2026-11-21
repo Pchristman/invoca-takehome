@@ -99,4 +99,22 @@ describe('measureOutcomeLagDays', () => {
     ];
     expect(lag(rows)).toBe(0);
   });
+
+  test('a revenue change on a call that is not booked does not count', () => {
+    const rows = [
+      goodRow({ started_at: START, outcome: 'not_qualified', revenue_usd: '', updated_at: hoursAfterStart(1) }),
+      goodRow({ started_at: START, outcome: 'not_qualified', revenue_usd: '120', updated_at: hoursAfterStart(50) }),
+    ];
+    expect(lag(rows)).toBe(0);
+  });
+
+  test('empty revenue then 0 is not a change, on a pending or a booked call', () => {
+    for (const outcome of ['', 'booked']) {
+      const rows = [
+        goodRow({ started_at: START, outcome, revenue_usd: '', updated_at: hoursAfterStart(1) }),
+        goodRow({ started_at: START, outcome, revenue_usd: '0', updated_at: hoursAfterStart(50) }),
+      ];
+      expect(lag(rows)).toBe(0);
+    }
+  });
 });

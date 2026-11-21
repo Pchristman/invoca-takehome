@@ -88,9 +88,10 @@ describe('readTable', () => {
     expect(t.rows[0]).toEqual({ a: '1', b: '2' });
   });
 
-  test('short row gives empty cells; blank lines are skipped', () => {
-    const t = readTable('a,b\n1\n\n3,4\n', file, required);
+  test('a short row has no key for its missing cells, so a reader can tell it was cut off; blank lines are skipped', () => {
+    const t = readTable('a,b\n1\n1,\n\n3,4\n', file, required);
     expect(t.rows).toEqual([
+      { a: '1' },
       { a: '1', b: '' },
       { a: '3', b: '4' },
     ]);

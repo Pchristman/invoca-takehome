@@ -28,14 +28,27 @@ export const CALL_COLUMNS = [
 
 const UNANSWERED_OUTCOMES: readonly string[] = ['missed', 'voicemail'];
 
+/**
+ * A plausibility window for started_at, not the dates of any dataset: a call outside it is taken as a
+ * placeholder (0001-01-01, 1970-01-01, 9999-12-31) that would otherwise stretch the date span.
+ */
+const PLAUSIBLE_CALL_YEARS = { first: 2000, last: 2100 } as const;
+
 export interface References {
   campaignIds: ReadonlySet<string>;
+  /** Campaigns whose campaigns.csv row is unusable, by id, with what is wrong. */
+  invalidCampaigns: ReadonlyMap<string, string>;
   locations: ReadonlyMap<string, Location>;
 }
 
-export function buildReferences(campaigns: Campaign[], locations: Location[]): References {
+export function buildReferences(
+  campaigns: Campaign[],
+  locations: Location[],
+  invalidCampaigns: ReadonlyMap<string, string> = new Map(),
+): References {
   return {
     campaignIds: new Set(campaigns.map((c) => c.id)),
+    invalidCampaigns,
     locations: new Map(locations.map((l) => [l.id, l])),
   };
 }
@@ -56,8 +69,19 @@ export function validateCall(raw: Record<string, string>, rowNumber: number, ref
 
   if (callId === '') return bad('missing_call_id', 'call_id is empty');
 
+  // The CSV reader leaves out the cells a short row lacks; such a row was cut off, not left blank.
+  const missing = CALL_COLUMNS.find((name) => raw[name] === undefined);
+  if (missing !== undefined) return bad('truncated_row', `the row ends early: it has no cell for ${missing} or any column after it`);
+
   const startedAt = parseTimestamp(field('started_at'));
   if (startedAt === null) return bad('bad_timestamp', `started_at "${field('started_at')}" is not an ISO 8601 UTC time`);
+  const year = startedAt.getUTCFullYear();
+  if (year < PLAUSIBLE_CALL_YEARS.first || year > PLAUSIBLE_CALL_YEARS.last) {
+    return bad(
+      'bad_timestamp',
+      `started_at "${field('started_at')}" is outside the years ${PLAUSIBLE_CALL_YEARS.first} to ${PLAUSIBLE_CALL_YEARS.last}, so it is taken as a placeholder date`,
+    );
+  }
 
   const location = refs.locations.get(field('location_id'));
   if (location === undefined) return bad('unknown_location', `location_id "${field('location_id')}" is not in locations`);
@@ -65,6 +89,10 @@ export function validateCall(raw: Record<string, string>, rowNumber: number, ref
 
   const campaignId = field('campaign_id');
   if (campaignId !== '' && !refs.campaignIds.has(campaignId)) {
+    const problem = refs.invalidCampaigns.get(campaignId);
+    if (problem !== undefined) {
+      return bad('invalid_campaign', `campaign_id "${campaignId}" has an unusable row in campaigns: ${problem}`);
+    }
     return bad('unknown_campaign', `campaign_id "${campaignId}" is not in campaigns`);
   }
 
