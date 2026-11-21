@@ -138,16 +138,18 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 
 **Action:**
 
-- If an office is flagged worse on answer rate: "{office} answers {a}% of calls versus {b}% at other offices. Its most-missed hour is {weekday} {hour} local." Links to Missed calls filtered to that office.
+- If an office is flagged worse on answer rate: "{office} answers {a}% of calls versus {b}% at other offices. Its most-missed hour is {weekday} {hour} local." Leave the hour clause out when two or more slots tie for the most missed calls. Links to Missed calls filtered to that office.
 - If flagged worse on booking rate: "{office} books {a}% of calls versus {b}% elsewhere. Its best campaign there is {campaign}."
-- If no office is flagged: "No office stands out on answer or booking rate. Missed calls are a company-wide issue." Links to Missed calls. This is a valid, useful result, not a failure.
+- If no office is flagged: when no office had enough calls to be tested, "There are too few calls in this range to compare offices."; otherwise "No office stands out on answer or booking rate.", followed by "Missed calls are a company-wide issue." only when at least one call in the range went unanswered. Links to Missed calls. This is a valid, useful result, not a failure.
+- If an office is flagged only better (none worse): "No office is doing worse than the rest on answer or booking rate.", followed by the same company-wide sentence under the same condition. Links to Missed calls.
+- In both cases above where offices were compared and none is flagged worse, the fact sheet carries the number of offices compared, the combined answer and booking rates and the unanswered calls in range (`offices.*`), and no individual office, so a takeaway can be written without ranking offices. The "too few calls" case has no facts. The Overview leaves these facts out of its own sheet.
 
 ### 4.4 Missed calls
 
 **Shows:**
 
 - A heatmap of unanswered calls by office x local hour, with a toggle to weekday x local hour.
-- **Estimated lost value** for unanswered calls in the range, labeled as an estimate with its formula visible.
+- **Estimated lost value** for unanswered calls in the range, labeled as an estimate with its formula visible. It is an upper bound: it counts every unanswered call, including repeat attempts and callers who later got through.
 - A **callback list**, downloadable as CSV.
 
 **Definitions:**
@@ -156,7 +158,7 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 - **Estimated value of one missed call** = its campaign's booking rate among answered calls with an outcome x that campaign's average booking value. Rates come from the **whole export**, not the selected range, so they are stable. If a campaign has fewer than `MIN_ANSWERED_FOR_RATE` answered calls with outcomes, use its channel's rates; if the channel is also too thin, use the overall rates. Unattributed calls use their `marketing_channel`'s rates.
 - **Callback list:** callers (by `caller_number_hash`) who had at least one unanswered call in the range **and** no answered call after their latest unanswered call in the range, looking through to the end of the export. Each row: caller hash, unanswered attempts in range, last attempt (office local time), office, campaign, tracking number dialed, estimated value. The estimate is for their latest missed call only, because one callback recovers at most one booking. Sorted by estimated value, highest first.
 
-**Action:** "Call back these {n} callers who never got through (est. ${x} in bookings). Busiest missed slot: {office} {weekday} {hour}."
+**Action:** "Call back {n} callers whose latest call went unanswered (est. ${x} in bookings). Busiest missed slot: {office} {weekday} {hour}." Leave the slot clause out when two or more slots tie for the most missed calls.
 
 **Stated limit:** the export carries only a hashed caller number. The list identifies callers by hash, tracking number and time, which the marketer matches in their call platform. Say this on the view.
 
@@ -181,8 +183,13 @@ All live in one config module with these defaults and are never derived from thi
 All rules live in the pure data core. **Each rule gets its own test** against a small hand-written fixture built to exercise it.
 
 1. **Loading.** Read `calls.csv`, `campaigns.csv`, `locations.csv` from `DATA_DIR` (default: repo root). Match columns by header name, not position. A missing required column stops startup with a message naming the file and column. Extra columns are ignored. Empty file: start with zero calls and say so.
-2. **Deduplication first.** Group rows by `call_id`; keep the row with the latest `updated_at`. Dedup happens **before** validation chooses rows, so a bad latest row never resurrects an older good one; that call is reported bad. If two rows tie on `updated_at`, keep the later one in the file and count the tie in data notes. A row whose `updated_at` can't be parsed loses to any parseable row of the same call.
+2. **Deduplication first.** Group rows by `call_id`; keep the row with the latest `updated_at`. Dedup happens **before** validation chooses rows, so a bad latest row never resurrects an older good one; that call is reported bad. If two rows tie on `updated_at`, keep the later one in the file and count the tie in data notes. A row whose `updated_at` can't be parsed loses to any parseable row of the same call. When no row of a call has a parseable `updated_at`, keep the later one in the file and do not count a tie.
 3. **Validation.** A call is bad, counted by reason and excluded from metrics, if: `started_at` can't be parsed; `location_id` is not in locations; `campaign_id` is non-empty but not in campaigns; `answered` is not a boolean; `outcome` or `marketing_channel` is outside its enum; or duration is negative. An unknown location time zone (not a valid IANA zone) makes that location's calls bad. Bad rows never crash the app.
+   - Timestamps are ISO 8601 UTC: end in `Z`, `+00:00` or `-00:00`, with up to 9 fractional digits (keep milliseconds). Reject any other offset and any impossible date or time.
+   - Also reject, each with its own reason: `inconsistent_outcome` (answered is true with an outcome of `missed` or `voicemail`, or false with any other non-empty outcome; an unanswered call may have an empty outcome); `bad_revenue` (non-empty but not a non-negative amount); `bad_duration` also covers an empty or non-integer duration.
+   - A `campaigns.csv` row with a bad budget (blank, not a number, or negative) or an unknown channel is not a campaign, but keep its id aside: calls to it are `invalid_campaign`, with a detail naming what is wrong with the row, not `unknown_campaign` ("is not in campaigns" would be false). Report the row itself as a reference issue, as an invalid office time zone is.
+   - Offices with an invalid time zone get no row in the Locations table or the missed-calls heatmap; their calls are already reported as bad.
+   - Report, as reference issues, campaigns with an empty name, a name another campaign already uses (ignoring case), or the name "Unattributed": each makes the AI fact sheet ambiguous. These rows stay valid campaigns, so an upload does not reject them.
 4. **Unattributed.** Empty `campaign_id` becomes the "Unattributed" bucket. These calls are never dropped. An unknown non-empty `campaign_id` is **not** unattributed; it's a bad row (a data error, not a missing campaign).
 5. **Time.** Store UTC. Derive local date, local hour and local weekday from the call's office time zone via the built-in `Intl` API. Every date filter, time-of-day and day-of-week view uses local values.
 6. **Revenue.** Counts only when the current outcome is `booked`. Revenue on any other outcome is ignored and counted in data notes. A booked call with empty revenue counts as a booking with $0 revenue and is counted in data notes.
@@ -271,7 +278,7 @@ The model writes text with **placeholders** that name fact-sheet keys, e.g. `{wo
 
 ### Checker
 
-Runs on every output before display. If any check fails, show the template text and log why. The checker rejects text that:
+Runs on every output before display. If any check fails, log why and ask the model once more with the same prompt plus the checker's reason; if the retry also fails, show the template text and log why. The retry is a call of its own: it passes the spend guard first and gets its own log line. The checker rejects text that:
 
 - uses a placeholder not in the fact sheet;
 - contains any digit outside placeholders;
@@ -313,7 +320,7 @@ Fall back to the template and log the reason on:
 - API error
 - refusal
 - malformed JSON
-- checker failure
+- checker failure, after one retry with the checker's reason (the only failure that is retried)
 
 The UI shows which it is with a small "template" vs "AI" marker.
 

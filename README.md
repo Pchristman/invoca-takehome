@@ -12,29 +12,31 @@ A small local web product that helps a marketing manager track inbound call perf
 | `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
 | `npm run seed [folder]` | available; loads the three CSVs from the folder (default `DATA_DIR`, else the current folder) into the database; see Database below |
 | `npm run build` | available; builds the web app into `dist/` |
-| `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (only this command does) (`HOST`, default 127.0.0.1; `PORT`, default 3000; `DATA_DIR`) |
+| `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (`HOST`, default 127.0.0.1; `PORT`, default 3000; `DATA_DIR`; `DB_PATH`, default `data/calls.db`) |
 | `docker compose up --build` | available; builds one image and serves the app at `http://localhost:3000`; see Docker below |
 | `npm run test:docker` | available; real Docker checks (needs Docker running; builds the image, starts containers, makes no real API call) |
 | `npm run ai:try -- <view|all>` | available; makes REAL API calls (needs a key); see AI takeaways below |
 | `npm run ai:try -- --question "..."` | available; one REAL call per question (needs a key); see Ask a question below |
 | `npm run dev` | available; the server (restarting on change) and Vite with hot reload together, `/api` proxied to the server; the page is at the address Vite prints on start |
 
-Copy `.env.example` to `.env` to configure. Never commit `.env`.
+Needs Node.js 22.18 or later, or 24 or later (the Docker image uses 24): the app uses `node:sqlite`, `process.loadEnvFile`, and runs `.ts` scripts with Node's own type stripping.
+
+Copy `.env.example` to `.env` to configure. `npm start`, `npm run dev`, `npm run seed` and `npm run ai:try` read it at start; a variable set in the shell wins. Tests never read it. Never commit `.env`.
 
 ## Docker
 
 One command: `docker compose up --build`, then open `http://localhost:3000`. A `.env` is optional: with none, AI is off and every view uses template text. If a start fails, plain `docker compose up` may still exit 0, so read `docker compose logs`.
 
 - **Another host port:** `PORT=3001 docker compose up --build` (PowerShell: `$env:PORT=3001; docker compose up --build`), or set `PORT` in `.env`. `PORT` is only the host side; inside the container the server is always on 3000.
-- **Another export:** `DATA_DIR=data/extended docker compose up --build` on a **first run**. After a first run the database already exists on the `calls-db` volume, so the app keeps serving the old data and prints a warning in `docker compose logs`; see "Database in Docker" below. `DATA_DIR` chooses the folder mounted read-only at `/data`; use forward slashes on Windows. A mistyped folder is created empty by Docker, and the app then prints `Cannot start: ...` (see `docker compose logs`).
-- **The default mount shows the container the whole repo folder, read-only.** The app reads only the three CSV files.
+- **Another export:** `DATA_DIR=data/extended docker compose up --build` on a **first run**. After a first run the database already exists on the `calls-db` volume, so the app keeps serving the old data and prints a warning in `docker compose logs`; see "Database in Docker" below. `DATA_DIR` chooses the folder mounted read-only at `/data`; use forward slashes on Windows. The folder is a long-syntax bind mount, so a mistyped folder is not created: Compose refuses to start the container and names the missing path.
+- **The default mount shows the container the whole repo folder, read-only, at `/data`, including your `.env` (and its key).** The app reads only the three CSV files. Set `DATA_DIR` to a folder that holds only the CSVs to keep the rest out.
 - **Not on the network:** the server listens on all interfaces inside the container, and Compose publishes it only on your machine's `127.0.0.1`, so the callback list is not exposed. Never change the port line in `docker-compose.yml` to `0.0.0.0`.
 - **New data:** a restart alone is not enough, because the app reads the database, not the CSVs. Upload a CSV in the app (see "Upload a CSV"; it is kept on the `calls-db` volume), or see "Database in Docker" below.
 - **Separate from `npm start`:** Docker keeps its AI call log and cache on the volumes `ai-logs` and `ai-cache`, while `npm start` uses `./logs` and `./.cache`. Each has its own spend cap (using both doubles the effective cap), and a takeaway paid for in one is paid for again in the other.
 - **Start-up line:** inside the container it says `http://localhost:3000` even when `PORT=3001` publishes it on 3001; the host port is the `PORT` you set.
 - **Exported key:** your shell's exported `ANTHROPIC_API_KEY` beats `.env`. To run with AI off, unset it first (PowerShell: `Remove-Item Env:ANTHROPIC_API_KEY`), or real API calls will be made.
 - **AI cache and call log** live on the volumes `ai-cache` and `ai-logs`. `docker compose down` keeps them. **`docker compose down -v` deletes the call log, so the spend guard counts from $0 again.** To read the log: `docker compose run --rm app cat logs/ai-calls.jsonl`.
-- **The key** comes from `.env` at run time and is never in the image. A shell `ANTHROPIC_API_KEY` wins over `.env`, as with `npm start`.
+- **The key** comes from `.env` at run time and is never in the image.
 - **`HOST` warning:** some shells (zsh) set `HOST` to the machine name. If it is exported (the shell beats `.env`), `npm start` listens on that address, which may be reachable from other devices on your network. When the bound address is not loopback, `npm start` prints a `Listening on a non-loopback address (...)` line; if you see it and did not mean it, unset `HOST` or set `HOST=127.0.0.1`. Inside Docker the image sets its own `HOST`, so this does not matter there.
 
 ### Database in Docker
@@ -47,7 +49,7 @@ One command: `docker compose up --build`, then open `http://localhost:3000`. A `
 
 The app reads three CSVs: `calls.csv`, `campaigns.csv` and `locations.csv`. They are loaded into a database (next section) and the app reads the database. They come from the folder named by `DATA_DIR` (set in the shell or in `.env`; the shell wins), or the current directory when it is unset or blank. A relative `DATA_DIR` is relative to the current directory. Columns are matched by header name, so extra or reordered columns are fine; a missing required column stops startup with a message naming the file and column.
 
-The loader returns every `calls.csv` row as either a typed call or a bad row, with bad rows counted by reason (bad timestamp, unknown location, unknown campaign, and so on). Bad rows never crash the app. Removing duplicate calls and everything after that comes in later phases.
+The loader returns every `calls.csv` row as either a typed call or a bad row, with bad rows counted by reason (bad timestamp, unknown location, unknown campaign, and so on). Bad rows never crash the app. When several rows share a `call_id`, the one with the latest `updated_at` is the call (see Database below).
 
 ## Database
 
@@ -55,7 +57,7 @@ The app keeps its calls in one SQLite file, `DB_PATH` (default `data/calls.db`, 
 
 - **`npm run seed [folder]`** loads the three CSVs from the folder (default `DATA_DIR`, else the current folder) into the database.
 - **`npm start` seeds when the file is missing** and reads the file afterwards.
-- **Re-seeding the same export changes nothing.** A newer export adds new versions of calls, and the latest `updated_at` wins.
+- **Re-seeding the same export stores nothing new.** A newer export adds new versions of calls, and the latest `updated_at` wins.
 - **Tables:** `raw_calls`, `bad_rows`, `campaigns`, `locations`, `reference_issues`, `cleaned_calls` and `seeds`. The app reads the raw tables and cleans them with the same code as before; `cleaned_calls` is a derived copy you can query in SQL.
 - **Views, API and numbers are unchanged** by the database.
 
@@ -65,8 +67,9 @@ The app keeps its calls in one SQLite file, `DB_PATH` (default `data/calls.db`, 
 - One process at a time should write.
 - Moving to another data folder needs `npm run seed <folder>` or moving the file aside; at start the app prints a warning when the folder is not what the database was seeded from.
 - A file from an older schema, or one that is corrupt, stops startup with a message; the app never deletes it. A file that is locked by another process, unreadable or read-only gets its own message, and none of those messages tells you to move the file aside unless it really is damaged.
-- **Seeds are merged in the order they were stored, not re-sorted by the newest file.** The first export fixes the order of calls and which row wins an exact `updated_at` tie; a later export only adds rows it has that are new. So seeding an export whose rows are reordered, or that inserts rows in the middle, can order calls differently from loading that export alone (which also changes the AI snapshot id, so cached takeaways are asked for again). Seeding one export at a time, oldest first, behaves like loading them in sequence.
+- **Seeds are merged in the order they were seeded, not re-sorted by the newest file.** Each seed's rows count as stored after everything seeded before, including rows it repeats, so the latest seed wins an exact `updated_at` tie and a call broken by a faulty export is fixed by seeding the good one again. So seeding an export whose rows are reordered, or that inserts rows in the middle, can order calls differently from loading that export alone (which also changes the AI snapshot id, so cached takeaways are asked for again). Seeding one export at a time, oldest first, behaves like loading them in sequence.
 - **Campaigns and locations are kept once seen.** A later export that leaves one out does not turn its stored calls bad; a later export that gives an office an invalid time zone makes that office's calls bad (reason `invalid_timezone`), as it would for a single export.
+- **Data notes count every row ever seeded, not just the latest export's.** After a faulty export and then the good one again, the calls match a fresh load of the good export, but rows read, bad rows, duplicates and ties still count the faulty rows, which stay stored as older versions; the same goes for calls stored as bad (an unknown campaign) and stored again once the campaign is added.
 - **Reference issues** (campaign or location rows that were skipped) describe the latest seed's files only.
 
 ### Extended export (synthetic)
@@ -101,13 +104,13 @@ The **Upload data** button in the header opens a panel where you add one CSV to 
 - **One transaction.** All new rows are written together, or none are; if the write fails nothing is stored and the server keeps its old data. Pressing **Add** again, or uploading the same file twice, adds nothing the second time.
 - **Views and takeaways update without a restart.** After **Add**, "See the new data" reloads the page on the default range, so the date span, the pickers, every view and every takeaway are fetched again. The takeaway service is rebuilt for the new data, so a takeaway written for the old data is not reused. The AI counters on the dev data notes panel (cache hits, checker failures) restart at 0; the spend is read from the call log and carries over.
 - **Bad rows are reported, not stored.** The header's "skipped rows" count only covers rows stored by a seed, so an upload does not change it.
-- **Safety:** uploads are safe only because the server listens on localhost and there is no login. The upload routes also refuse a request that a browser marks as cross-site, a request whose Host is not localhost (or the host the server is bound to), and one whose Origin does not match its Host. Do not expose the port; the Docker compose file publishes it only on 127.0.0.1.
+- **Safety:** uploads are safe only because the server listens on localhost and there is no login. Like every `/api` route, the upload routes refuse a request whose Host is not localhost (or the host the server is bound to); they also refuse a request that a browser marks as cross-site, and one whose Origin does not match its Host. Do not expose the port; the Docker compose file publishes it only on 127.0.0.1.
 - **`DB_PATH=:memory:`** keeps the data in memory, so an upload lasts until the server stops.
 - Each confirmed upload adds one row to the `seeds` table, labelled `upload: <file name>`. The database schema is unchanged.
 
 ## API
 
-`npm start` reads the database at start (seeding it first if the file is missing) and again after each confirmed upload and serves JSON on **127.0.0.1 only** (the callback list carries caller hashes). A missing folder, file or column, a bad `PORT` or a busy port prints one `Cannot start: ...` line and exits 1. Every route is GET only except the two upload routes.
+`npm start` reads the database at start (seeding it first if the file is missing) and again after each confirmed upload and serves JSON on **127.0.0.1** unless `HOST` says otherwise (the callback list carries caller hashes; see the `HOST` warning under Docker). On a first start (no database yet), a missing folder, file or column prints one `Cannot start: ...` line and exits 1; once the database holds data the data folder is optional. A bad `PORT` or a busy port always does. Every route is GET only except the two upload routes. Every `/api` route refuses (403) a request whose Host header is not `localhost`, `127.0.0.1`, `[::1]` or the address the server is bound to, so a web page that points its own domain at 127.0.0.1 (DNS rebinding) cannot read the data or spend on AI; the AI routes also refuse a request a browser marks as cross-site.
 
 | Route | Query parameters | 200 body |
 | --- | --- | --- |
@@ -117,7 +120,7 @@ The **Upload data** button in the header opens a panel where you add one CSV to 
 | `/api/locations` | range, compare | locations view |
 | `/api/missed-calls` | range, compare, `location` | missed-calls view |
 | `/api/missed-calls/callbacks.csv` | range, compare, `location` | CSV file |
-| `/api/takeaway/:view` | as that view | template takeaway text |
+| `/api/takeaway/:view` | as that view | the takeaway: checked AI text, or the template text (AI off, over budget, or the AI text failed its check) |
 | `/api/answer` | range, `view`, `f_*` filter | answer panel: totals and a table for the filter (code only) |
 | `/api/question` | `q` (at most 300 characters) | a validated filter as a query string (the only AI step; needs a key) |
 | `/api/data-notes` | none | data notes (always available) |
@@ -127,17 +130,17 @@ The **Upload data** button in the header opens a panel where you add one CSV to 
 - **Range:** `range=last7|last28|all`, or `start=YYYY-MM-DD&end=YYYY-MM-DD`. Neither given means `last28`.
 - **Compare (optional):** `compareStart` and `compareEnd` together.
 - Parameters a route does not use are ignored.
-- **Errors** are JSON: `{ "error": { "code", "message", "field"? } }`. Status 400 for a bad parameter or unknown campaign or office, 409 `no_data` for an empty export, 404 `not_found`, 500 `internal` (no details).
-- **CSV:** UTF-8 with a byte-order mark and CRLF line ends, so a spreadsheet opens non-ASCII names correctly. A cell starting with `=`, `+`, `-`, `@`, tab or CR gets a leading `'` so a spreadsheet cannot run it as a formula; tracking numbers therefore appear as `'+1-...`.
+- **Errors** are JSON: `{ "error": { "code", "message", "field"? } }`. Status 400 for a bad parameter, an unknown campaign or office, or an upload that is not a readable CSV; 403 `forbidden` for a Host or cross-site request the server refuses; 404 `not_found`; 409 `no_data` for an empty export, or `upload_unavailable` when the server has no database to upload into; 413 `too_large` for an upload over 10 MB; 500 `internal` (no details) or `upload_failed` (nothing was stored).
+- **CSV:** UTF-8 with a byte-order mark and CRLF line ends, so a spreadsheet opens non-ASCII names correctly. A cell starting with `=`, `+`, `-`, `@`, tab or CR gets a leading `'` so a spreadsheet cannot run it as a formula, except a value that is only a phone number (`+`, then digits, spaces, hyphens and parentheses), so tracking numbers appear as they are.
 
 ## Web app
 
 Open `http://127.0.0.1:3000/` after `npm start`. The nav has four views: Overview, Campaigns, Locations and Missed calls.
 
-- **Locations** lists every office with its calls, answer rate, bookings, booking rate, revenue and best campaign there. Each office is compared with all other offices pooled, on answer rate and booking rate; a difference that chance does not explain is flagged, "better" or "worse", with both rates. An office with too few calls reads "Too few calls to compare". If an office is flagged worse, the action links to Missed calls filtered to that office; if none is, the page says no office stands out.
-- **Missed calls** shows a heatmap of missed calls by hour, by office or by weekday (office local time), the estimated lost value (marked "est.", with its formula one click away), a call-back list of callers who never got through (25 rows a page, highest value first) and a CSV download of the whole list. It can be filtered to one office.
+**How do I use it?** The [user guide](docs/USER_GUIDE.md) walks through each page with annotated screenshots.
 
-The CSV starts tracking numbers with an apostrophe, so a spreadsheet keeps them as text.
+- **Locations** lists every office with its calls, answer rate, bookings, booking rate, revenue and best campaign there. Each office is compared with all other offices pooled, on answer rate and booking rate; a difference that chance does not explain is flagged, "better" or "worse", with both rates. An office with too few calls reads "Too few calls to compare". If an office is flagged worse, the action links to Missed calls filtered to that office; if none is, the page says no office stands out.
+- **Missed calls** shows a heatmap of missed calls by hour, by office or by weekday (office local time), the estimated lost value (marked "est.", with its formula one click away), a call-back list of callers whose latest call went unanswered (25 rows a page, highest value first) and a CSV download of the whole list. It can be filtered to one office.
 
 The URL holds the screen, so a link, a refresh or the back button reproduces it:
 
@@ -168,7 +171,7 @@ A box under the nav takes a question in plain English ("Which office misses the 
 - **Glossary** (fixed in the prompt): weekend = Saturday and Sunday; weekdays = Monday to Friday; morning = 6 to 11; afternoon = 12 to 16; evening = 17 to 20; overnight = 21 to 23 and 0 to 5; business hours = 9 to 16; "9 to 5" and "between 9 and noon" run to the hour before the end. Any other vague phrase ("busy times", "late", "recently") gets "That isn't a question about these calls." Hours are the office's local hours; "Friday" means Friday at the call's office.
 - **Limits:** a question is at most 300 characters; each filter list holds at most 50 values. A name that matches no office or campaign, or matches two, rejects the whole question and the message names it.
 - **Same cache, guard and log as takeaways.** A repeat question costs nothing; the spend limit is shared; each call is one line in `logs/ai-calls.jsonl` with `purpose: question` (the question and the reply are never logged).
-- **Try it by hand:** `DATA_DIR=data/extended npm run ai:try -- --question "Which office misses the most calls on Fridays?"` makes one real call (about $0.0002) and prints the validated query and the cost; the question is not echoed.
+- **Try it by hand:** `npm run ai:try -- --question "Which office misses the most calls on Fridays?"` makes one real call (about $0.0002) and prints the validated query and the cost; the question is not echoed. Like the server, `ai:try` reads the database at `DB_PATH`; with no database yet it reads the CSVs in `DATA_DIR` into memory and creates no file.
 
 ### Known limits of the question box
 
@@ -233,8 +236,9 @@ Each view shows one short takeaway line under the date control, marked `AI` or `
 
 ### Known limits of AI takeaways
 
-- **One process at a time.** Each running copy of the app (and `npm run ai:try`) reads the call log once at start and counts only its own calls after that, so two running at once each get the full spend limit. The log and cache paths are relative to the folder you start from (like `DATA_DIR`): start from the project folder, or spend will read as $0.
+- **One process at a time.** Each running copy of the app (and `npm run ai:try`) reads the call log once at start-up and then counts only its own spend, so two copies running at once each get the full limit. The log and cache paths are relative to the folder you start from (like `DATA_DIR`): start from the project folder, or spend will read as $0.
 - **Docker and `npm start` do not share state.** Docker keeps its call log and cache on the volumes `ai-logs` and `ai-cache`; `npm start` uses `./logs` and `./.cache`. Each has its own spend cap (using both doubles the effective cap), and a takeaway paid for in one is paid for again in the other.
-- **The checker cannot see meaning.** It stops invented numbers and names, but not valid placeholders in the wrong place ("{worst.name} is the strongest"), and the model sees names cut to 80 characters, so it could write that cut-off form.
-- **Failed calls log $0.** A timeout or API error returns no token count, so it is logged at $0 and the real bill may be a little higher; the $5 default limit sits far below the $250 cap.
+- **The checker cannot see all meaning.** It checks that every number and name is a placeholder from the fact sheet; it does not check that the sentence around them is right, so a model could write "fell" for a rise, or put the best campaign's name where the worst belongs. The model also sees names cut to 80 characters, so it could write that cut-off form.
+- **A timeout logs its worst case; an API error logs $0.** An aborted call may still be billed and returns no token count, so a timeout is logged at the most it could cost (0 tokens, the worst-case cost); a failed request logs $0.
 - **Names are data, not trusted.** Campaign and office names reach the prompt, shortened and inside a JSON block; the checker is the hard limit, not the prompt.
+- **A rejected takeaway is retried once.** When the checker rejects the text, the model is asked once more with the checker's reason; if that also fails, the template is shown for the rest of the session. This costs one extra call, logged on its own line, only when the first is rejected; it is skipped if it could pass the spend limit. Timeouts, API errors, refusals and malformed replies are not retried.
