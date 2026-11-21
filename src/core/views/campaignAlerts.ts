@@ -1,6 +1,7 @@
 // The one sentence for campaigns whose calls jumped or dropped. The test itself is in ../alerts.ts.
 import { makeAction } from './facts';
 import type { Action } from './facts';
+import { compareText } from '../text';
 
 export interface FlaggedCampaign {
   campaignId: string;
@@ -18,12 +19,9 @@ const DROP_TEMPLATE =
 const MANY_TEMPLATE =
   '{alert.count} changed by more than chance explains; {alert.top.name} moved most, from {alert.top.previous} to {alert.top.current}. Review each flagged campaign in the table.';
 
-/** Plain character order, so results never depend on the machine's locale. */
-export const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-
 /** One action for all flagged campaigns, naming the biggest mover (largest |z|, ties by lower id). Null when none. */
 export function alertAction(flagged: readonly FlaggedCampaign[]): Action | null {
-  const sorted = [...flagged].sort((a, b) => Math.abs(b.z) - Math.abs(a.z) || byText(a.campaignId, b.campaignId));
+  const sorted = [...flagged].sort((a, b) => Math.abs(b.z) - Math.abs(a.z) || compareText(a.campaignId, b.campaignId));
   const top = sorted[0];
   if (!top) return null;
 

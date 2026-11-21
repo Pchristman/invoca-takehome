@@ -130,6 +130,19 @@ describe('buildOverview actions', () => {
   });
 });
 
+describe('buildOverview and the Locations combined figures', () => {
+  it('leaves out the offices.* facts Locations gives when no office stands out', () => {
+    const twoOffices = { ...options, locations: [office('loc_1', 'Office One'), office('loc_2', 'Office Two')] };
+    const at = (locationId: string, tag: string) =>
+      period('2026-09-14', tag, { calls: 60, answered: 40, booked: 20, distinct: 60 }).map((c) => ({ ...c, locationId }));
+    const view = buildOverview(makeStore([...at('loc_1', 'a'), ...at('loc_2', 'b')], twoOffices), week);
+    const locations = view.topActions.find((t) => t.view === 'locations')!.action;
+    expect(locations.kind).toBe('no_office_stands_out');
+    expect(Object.keys(locations.facts)).toContain('offices.answer_rate');
+    expect(Object.keys(view.factSheet.facts).filter((key) => key.startsWith('offices.'))).toEqual([]);
+  });
+});
+
 describe('buildOverview edge cases', () => {
   it('a bad second range builds with no comparison', () => {
     const view = buildOverview(store(), week, { start: '2026-02-30', end: '2026-03-02' });

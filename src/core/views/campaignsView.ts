@@ -7,7 +7,8 @@ import { THRESHOLDS } from '../thresholds';
 import type { CallStore, Channel, CleanCall } from '../types';
 import { callsPerWeek } from '../weeks';
 import type { WeekBucket } from '../weeks';
-import { alertAction, byText } from './campaignAlerts';
+import { compareText, UNATTRIBUTED_NAME } from '../text';
+import { alertAction } from './campaignAlerts';
 import type { FlaggedCampaign } from './campaignAlerts';
 import { fillPlaceholders, makeAction, makeFactSheet } from './facts';
 import type { Action, Facts } from './facts';
@@ -28,10 +29,11 @@ export interface CampaignRow {
   bookings: number;
   bookingRate: number | null;
   revenueUsd: number;
-  /** null for Unattributed. */
+  /** null for Unattributed and for a campaign whose budget is blank or unreadable. */
   estimatedSpendUsd: number | null;
-  /** null: zero budget, zero bookings, or Unattributed. */
+  /** null: zero or unknown budget, zero bookings, or Unattributed. */
   estimatedCostPerBookingUsd: number | null;
+  /** null: zero or unknown budget, or Unattributed. */
   revenuePerBudgetDollar: number | null;
   isBest: boolean;
   isWorst: boolean;
@@ -110,7 +112,8 @@ export function buildCampaigns(
   // One row per store campaign, from that campaign's calls in range.
   const rows: CampaignRow[] = store.campaigns.map((c) => {
     const t = tally(context.current.filter((call) => call.campaignId === c.id));
-    const spend = estimatedSpend(c.dailyBudgetUsd, range.days);
+    // An unknown budget gives no spend, so nothing derived from it.
+    const spend = c.dailyBudgetUsd === null ? null : estimatedSpend(c.dailyBudgetUsd, range.days);
     const previousCalls = countIn(context.previous, c.id);
     const test = previousCalls === null || !testable ? NOT_TESTED : countAlert(t.calls, previousCalls);
     return {
@@ -122,8 +125,8 @@ export function buildCampaigns(
       bookingRate: rate(t.bookings, t.calls),
       revenueUsd: t.revenueUsd,
       estimatedSpendUsd: spend,
-      estimatedCostPerBookingUsd: costPerBooking(spend, t.bookings),
-      revenuePerBudgetDollar: revenuePerBudgetDollar(t.revenueUsd, spend),
+      estimatedCostPerBookingUsd: spend === null ? null : costPerBooking(spend, t.bookings),
+      revenuePerBudgetDollar: spend === null ? null : revenuePerBudgetDollar(t.revenueUsd, spend),
       isBest: false,
       isWorst: false,
       previousCalls,
@@ -131,13 +134,13 @@ export function buildCampaigns(
       alert: test.direction !== null && test.z !== null ? { direction: test.direction, z: test.z } : null,
     };
   });
-  rows.sort((a, b) => b.calls - a.calls || byText(a.campaignId!, b.campaignId!));
+  rows.sort((a, b) => b.calls - a.calls || compareText(a.campaignId!, b.campaignId!));
 
   const picked = pickBestWorst(
     rows.map((r) => ({
       campaignId: r.campaignId!,
       bookings: r.bookings,
-      estimatedSpendUsd: r.estimatedSpendUsd!,
+      estimatedSpendUsd: r.estimatedSpendUsd ?? 0, // $0 keeps an unknown budget out of the ranking, as it does a $0 budget
       revenuePerBudgetDollar: r.revenuePerBudgetDollar,
     })),
   );
@@ -286,11 +289,11 @@ function buildUnattributed(
   }
   const trackingNumbers = [...perNumber]
     .map(([trackingNumber, count]) => ({ trackingNumber, calls: count }))
-    .sort((a, b) => b.calls - a.calls || byText(a.trackingNumber, b.trackingNumber));
+    .sort((a, b) => b.calls - a.calls || compareText(a.trackingNumber, b.trackingNumber));
 
   return {
     campaignId: null,
-    name: 'Unattributed',
+    name: UNATTRIBUTED_NAME,
     channel: null,
     calls: t.calls,
     bookings: t.bookings,

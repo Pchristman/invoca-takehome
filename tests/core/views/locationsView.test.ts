@@ -37,14 +37,18 @@ describe('busiestMissedSlot', () => {
     expect(busiestMissedSlot([makeCall({ answered: true })])).toBeNull();
   });
 
-  it('breaks ties by office, weekday, hour', () => {
-    const check = (calls: CleanCall[], expected: { locationId: string; weekday: number; hour: number }) => {
-      expect(busiestMissedSlot(calls)).toMatchObject(expected);
-      expect(busiestMissedSlot([...calls].reverse())).toMatchObject(expected);
-    };
-    check([...missedAt('loc_b', 0, 9), ...missedAt('loc_a', 3, 9)], { locationId: 'loc_a', weekday: 3, hour: 9 });
-    check([...missedAt('loc_a', 5, 9), ...missedAt('loc_a', 2, 9)], { locationId: 'loc_a', weekday: 2, hour: 9 });
-    check([...missedAt('loc_a', 2, 14), ...missedAt('loc_a', 2, 9)], { locationId: 'loc_a', weekday: 2, hour: 9 });
+  it('a tie for the most names no slot', () => {
+    for (const calls of [
+      [...missedAt('loc_b', 0, 9), ...missedAt('loc_a', 3, 9)],
+      [...missedAt('loc_a', 5, 9), ...missedAt('loc_a', 2, 9)],
+      [...missedAt('loc_a', 2, 14, 2), ...missedAt('loc_a', 2, 9, 2), ...missedAt('loc_a', 1, 9)],
+    ]) {
+      expect(busiestMissedSlot(calls)).toBeNull();
+      expect(busiestMissedSlot([...calls].reverse())).toBeNull();
+    }
+    // A tie below the top does not matter.
+    const clear = [...missedAt('loc_a', 1, 9), ...missedAt('loc_b', 2, 9), ...missedAt('loc_c', 3, 9, 2)];
+    expect(busiestMissedSlot(clear)).toMatchObject({ locationId: 'loc_c', weekday: 3, hour: 9, calls: 2 });
   });
 });
 
@@ -81,6 +85,9 @@ describe('buildLocations', () => {
     expect(action.link).toEqual({ view: 'missed-calls', locationId: 'loc_a' });
     expect(view.templateSentence).toBe(action.text);
     expect(view.factSheet.entities).toEqual(['Office A']);
+    expect(Object.keys(view.factSheet.facts).sort()).toEqual([
+      'office_answer.hour', 'office_answer.office', 'office_answer.office_rate', 'office_answer.rest_rate', 'office_answer.weekday',
+    ]);
   });
 
   const l2 = (aOver: Partial<CleanCall> = {}): CleanCall[] => [
@@ -132,6 +139,49 @@ describe('buildLocations', () => {
     expect(action.text).toBe('No office stands out on answer or booking rate. Missed calls are a company-wide issue.');
     expect(action.actionable).toBe(false);
     expect(action.link).toEqual({ view: 'missed-calls' });
+  });
+
+  const COMBINED_KEYS = ['offices.answer_rate', 'offices.booking_rate', 'offices.compared', 'offices.unanswered'];
+
+  it('when no office stands out, the facts are only combined figures for the range', () => {
+    // Office C has too few calls to be tested, so two offices were compared; its calls still count in the totals.
+    const few = { calls: 10, answered: 9, booked: 1 };
+    const view = buildLocations(storeOf(l1({ calls: 100, answered: 50, booked: 30 }, { calls: 500, answered: 250, booked: 150 }, few)), r);
+    const action = view.actions[0]!;
+    expect(action.kind).toBe('no_office_stands_out');
+    expect(action.text).toBe('No office stands out on answer or booking rate. Missed calls are a company-wide issue.');
+    expect(Object.keys(action.facts).sort()).toEqual(COMBINED_KEYS);
+    expect(action.facts['offices.compared']).toEqual({ kind: 'count', value: 2, noun: ['office', 'offices'] });
+    expect(action.facts['offices.answer_rate']).toEqual({ kind: 'rate', value: 309 / 610 });
+    expect(action.facts['offices.booking_rate']).toEqual({ kind: 'rate', value: 181 / 610 });
+    expect(action.facts['offices.unanswered']).toEqual({ kind: 'count', value: 301, noun: ['call', 'calls'] });
+    expect(Object.values(action.facts).some((fact) => fact.kind === 'name')).toBe(false);
+    expect(view.factSheet.facts).toEqual(action.facts);
+    expect(view.factSheet.entities).toEqual([]);
+  });
+
+  it('when an office is flagged only better, the facts are the same combined figures', () => {
+    const view = buildLocations(storeOf(l1({ calls: 100, answered: 70, booked: 30 })), r);
+    expect(view.actions[0]!.kind).toBe('no_office_worse');
+    expect(Object.keys(view.factSheet.facts).sort()).toEqual(COMBINED_KEYS);
+    expect(view.factSheet.facts['offices.compared']?.value).toBe(3);
+    expect(view.factSheet.entities).toEqual([]);
+  });
+
+  it('with no unanswered calls, nothing is called a company-wide issue', () => {
+    const all = { calls: 500, answered: 500, booked: 150 };
+    const view = buildLocations(storeOf(l1({ calls: 100, answered: 100, booked: 30 }, all)), r);
+    expect(view.actions[0]!.kind).toBe('no_office_stands_out');
+    expect(view.actions[0]!.text).toBe('No office stands out on answer or booking rate.');
+  });
+
+  it('when no office has enough calls to be tested, it says so', () => {
+    const few = { calls: 5, answered: 2, booked: 1 };
+    const view = buildLocations(storeOf(l1(few, few)), r);
+    expect(view.rows.every((row) => !row.answerFlag.eligible && !row.bookingFlag.eligible)).toBe(true);
+    expect(view.actions[0]!.kind).toBe('no_office_stands_out');
+    expect(view.actions[0]!.text).toBe('There are too few calls in this range to compare offices.');
+    expect(view.factSheet.facts).toEqual({});
   });
 
   it('the larger z wins, even on booking rate', () => {
@@ -212,11 +262,19 @@ describe('buildLocations', () => {
     expect(a.bookingFlag.eligible).toBe(false);
   });
 
+  it('an office with an invalid time zone gets no row (its calls are reported as bad in the data notes)', () => {
+    const broken = { ...office('loc_x', 'Nowhere', 'Mars/Olympus'), timezoneValid: false };
+    const store = makeStore(l1({ calls: 100, answered: 30, booked: 30 }), { campaigns, locations: [...locations, broken] });
+    expect(buildLocations(store, r).rows.map((row) => row.locationId)).not.toContain('loc_x');
+    expect(buildLocations(store, r).rows).toHaveLength(3);
+  });
+
   it('an empty range builds', () => {
     const view = buildLocations(storeOf(l1({ calls: 100, answered: 30, booked: 30 })), range('2026-01-01', '2026-01-07'));
     expect(view.rows.every((row) => row.calls === 0)).toBe(true);
     expect(view.actions).toHaveLength(1);
     expect(view.actions[0]!.kind).toBe('no_office_stands_out');
+    expect(view.actions[0]!.text).toBe('There are too few calls in this range to compare offices.');
     expectAllFinite(view);
     expect(buildLocations(makeStore([]), r).rows).toEqual([]);
   });

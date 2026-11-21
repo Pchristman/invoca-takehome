@@ -91,6 +91,22 @@ describe('buildCampaigns', () => {
     expectAllFinite(view);
   });
 
+  it('a campaign with no budget counts its calls and revenue, has every budget column blank, and is never ranked', () => {
+    // Alpha alone would be best against Beta; with no budget it must drop out, leaving too few to rank.
+    const two = [campaign('cmp_a', 'Alpha', 'social', null), campaign('cmp_b', 'Beta', 'display', 20)];
+    const calls = [...campaignCalls('cmp_a', 10, 6, 100), ...campaignCalls('cmp_b', 10, 5, 50)];
+    const view = buildCampaigns(makeStore(calls, { campaigns: two, locations }), fourteen);
+    const alpha = view.rows.find((r) => r.campaignId === 'cmp_a')!;
+    expect(alpha).toMatchObject({ calls: 10, bookings: 6, revenueUsd: 600 });
+    expect(alpha.estimatedSpendUsd).toBeNull();
+    expect(alpha.estimatedCostPerBookingUsd).toBeNull();
+    expect(alpha.revenuePerBudgetDollar).toBeNull();
+    expect(view.rows.some((r) => r.isBest || r.isWorst)).toBe(false);
+    expect(view.bestWorst.eligible).toBe(1);
+    expect(view.actions[0]!.kind).toBe('no_budget_shift');
+    expectAllFinite(view);
+  });
+
   it('best and worst are marked among eligible campaigns only', () => {
     const view = buildCampaigns(store(mainCalls()), fourteen);
     const byId = Object.fromEntries(view.rows.map((r) => [r.campaignId, r]));

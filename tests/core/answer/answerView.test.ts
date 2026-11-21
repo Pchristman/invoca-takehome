@@ -109,22 +109,44 @@ describe('buildAnswer', () => {
 
     it('two tied groups are named together', () => {
       expect(buildAnswer(tied(2), r, open).sentence).toBe(
-        'Alpha Office and Beta Office tied for the most unanswered calls: 2 of 2.',
+        'Alpha Office and Beta Office tied for the most unanswered calls: 2.',
+      );
+    });
+
+    it('a tie states only the tied value, not the first leader\'s other numbers', () => {
+      const got = { answered: true, outcome: 'not_qualified' as const, booked: false, revenueUsd: 0, ...fri };
+      const uneven = (bCall: object) =>
+        makeStore(
+          [
+            callAt(FRI, { locationId: 'a', ...miss, ...fri }),
+            callAt(FRI, { locationId: 'a', ...got }),
+            callAt(FRI, { locationId: 'b', ...miss, ...fri }),
+            callAt(FRI, { locationId: 'b', ...bCall }),
+          ],
+          { locations: [office('a', 'Alpha Office'), office('b', 'Beta Office')], campaigns: [] },
+        );
+      // Locations: 2 calls each; Alpha answered 1, Beta none.
+      expect(buildAnswer(uneven({ ...miss, ...fri }), r, { ...open, view: 'locations' }).sentence).toBe(
+        'Alpha Office and Beta Office tied for the most calls: 2.',
+      );
+      // Missed calls: 1 unanswered each; Alpha of 2 calls, Beta of 1 (its second call is on Saturday, out of the filter).
+      expect(buildAnswer(uneven({ ...miss, ...sat }), r, { ...open, weekdays: [4] }).sentence).toBe(
+        'Alpha Office and Beta Office tied for the most unanswered calls: 1.',
       );
     });
 
     it('three are listed; more than three say "and N more"', () => {
       expect(buildAnswer(tied(3), r, open).sentence).toBe(
-        'Alpha Office, Beta Office and Canyon Office tied for the most unanswered calls: 2 of 2.',
+        'Alpha Office, Beta Office and Canyon Office tied for the most unanswered calls: 2.',
       );
       expect(buildAnswer(tied(5), r, open).sentence).toBe(
-        'Alpha Office, Beta Office, Canyon Office and 2 more tied for the most unanswered calls: 2 of 2.',
+        'Alpha Office, Beta Office, Canyon Office and 2 more tied for the most unanswered calls: 2.',
       );
     });
 
     it('locations and campaigns ties are worded the same way; a single leader is unchanged', () => {
       expect(buildAnswer(tied(2), r, { ...open, view: 'locations' }).sentence).toBe(
-        'Alpha Office and Beta Office tied for the most calls: 2, of which 0 were answered.',
+        'Alpha Office and Beta Office tied for the most calls: 2.',
       );
       expect(buildAnswer(store, r, { ...open, weekdays: [4] }).sentence).toBe(
         'Alpha Office had the most unanswered calls: 3 of 4.',

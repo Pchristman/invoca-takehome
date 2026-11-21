@@ -94,7 +94,10 @@ export function buildOverview(store: CallStore, range: ResolvedRange, previous?:
     addChangeFact(facts, 'revenue', tiles.revenueUsd.change);
     addChangeFact(facts, 'answer_rate', tiles.answerRate.change);
   }
-  const allFacts: Facts = Object.assign({}, facts, ...actions.map((a) => a.facts));
+  // When no office stands out, Locations gives only combined figures (offices.*). They repeat the answer rate
+  // tile and suggest nothing, so the Overview leaves them out.
+  const noOffice = (a: Action) => a.kind === 'no_office_stands_out' || a.kind === 'no_office_worse';
+  const allFacts: Facts = Object.assign({}, facts, ...actions.map((a) => (noOffice(a) ? {} : a.facts)));
 
   return {
     view: 'overview',

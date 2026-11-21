@@ -3,6 +3,7 @@ import { callsInRange, toCents } from '../metrics';
 import { estimateMissedCallValue } from '../missedValue';
 import type { MissedValueRates } from '../missedValue';
 import type { ResolvedRange } from '../ranges';
+import { compareText, UNATTRIBUTED_NAME } from '../text';
 import type { CallStore, CleanCall } from '../types';
 
 export interface CallbackRow {
@@ -82,7 +83,7 @@ export function buildCallbackList(
     const location = store.locations.find((l) => l.id === last.locationId);
     // Cleaning drops calls whose office or campaign is not in the store, so both lookups succeed.
     if (!location) throw new Error(`Call ${last.callId} is at unknown office ${last.locationId}`);
-    let campaignName = 'Unattributed';
+    let campaignName = UNATTRIBUTED_NAME;
     if (last.campaignId !== null) {
       const campaign = store.campaigns.find((c) => c.id === last.campaignId);
       if (!campaign) throw new Error(`Call ${last.callId} is in unknown campaign ${last.campaignId}`);
@@ -104,6 +105,6 @@ export function buildCallbackList(
     });
   }
 
-  rows.sort((a, b) => b.estimatedValueUsd - a.estimatedValueUsd || (a.callerHash < b.callerHash ? -1 : a.callerHash > b.callerHash ? 1 : 0));
+  rows.sort((a, b) => b.estimatedValueUsd - a.estimatedValueUsd || compareText(a.callerHash, b.callerHash));
   return { rows, totalValueUsd: totalCents / 100, unidentifiedUnanswered };
 }

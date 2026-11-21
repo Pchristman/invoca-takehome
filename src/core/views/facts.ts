@@ -4,7 +4,9 @@ import {
   formatCount, formatHour, formatPercentChange, formatPointsChange, formatRate, formatUsd, formatUsdPerDollar, formatWeekday,
 } from './format';
 
-export type ViewName = 'overview' | 'campaigns' | 'locations' | 'missed-calls';
+/** Every view, in menu order. The one list the URL parser and the question schema read. */
+export const VIEW_NAMES = ['overview', 'campaigns', 'locations', 'missed-calls'] as const;
+export type ViewName = (typeof VIEW_NAMES)[number];
 
 export type Fact =
   | { kind: 'name'; value: string } // a campaign, office or channel: becomes an entity
@@ -41,10 +43,15 @@ export function formatFact(fact: Fact): string {
   }
 }
 
+/** A {placeholder}: anything between a pair of braces. The AI checker uses the same two patterns. */
+export const PLACEHOLDER = /\{([^{}]*)\}/g;
+/** What a placeholder key must look like. */
+export const PLACEHOLDER_KEY = /^[a-z0-9_.]+$/;
+
 export function fillPlaceholders(template: string, facts: Facts): string {
   const unknown: string[] = [];
-  const text = template.replace(/\{([^{}]*)\}/g, (_match, key: string) => {
-    if (!/^[a-z0-9_.]+$/.test(key)) throw new Error(`Malformed placeholder: {${key}}`);
+  const text = template.replace(PLACEHOLDER, (_match, key: string) => {
+    if (!PLACEHOLDER_KEY.test(key)) throw new Error(`Malformed placeholder: {${key}}`);
     const fact = Object.prototype.hasOwnProperty.call(facts, key) ? facts[key] : undefined;
     if (!fact) {
       if (!unknown.includes(key)) unknown.push(key);

@@ -5,7 +5,7 @@ import type { ResolvedRange } from '../../../src/core/ranges';
 import type { CallStore, Campaign, Channel, CleanCall, DataNotes, Location } from '../../../src/core/types';
 import { loadFixture, makeCall } from '../helpers';
 
-export const campaign = (id: string, name: string, channel: Channel, dailyBudgetUsd: number): Campaign => ({
+export const campaign = (id: string, name: string, channel: Channel, dailyBudgetUsd: number | null): Campaign => ({
   id,
   name,
   channel,

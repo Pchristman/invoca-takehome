@@ -1,4 +1,5 @@
 import { rate } from './metrics';
+import { compareText } from './text';
 import { THRESHOLDS } from './thresholds';
 
 export interface CampaignPerformance {
@@ -15,15 +16,8 @@ export interface BestWorst {
   worst: CampaignPerformance | null;
 }
 
-/** Plain character order, so the result never depends on the machine's locale. */
-function byId(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
-/** Equal to the cent, so floating-point noise never makes a spread. */
-function sameValue(a: number, b: number): boolean {
-  return Math.round(a * 100) === Math.round(b * 100);
-}
+/** Compared to the cent, so floating-point noise never makes a spread or decides a tie. */
+const cents = (row: CampaignPerformance): number => Math.round(row.revenuePerBudgetDollar! * 100);
 
 /**
  * Best and worst campaign by revenue per budget dollar. Rows are real campaigns only (the caller leaves
@@ -34,7 +28,7 @@ export function pickBestWorst(
   rows: readonly CampaignPerformance[],
   minBookings: number = THRESHOLDS.MIN_BOOKINGS_TO_RANK,
 ): BestWorst {
-  // Highest value first; equal values by the lower campaign id, so the order never depends on the input order.
+  // Highest value first; values equal to the cent by the lower campaign id, so the order never depends on the input order.
   // At least one booking, whatever minBookings says: a campaign with none has no cost per booking to quote.
   const needed = Math.max(minBookings, 1);
   const eligible = rows
@@ -45,15 +39,15 @@ export function pickBestWorst(
         row.revenuePerBudgetDollar !== null &&
         Number.isFinite(row.revenuePerBudgetDollar),
     )
-    .sort((a, b) => b.revenuePerBudgetDollar! - a.revenuePerBudgetDollar! || byId(a.campaignId, b.campaignId));
+    .sort((a, b) => cents(b) - cents(a) || compareText(a.campaignId, b.campaignId));
 
   const best = eligible[0];
   const lowest = eligible[eligible.length - 1];
-  if (eligible.length < 2 || sameValue(best!.revenuePerBudgetDollar!, lowest!.revenuePerBudgetDollar!)) {
+  if (eligible.length < 2 || cents(best!) === cents(lowest!)) {
     return { eligible: eligible.length, best: null, worst: null };
   }
   // Ties for worst also go to the lower campaign id: the first row at the lowest value in this order.
-  const worst = eligible.find((row) => sameValue(row.revenuePerBudgetDollar!, lowest!.revenuePerBudgetDollar!))!;
+  const worst = eligible.find((row) => cents(row) === cents(lowest!))!;
   return { eligible: eligible.length, best: best!, worst };
 }
 
@@ -75,7 +69,7 @@ export function bestCampaignAtOffice(
     .filter((row) => row.calls > 0 && row.calls >= minCalls)
     .sort(
       (a, b) =>
-        b.bookings / b.calls - a.bookings / a.calls || b.bookings - a.bookings || byId(a.campaignId, b.campaignId),
+        b.bookings / b.calls - a.bookings / a.calls || b.bookings - a.bookings || compareText(a.campaignId, b.campaignId),
     );
   return ranked[0] ?? null;
 }

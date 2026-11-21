@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -63,8 +63,12 @@ describe('extended export: the files', () => {
 
   it('writeExtended writes the same three files', () => {
     const out = mkdtempSync(join(tmpdir(), 'extended-'));
-    writeExtended(ORIGINAL_DIR, out);
-    for (const file of ['calls.csv', 'campaigns.csv', 'locations.csv']) expect(text(out, file)).toBe(text(EXTENDED_DIR, file));
+    try {
+      writeExtended(ORIGINAL_DIR, out);
+      for (const file of ['calls.csv', 'campaigns.csv', 'locations.csv']) expect(text(out, file)).toBe(text(EXTENDED_DIR, file));
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
   });
 
   it('the original export is untouched', () => {
@@ -218,7 +222,7 @@ describe('extended export: Campaigns', () => {
       const days = inclusiveDays(range.start, range.end);
       const rows: CampaignPerformance[] = store.campaigns.map((camp) => {
         const mine = tally(callsInRange(store.calls, range).filter((c) => c.campaignId === camp.id));
-        const spend = estimatedSpend(camp.dailyBudgetUsd, days);
+        const spend = estimatedSpend(camp.dailyBudgetUsd ?? 0, days); // both exports give every campaign a budget
         return { campaignId: camp.id, bookings: mine.bookings, estimatedSpendUsd: spend, revenuePerBudgetDollar: revenuePerBudgetDollar(mine.revenueUsd, spend) };
       });
       const { best, worst } = pickBestWorst(rows);

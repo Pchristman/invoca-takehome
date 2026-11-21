@@ -57,6 +57,15 @@ describe('pickBestWorst', () => {
     }
   });
 
+  test('best and worst both treat values equal to the cent as a tie, broken by campaign id', () => {
+    const rows = [perf('cmp_b', 10, 600, 5.004), perf('cmp_a', 10, 600, 5.001), perf('cmp_d', 10, 600, 2.004), perf('cmp_c', 10, 600, 2.001)];
+    for (const order of [rows, [...rows].reverse()]) {
+      const result = pickBestWorst(order);
+      expect(result.best?.campaignId).toBe('cmp_a');
+      expect(result.worst?.campaignId).toBe('cmp_c');
+    }
+  });
+
   test('ties for worst go to the lower campaign id too, whatever the input order', () => {
     const rows = [perf('cmp_c', 10, 600, 2), perf('cmp_b', 10, 600, 2), perf('cmp_a', 10, 600, 9)];
     for (const order of [rows, [...rows].reverse()]) {

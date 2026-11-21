@@ -2,6 +2,7 @@ import { rate, tally } from '../metrics';
 import { bestCampaignAtOffice, officeOutlier } from '../ranking';
 import type { CampaignAtOffice, OutlierResult } from '../ranking';
 import type { DateRange, ResolvedRange } from '../ranges';
+import { compareText } from '../text';
 import { THRESHOLDS } from '../thresholds';
 import type { CallStore, CleanCall } from '../types';
 import { makeAction, makeFactSheet } from './facts';
@@ -36,20 +37,21 @@ export interface LocationRow {
 
 export interface LocationsView extends ViewBase {
   view: 'locations';
-  /** Every store location, calls desc, ties by location id. */
+  /** Every store location with a valid time zone, calls desc, ties by location id. */
   rows: LocationRow[];
 }
 
-const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-
 const CALLS = ['call', 'calls'] as const;
+const OFFICES = ['office', 'offices'] as const;
 
 export function buildLocations(store: CallStore, range: ResolvedRange, previous?: DateRange): LocationsView {
   const ctx = makeViewContext(store, range, previous);
   const total = tally(ctx.current);
   const campaignNames = new Map(store.campaigns.map((c) => [c.id, c.name]));
 
-  const rows: LocationRow[] = store.locations.map((location) => {
+  // An office with an invalid time zone has no good calls (they are bad rows in the data notes), so it gets no row.
+  const offices = store.locations.filter((location) => location.timezoneValid);
+  const rows: LocationRow[] = offices.map((location) => {
     const calls = ctx.current.filter((c) => c.locationId === location.id);
     const t = tally(calls);
     // "Rest" is the range total minus this office; every office is computed the same way.
@@ -68,7 +70,7 @@ export function buildLocations(store: CallStore, range: ResolvedRange, previous?
       bookingFlag: officeOutlier({ successes: t.bookings, calls: t.calls }, { successes: rest.bookings, calls: rest.calls }),
     };
   });
-  rows.sort((a, b) => b.calls - a.calls || byText(a.locationId, b.locationId));
+  rows.sort((a, b) => b.calls - a.calls || compareText(a.locationId, b.locationId));
 
   const action = chooseAction(rows, ctx.current);
   return {
@@ -124,25 +126,29 @@ function chooseAction(rows: readonly LocationRow[], current: readonly CleanCall[
     (a, b) =>
       Math.abs(b.flag.z!) - Math.abs(a.flag.z!) ||
       (a.kind === b.kind ? 0 : a.kind === 'answer' ? -1 : 1) ||
-      byText(a.row.locationId, b.row.locationId),
+      compareText(a.row.locationId, b.row.locationId),
   );
   const top = candidates[0];
 
   if (!top) {
     const link = { view: 'missed-calls' } as const;
+    const compared = rows.filter((row) => row.answerFlag.eligible || row.bookingFlag.eligible).length;
+    if (compared === 0) {
+      return makeAction('no_office_stands_out', 'There are too few calls in this range to compare offices.', {}, link);
+    }
+    // Only figures for all offices together, so a takeaway has no office to rank (the brief: no "bad office" story).
+    // An office was compared, so the range has calls and both rates exist.
+    const total = tally(current);
+    const combined: Facts = {
+      'offices.compared': { kind: 'count', value: compared, noun: OFFICES },
+      'offices.answer_rate': { kind: 'rate', value: rate(total.answered, total.calls)! },
+      'offices.booking_rate': { kind: 'rate', value: rate(total.bookings, total.calls)! },
+      'offices.unanswered': { kind: 'count', value: total.calls - total.answered, noun: CALLS },
+    };
+    const companyWide = current.some((c) => !c.answered) ? ' Missed calls are a company-wide issue.' : '';
     return anyBetter
-      ? makeAction(
-          'no_office_worse',
-          'No office is doing worse than the rest on answer or booking rate. Missed calls are a company-wide issue.',
-          {},
-          link,
-        )
-      : makeAction(
-          'no_office_stands_out',
-          'No office stands out on answer or booking rate. Missed calls are a company-wide issue.',
-          {},
-          link,
-        );
+      ? makeAction('no_office_worse', 'No office is doing worse than the rest on answer or booking rate.' + companyWide, combined, link)
+      : makeAction('no_office_stands_out', 'No office stands out on answer or booking rate.' + companyWide, combined, link);
   }
 
   const { row, flag } = top;

@@ -9,7 +9,7 @@ export interface MissedSlot {
 
 /**
  * The office, local weekday and local hour with the most unanswered calls among the calls given.
- * Ties go to the lower location id (plain character order), then weekday, then hour. Null when none is unanswered.
+ * Null when none is unanswered, or when two or more slots tie for the most: no slot is named then.
  */
 export function busiestMissedSlot(calls: readonly CleanCall[]): MissedSlot | null {
   const slots = new Map<string, MissedSlot>();
@@ -21,16 +21,7 @@ export function busiestMissedSlot(calls: readonly CleanCall[]): MissedSlot | nul
     else slots.set(key, { locationId: call.locationId, weekday: call.localWeekday, hour: call.localHour, calls: 1 });
   }
 
-  let best: MissedSlot | null = null;
-  for (const slot of slots.values()) {
-    if (best === null || beats(slot, best)) best = slot;
-  }
-  return best;
-}
-
-function beats(a: MissedSlot, b: MissedSlot): boolean {
-  if (a.calls !== b.calls) return a.calls > b.calls;
-  if (a.locationId !== b.locationId) return a.locationId < b.locationId;
-  if (a.weekday !== b.weekday) return a.weekday < b.weekday;
-  return a.hour < b.hour;
+  const ranked = [...slots.values()].sort((a, b) => b.calls - a.calls);
+  const [top, next] = ranked;
+  return top && (!next || next.calls < top.calls) ? top : null;
 }
