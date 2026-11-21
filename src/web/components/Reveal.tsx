@@ -15,6 +15,7 @@ function MotionReveal({ kind, id, children }: { kind: RevealKind; id: string; ch
     <motion.div
       data-motion={kind}
       data-reveal={id}
+      data-reveal-kind={kind}
       inert={inertWhenLeaving(isPresent)}
       initial={reveal.initial}
       animate={reveal.animate}
@@ -29,9 +30,16 @@ function MotionReveal({ kind, id, children }: { kind: RevealKind; id: string; ch
 /**
  * Fades and rises in, fades out. Put it inside <RevealPresence> and give it a key at the call site.
  * With motion off it is a plain div, so no opacity or transform is ever written (nothing can stick half-faded).
+ * Both carry data-reveal-kind, so the layout rules (a view keeps its height while the next one loads) apply either way.
  */
 export function Reveal({ kind, id, children }: { kind: RevealKind; id: string; children: ReactNode }) {
-  if (!useMotion().enabled) return <div data-reveal={id}>{children}</div>;
+  if (!useMotion().enabled) {
+    return (
+      <div data-reveal={id} data-reveal-kind={kind}>
+        {children}
+      </div>
+    );
+  }
   return <MotionReveal kind={kind} id={id}>{children}</MotionReveal>;
 }
 

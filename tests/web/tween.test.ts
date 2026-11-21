@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { overviewModel } from '../../src/web/models/overviewModel';
 import { formatCount, formatRate, formatUsd } from '../../src/core/views/format';
-import { createTileTicker, forgetFigure, forgetFigures, formatFigure, recallFigure, rememberFigure, tweenPlan } from '../../src/web/models/tween';
+import { createTileTicker, forgetFigure, formatFigure, recallFigure, rememberFigure, tweenPlan } from '../../src/web/models/tween';
 import type { FigureKind, TweenAnimator } from '../../src/web/models/tween';
 import { overviewFor } from './fixtures';
 
@@ -57,7 +57,7 @@ describe('tweenPlan', () => {
 });
 
 describe('figure memory', () => {
-  beforeEach(() => forgetFigures());
+  beforeEach(() => forgetFigure('a'));
   it('remembers per id, replaces, and forgets', () => {
     expect(recallFigure('a')).toBeNull();
     rememberFigure('a', 5);
@@ -65,7 +65,7 @@ describe('figure memory', () => {
     expect(recallFigure('b')).toBeNull();
     rememberFigure('a', 7);
     expect(recallFigure('a')).toBe(7);
-    forgetFigures();
+    forgetFigure('a');
     expect(recallFigure('a')).toBeNull();
   });
 });
@@ -84,7 +84,7 @@ function fakeAnimator() {
 describe('tile ticker', () => {
   const count = (value: number) => ({ value, kind: 'count' as FigureKind });
   function setup(id = 't') {
-    forgetFigures();
+    forgetFigure(id);
     const writes: string[] = [];
     const fake = fakeAnimator();
     const ticker = createTileTicker({ id, write: (t) => writes.push(t) });
@@ -194,7 +194,6 @@ describe('tile ticker', () => {
 
 describe('forgetFigure', () => {
   it('clears one id only', () => {
-    forgetFigures();
     rememberFigure('a', 1);
     rememberFigure('b', 2);
     forgetFigure('a');

@@ -34,7 +34,7 @@ export function Heatmap({
       </div>
       <RevealPresence wait>
       <Reveal key={mode} kind="panel" id={mode}>
-      <div className="table-wrap heatmap-wrap">
+      <div className="table-wrap">
         <table className="heatmap">
           <caption className="visually-hidden">
             Missed calls by hour of day, {mode === 'office' ? 'one row per office' : 'one row per weekday'}

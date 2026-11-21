@@ -1,24 +1,14 @@
-import { useState } from 'react';
 import type { DateRange } from '../../core/ranges';
 import type { LocationsView as LocationsData } from '../../core/views';
 import { caveatsFor } from '../models/caveats';
-import { DEFAULT_LOCATION_SORT, locationsModel, nextLocationSort } from '../models/locationsModel';
+import { DEFAULT_LOCATION_SORT, LOCATION_TEXT_KEYS, locationsModel } from '../models/locationsModel';
 import type { LocationRowModel, LocationSort, LocationSortKey, LocationsModel } from '../models/locationsModel';
-import type { Cell } from '../models/campaignsModel';
+import { nextSort } from '../models/sorting';
 import { actionHref } from '../urlState';
 import type { UrlState } from '../urlState';
 import { Caveats } from './Caveats';
 import { Link } from './Link';
-
-function CellText({ cell }: { cell: Cell }) {
-  if (cell.note === undefined) return <>{cell.text}</>;
-  return (
-    <>
-      <span title={cell.note}>{cell.text}</span>
-      <span className="visually-hidden"> {cell.note}</span>
-    </>
-  );
-}
+import { CellText, SortHeader } from './TableParts';
 
 function Flags({ row }: { row: LocationRowModel }) {
   if (row.flags.length === 0) return <span className="muted">{row.flagNote}</span>;
@@ -57,16 +47,9 @@ export function LocationTable({
                   {column.label}
                 </th>
               ) : (
-                <th
-                  key={column.key}
-                  scope="col"
-                  className={column.numeric ? 'num' : undefined}
-                  aria-sort={sort.key === column.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
-                >
-                  <button type="button" className="sort-button" onClick={() => onSort(column.key as LocationSortKey)}>
-                    {column.label}
-                  </button>
-                </th>
+                <SortHeader key={column.key} columnKey={column.key} numeric={column.numeric} sort={sort} onSort={onSort}>
+                  {column.label}
+                </SortHeader>
               ),
             )}
           </tr>
@@ -97,8 +80,18 @@ export function LocationTable({
   );
 }
 
-export function LocationsView({ view, state, span }: { view: LocationsData; state: UrlState; span: DateRange }) {
-  const [sort, setSort] = useState(DEFAULT_LOCATION_SORT);
+export function LocationsView({
+  view,
+  state,
+  span,
+  onSort,
+}: {
+  view: LocationsData;
+  state: UrlState;
+  span: DateRange;
+  onSort(sort: LocationSort): void; // the sort lives in the URL, so it survives a range change
+}) {
+  const sort = state.locationSort ?? DEFAULT_LOCATION_SORT;
   const model = locationsModel(view, sort);
   const caveats = caveatsFor(view.notes, span, { comparing: false, range: view.range });
 
@@ -121,7 +114,7 @@ export function LocationsView({ view, state, span }: { view: LocationsData; stat
             <LocationTable
               model={model}
               sort={sort}
-              onSort={(key) => setSort((current) => nextLocationSort(current, key))}
+              onSort={(key) => onSort(nextSort(sort, key, LOCATION_TEXT_KEYS))}
             />
             <p className="muted small">{model.flagsNote}</p>
           </>

@@ -87,12 +87,11 @@ describe('answerModel', () => {
     expect(answerModel(answer({ officeIds: ['loc_a'] }, names), span).interpretation).toContain('<b>x</b>');
   });
 
-  it('empty when no call matches', () => {
+  it('says so when no call matches', () => {
     const show = answerModel(answer({ weekdays: [6], hours: [3] }), span);
-    expect(show.empty).toBe(true);
     expect(show.sentence).toBe('No calls match this question in this range.');
     expect(show.rows).toEqual([]);
-    expect(answerModel(answer({}), span).empty).toBe(false);
+    expect(answerModel(answer({}), span).sentence).not.toBe('No calls match this question in this range.');
   });
 
   it('links to the real view with the range kept', () => {

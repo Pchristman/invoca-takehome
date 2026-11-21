@@ -19,7 +19,6 @@ export interface AnswerShow {
   totals: { label: string; value: string }[];
   link: { label: string; href: string };
   caveats: Caveat[];
-  empty: boolean;
   showTable: boolean; // false for Overview answers (totals only) and when nothing matched
 }
 
@@ -88,6 +87,9 @@ function linkFor(answer: AnswerResponse): AnswerShow['link'] {
     compare: null,
     campaign: null,
     location: filter.view === 'missed-calls' && filter.officeIds.length === 1 ? (filter.officeIds[0] ?? null) : null,
+    campaignSort: null,
+    locationSort: null,
+    heatmap: 'office',
     dev: false,
     print: false,
     answer: null,
@@ -115,7 +117,6 @@ export function answerModel(answer: AnswerResponse, span: DateRange): AnswerShow
     ],
     link: linkFor(answer),
     caveats: caveatsFor(answer.notes, span, { comparing: false, range: answer.range }),
-    empty: totals.calls === 0,
     showTable: groupBy !== 'none' && answer.rows.length > 0,
   };
 }

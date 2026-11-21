@@ -7,34 +7,32 @@ import { THRESHOLDS } from '../../core/thresholds';
 import { BLANK, formatThreshold, humanize } from '../format';
 import { changeModel } from './changeModel';
 import { compareSortValues } from './sorting';
-import type { SortValue } from './sorting';
+import type { SortValue, TableSort } from './sorting';
 
-export type SortKey =
-  | 'name'
-  | 'channel'
-  | 'calls'
-  | 'callsChange'
-  | 'bookings'
-  | 'bookingRate'
-  | 'revenueUsd'
-  | 'estimatedSpendUsd'
-  | 'estimatedCostPerBookingUsd'
-  | 'revenuePerBudgetDollar';
+/** Every column the Campaigns table sorts by. The URL accepts only these. */
+export const CAMPAIGN_SORT_KEYS = [
+  'name',
+  'channel',
+  'calls',
+  'callsChange',
+  'bookings',
+  'bookingRate',
+  'revenueUsd',
+  'estimatedSpendUsd',
+  'estimatedCostPerBookingUsd',
+  'revenuePerBudgetDollar',
+] as const;
+
+export type SortKey = (typeof CAMPAIGN_SORT_KEYS)[number];
 
 export type Mark = 'best' | 'worst' | 'jump' | 'drop';
 
-export interface CampaignSort {
-  key: SortKey;
-  dir: 'asc' | 'desc';
-}
+export type CampaignSort = TableSort<SortKey>;
 
 export const DEFAULT_SORT: CampaignSort = { key: 'calls', dir: 'desc' };
 
-/** The same key flips; name and channel start ascending, the rest descending. */
-export function nextSort(current: CampaignSort, key: SortKey): CampaignSort {
-  if (current.key === key) return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' };
-  return { key, dir: key === 'name' || key === 'channel' ? 'asc' : 'desc' };
-}
+/** The text columns: a first click sorts them A to Z; every other column starts highest first. */
+export const CAMPAIGN_TEXT_KEYS: readonly SortKey[] = ['name', 'channel'];
 
 export interface Cell {
   text: string;
@@ -50,7 +48,7 @@ export interface CampaignRowModel {
 
 export interface CampaignsModel {
   empty: boolean; // no calls in range and none in the previous period, unattributed included
-  columns: { key: SortKey; label: string; numeric: boolean; estimate: boolean }[];
+  columns: { key: SortKey; label: string; numeric: boolean }[];
   rows: CampaignRowModel[]; // sorted by `sort`; unattributed is NOT in here
   unattributed: (CampaignRowModel & { trackingNumbers: { text: string }[] }) | null; // pinned last, never sorted
   bestWorstNote: string | null; // bestWorst.reason, only when nothing is marked
@@ -64,20 +62,21 @@ export interface CampaignsModel {
 }
 
 const COLUMNS: CampaignsModel['columns'] = [
-  { key: 'name', label: 'Campaign', numeric: false, estimate: false },
-  { key: 'channel', label: 'Channel', numeric: false, estimate: false },
-  { key: 'calls', label: 'Calls', numeric: true, estimate: false },
-  { key: 'callsChange', label: 'Calls vs comparison', numeric: true, estimate: false },
-  { key: 'bookings', label: 'Bookings', numeric: true, estimate: false },
-  { key: 'bookingRate', label: 'Booking rate', numeric: true, estimate: false },
-  { key: 'revenueUsd', label: 'Revenue', numeric: true, estimate: false },
-  { key: 'estimatedSpendUsd', label: 'Est. spend', numeric: true, estimate: true },
-  { key: 'estimatedCostPerBookingUsd', label: 'Est. cost per booking', numeric: true, estimate: true },
-  { key: 'revenuePerBudgetDollar', label: 'Est. revenue per budget $', numeric: true, estimate: true },
+  { key: 'name', label: 'Campaign', numeric: false },
+  { key: 'channel', label: 'Channel', numeric: false },
+  { key: 'calls', label: 'Calls', numeric: true },
+  { key: 'callsChange', label: 'Calls vs comparison', numeric: true },
+  { key: 'bookings', label: 'Bookings', numeric: true },
+  { key: 'bookingRate', label: 'Booking rate', numeric: true },
+  { key: 'revenueUsd', label: 'Revenue', numeric: true },
+  { key: 'estimatedSpendUsd', label: 'Est. spend', numeric: true },
+  { key: 'estimatedCostPerBookingUsd', label: 'Est. cost per booking', numeric: true },
+  { key: 'revenuePerBudgetDollar', label: 'Est. revenue per budget $', numeric: true },
 ];
 
 const NOT_APPLICABLE = 'Not applicable: no campaign, so no budget.';
 const ZERO_BUDGET = 'No estimate: this campaign has a $0 budget.';
+const NO_BUDGET = 'No estimate: this campaign has no budget in the campaigns file.';
 const NO_BOOKINGS = 'No estimate: no bookings in this range.';
 const NO_CALLS = 'No calls in this range.';
 
@@ -98,7 +97,9 @@ function callsChangeCell(row: CampaignRow, noPreviousReason: string | null, perD
 }
 
 function cellsFor(row: CampaignRow, noPreviousReason: string | null, perDay: boolean): Record<SortKey, Cell> {
-  const noBudget = row.estimatedSpendUsd === null ? NOT_APPLICABLE : row.estimatedSpendUsd === 0 ? ZERO_BUDGET : null;
+  // A null spend on a real campaign is a blank or unreadable budget; on the Unattributed row there is no campaign at all.
+  const missingSpend = row.campaignId === null ? NOT_APPLICABLE : NO_BUDGET;
+  const noBudget = row.estimatedSpendUsd === null ? missingSpend : row.estimatedSpendUsd === 0 ? ZERO_BUDGET : null;
   const costNote = noBudget ?? (row.bookings === 0 ? NO_BOOKINGS : null);
   return {
     name: { text: row.name },
@@ -108,7 +109,7 @@ function cellsFor(row: CampaignRow, noPreviousReason: string | null, perDay: boo
     bookings: { text: formatCount(row.bookings) },
     bookingRate: numberCell(row.bookingRate, formatRate, NO_CALLS),
     revenueUsd: { text: formatUsd(row.revenueUsd) },
-    estimatedSpendUsd: numberCell(row.estimatedSpendUsd, formatUsd, NOT_APPLICABLE),
+    estimatedSpendUsd: numberCell(row.estimatedSpendUsd, formatUsd, missingSpend),
     estimatedCostPerBookingUsd: numberCell(row.estimatedCostPerBookingUsd, formatUsd, costNote),
     revenuePerBudgetDollar: numberCell(row.revenuePerBudgetDollar, formatUsdPerDollar, noBudget),
   };

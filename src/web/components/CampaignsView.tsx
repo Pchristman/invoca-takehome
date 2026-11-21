@@ -1,9 +1,10 @@
-import { useState } from 'react';
 import type { DateRange } from '../../core/ranges';
 import type { CampaignsView as CampaignsData } from '../../core/views';
 import { caveatsFor } from '../models/caveats';
 import { comparisonLine } from '../models/comparisonLine';
-import { DEFAULT_SORT, campaignsModel, nextSort } from '../models/campaignsModel';
+import { CAMPAIGN_TEXT_KEYS, DEFAULT_SORT, campaignsModel } from '../models/campaignsModel';
+import type { CampaignSort } from '../models/campaignsModel';
+import { nextSort } from '../models/sorting';
 import { weeklyChartModel } from '../models/weeklyChart';
 import type { UrlState } from '../urlState';
 import { CampaignTable } from './CampaignTable';
@@ -13,17 +14,20 @@ import { WeeklyChart } from './WeeklyChart';
 
 export function CampaignsView({
   view,
+  state,
   span,
   chartBusy = false,
   onSelectCampaign,
+  onSort,
 }: {
   view: CampaignsData;
   state: UrlState;
   span: DateRange;
   chartBusy?: boolean; // the chart's campaign is changing; the rest is the last reply
   onSelectCampaign(id: string): void;
+  onSort(sort: CampaignSort): void; // the sort lives in the URL, so it survives a range change
 }) {
-  const [sort, setSort] = useState(DEFAULT_SORT);
+  const sort = state.campaignSort ?? DEFAULT_SORT;
   const model = campaignsModel(view, sort);
   const chart = weeklyChartModel(view.weekly);
   // caveatsFor shows the previous-period notes only when notes.comparison.available, so true is enough here.
@@ -58,7 +62,7 @@ export function CampaignsView({
         {model.empty ? (
           <p role="status">No calls in this range.</p>
         ) : (
-          <CampaignTable model={model} sort={sort} onSort={(key) => setSort((current) => nextSort(current, key))} />
+          <CampaignTable model={model} sort={sort} onSort={(key) => onSort(nextSort(sort, key, CAMPAIGN_TEXT_KEYS))} />
         )}
         {model.alertsRule !== null && (
           <details className="small">
@@ -73,7 +77,7 @@ export function CampaignsView({
             Campaign for the weekly chart
             <select
               className="button"
-              value={model.selectedCampaignId ?? ''}
+              value={state.campaign ?? model.selectedCampaignId ?? ''} // the URL first, so a new pick shows before its reply
               onChange={(event) => onSelectCampaign(event.target.value)}
             >
               {model.chartChoices.map((choice) => (

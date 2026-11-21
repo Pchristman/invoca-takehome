@@ -43,6 +43,10 @@ describe('RevealPresence with motion off', () => {
     expect(html).not.toContain('data-motion');
   });
 
+  it('still marks a view for the height hold, so a range change does not blank and jump the page', () => {
+    expect(show('a')).toContain('data-reveal-kind="view"');
+  });
+
   it('after a key switch only the current child is in the markup', () => {
     const html = show('b');
     expect(html).toContain('content-b');

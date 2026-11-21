@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { Meta, QuestionResponse } from '../../server/api';
 import { askQuestion } from '../api';
-import { askModel, replyWanted } from '../models/askModel';
+import { askModel } from '../models/askModel';
 import type { AskShow } from '../models/askModel';
 import type { RequestState } from '../requestState';
 import { answerHref } from '../urlState';
@@ -17,11 +17,13 @@ export function AskBoxView({
   value,
   onChange,
   onSubmit,
+  onCancel,
 }: {
   show: AskShow;
   value: string;
   onChange(value: string): void;
   onSubmit(): void;
+  onCancel(): void;
 }) {
   if (show.box === 'hidden') return <p className="small muted ask-note">{show.note}</p>;
   const submit = (event: FormEvent) => {
@@ -33,30 +35,36 @@ export function AskBoxView({
       <label htmlFor={INPUT_ID}>Ask a question</label>
       <div className="row">
         <input id={INPUT_ID} type="text" maxLength={ASK_MAX_CHARS} value={value} onChange={(event) => onChange(event.target.value)} />
-        <button type="submit" className="button" disabled={show.busy}>
-          Ask
-        </button>
+        {/* While a question is out the button cancels it, so a hung request always has a way out. */}
+        {show.busy ? (
+          <button type="button" className="button" onClick={onCancel}>
+            Cancel
+          </button>
+        ) : (
+          <button type="submit" className="button">
+            Ask
+          </button>
+        )}
       </div>
-      {(show.message !== null || show.busy) && (
-        <div role="status" className="ask-result">
-          {show.busy && <p>Reading your question...</p>}
-          {show.message !== null && <p>{show.message}</p>}
-          {show.examples !== null && (
-            <ul>
-              {show.examples.map((example) => (
-                <li key={example}>{example}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {/* Always rendered, so a screen reader hears each change of its text. */}
+      <div role="status" className="ask-result">
+        {show.busy && <p>Reading your question...</p>}
+        {show.message !== null && <p>{show.message}</p>}
+        {show.examples !== null && (
+          <ul>
+            {show.examples.map((example) => (
+              <li key={example}>{example}</li>
+            ))}
+          </ul>
+        )}
+      </div>
     </form>
   );
 }
 
 /**
- * One request at a time. On a valid filter it navigates to the answer page; on failure the typed text stays.
- * Each submit has its own AbortController; leaving the page or asking again cancels the one in flight.
+ * One request at a time; Cancel or leaving the page aborts it. On a valid filter it navigates to the answer page;
+ * on failure the typed text stays.
  */
 export function AskBox({ meta, state, onNavigate }: { meta: Pick<Meta, 'aiStatus'>; state: UrlState; onNavigate(href: string): void }) {
   const [value, setValue] = useState('');
@@ -65,20 +73,16 @@ export function AskBox({ meta, state, onNavigate }: { meta: Pick<Meta, 'aiStatus
   const latestState = useRef(state); // navigate from the page as it is when the reply arrives
   latestState.current = state;
   const controller = useRef<AbortController | null>(null);
-  const latestId = useRef(0);
 
   useEffect(() => () => controller.current?.abort(), []); // unmount
 
   const submit = () => {
     if (busy || value.trim() === '') return;
-    controller.current?.abort();
     const abort = new AbortController();
     controller.current = abort;
-    latestId.current += 1;
-    const submitId = latestId.current;
     setRequest({ status: 'loading', key: value });
     askQuestion(value, abort.signal).then((reply) => {
-      if (!replyWanted({ submitId, latestId: latestId.current, aborted: abort.signal.aborted })) return;
+      if (abort.signal.aborted) return;
       if (reply.ok) {
         setRequest(null);
         onNavigate(answerHref(latestState.current, reply.query));
@@ -88,5 +92,10 @@ export function AskBox({ meta, state, onNavigate }: { meta: Pick<Meta, 'aiStatus
     });
   };
 
-  return <AskBoxView show={askModel(meta, request)} value={value} onChange={setValue} onSubmit={submit} />;
+  const cancel = () => {
+    controller.current?.abort();
+    setRequest(null);
+  };
+
+  return <AskBoxView show={askModel(meta, request)} value={value} onChange={setValue} onSubmit={submit} onCancel={cancel} />;
 }

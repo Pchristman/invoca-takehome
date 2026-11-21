@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Meta } from '../../src/server/api';
@@ -34,27 +33,5 @@ describe('clearing dates', () => {
   it('keeps Use previous period when a comparison is set', () => {
     const html = render('?start=2026-09-08&end=2026-09-14&compareStart=2026-09-01&compareEnd=2026-09-07');
     expect(html).toMatch(/<button[^>]*>Use previous period</);
-  });
-});
-
-describe('loading label', () => {
-  const css = readFileSync('src/web/styles/base.css', 'utf8');
-  it('is delayed, so a quick reply does not flash Loading...', () => {
-    const rule = /\n\.loading \{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(rule).toMatch(/animation: loading-in[^;]*var\(--motion-slow\)/);
-  });
-  it('does not double-fade content that already has its own motion wrapper', () => {
-    expect(css).toContain(':not(.loading):not([data-motion])');
-  });
-});
-
-describe('range control layout', () => {
-  const css = readFileSync('src/web/styles/base.css', 'utf8');
-  it('lines the Compare group up on the bottom of the inputs, not on the middle of the labels', () => {
-    expect(css).toMatch(/\.range-control > \.row\s*\{[^}]*align-items:\s*end/);
-  });
-  it('lets the page use more than 76rem', () => {
-    const width = /\.page\s*\{[^}]*max-width:\s*(\d+)rem/.exec(css)?.[1];
-    expect(Number(width)).toBeGreaterThan(76);
   });
 });

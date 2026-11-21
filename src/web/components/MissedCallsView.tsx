@@ -21,6 +21,7 @@ export function MissedCallsView({
   offices,
   busy = false,
   onSelectOffice,
+  onHeatmap,
 }: {
   view: MissedCallsData;
   state: UrlState;
@@ -28,8 +29,8 @@ export function MissedCallsView({
   offices: Meta['locations'];
   busy?: boolean; // the office is changing; the rest is the last reply
   onSelectOffice(id: string | null): void;
+  onHeatmap(mode: HeatmapMode): void; // the mode lives in the URL, so it survives a range change
 }) {
-  const [mode, setMode] = useState<HeatmapMode>('office');
   // The page is remembered with the range and office it was chosen for: change either and it is page 1 again.
   const key = pageKey(view.range, state);
   const [chosen, setChosen] = useState({ key, page: 1 });
@@ -78,8 +79,8 @@ export function MissedCallsView({
           state={state}
           model={model}
           busy={busy}
-          mode={mode}
-          onMode={setMode}
+          mode={state.heatmap}
+          onMode={onHeatmap}
           onPage={(next) => setChosen({ key, page: next })}
         />
       )}

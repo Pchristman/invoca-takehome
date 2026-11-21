@@ -268,8 +268,7 @@ pre {
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
-.button[aria-pressed="true"],
-.button.is-active {
+.button[aria-pressed="true"] {
   position: relative;
   background: var(--color-accent-soft);
   border-color: var(--color-accent);
@@ -331,7 +330,8 @@ button.button:not([aria-pressed]):not(:disabled):hover {
 
 .tone-up { color: var(--color-up); font-weight: 500; }
 .tone-down { color: var(--color-down); font-weight: 500; }
-.tone-flat { color: var(--color-text-muted); }
+.tone-flat,
+.tone-new { color: var(--color-text-muted); } /* new: no previous calls to compare with, so neither up nor down */
 
 /* ---------- lists of actions: one white panel, a row each ---------- */
 .section > ul {
@@ -364,7 +364,9 @@ button.button:not([aria-pressed]):not(:disabled):hover {
 }
 
 /* ---------- tables: a white panel that scrolls sideways on a narrow screen ---------- */
+/* position: relative keeps the absolutely placed .visually-hidden text inside the scroller, so it cannot widen the page. */
 .table-wrap {
+  position: relative;
   overflow-x: auto;
   max-width: 100%;
   background: var(--color-panel);
@@ -523,8 +525,9 @@ th .badge {
 .loading {
   color: var(--color-text-muted);
   padding: var(--space-4) 0;
-  /* A quick reply never shows "Loading...": the label only appears if the wait lasts longer than the slow motion time. */
-  animation: loading-in var(--motion-base) var(--ease-standard) var(--motion-slow) backwards;
+  /* A quick reply never shows "Loading...": the label only appears if the wait lasts longer than --loading-delay.
+     With reduced motion the fade takes no time, but the delay stays, so a quick reply still does not flash the label. */
+  animation: loading-in var(--motion-base) var(--ease-standard) var(--loading-delay) backwards;
 }
 
 @keyframes loading-in {
@@ -568,12 +571,6 @@ th .badge {
   border-color: var(--color-down);
 }
 
-.badge-estimate {
-  color: var(--color-notice-text);
-  background: var(--color-notice-bg);
-  border-color: var(--color-notice-text);
-}
-
 /* ---------- chart: a white panel ---------- */
 .chart {
   margin: var(--space-4) 0;
@@ -585,14 +582,6 @@ th .badge {
 
 .chart-title {
   overflow-wrap: anywhere;
-}
-
-.chart-bar {
-  fill: var(--color-chart-bar);
-}
-
-.chart-bar-partial {
-  fill: var(--color-chart-bar-partial);
 }
 
 .chart-axis {
@@ -855,19 +844,8 @@ th .badge {
 }
 
 /* ---------- view motion ---------- */
-/* While a view is leaving and the next is arriving the box keeps its height, so the page below does not jump up and down. */
-[data-motion="view"] {
+/* While a view is leaving and the next is loading the box keeps its height, so the page below does not jump up and down.
+   It applies with motion off too: the new view still waits for its data. The view's own Reveal does the one fade. */
+[data-reveal-kind="view"] {
   min-height: 60vh;
-}
-
-/* Anything that mounts inside a view (data replacing "Loading...", the takeaway) fades in instead of popping in. */
-[data-motion="view"] > :not(.loading):not([data-motion]) {
-  animation: view-content-in var(--motion-base) var(--ease-standard) backwards;
-}
-
-@keyframes view-content-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
 }

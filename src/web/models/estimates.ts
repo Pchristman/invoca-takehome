@@ -9,27 +9,28 @@ export function estimateFormulas(days: number): { kind: EstimateKind; label: str
     {
       kind: 'spend',
       label: 'Est. spend',
-      formula: `Estimated spend = daily budget × ${formatCount(days, ['day', 'days'])} in this range. The export has no actual spend, so this is an estimate.`,
+      formula: `Estimated spend = daily budget × ${formatCount(days, ['day', 'days'])} in this range. The export has no actual spend, so this is an estimate. Blank when the budget is not given.`,
     },
     {
       kind: 'cost_per_booking',
       label: 'Est. cost per booking',
       formula:
-        'Estimated cost per booking = estimated spend ÷ bookings. Blank when the budget is $0 or there are no bookings.',
+        'Estimated cost per booking = estimated spend ÷ bookings. Blank when the budget is $0 or not given, or there are no bookings.',
     },
     {
       kind: 'revenue_per_dollar',
       label: 'Est. revenue per budget $',
-      formula: 'Revenue per budget dollar = revenue ÷ estimated spend. Blank when estimated spend is $0.',
+      formula: 'Revenue per budget dollar = revenue ÷ estimated spend. Blank when estimated spend is $0 or the budget is not given.',
     },
   ];
 }
 
 /** The three "est." lines the printed page always carries: paper has no "one click away". */
 export function printEstimateNotes(days: number): string[] {
+  const [spend, , revenuePerDollar] = estimateFormulas(days);
   return [
-    estimateFormulas(days)[0]!.formula,
-    estimateFormulas(days)[2]!.formula,
+    spend!.formula,
+    revenuePerDollar!.formula,
     "Est. missed-call value = the campaign's booking rate × its average booking value, using rates from the whole export. Missed calls shows the full formula.",
   ];
 }

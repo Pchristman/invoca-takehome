@@ -8,10 +8,13 @@ import { THRESHOLDS } from '../../core/thresholds';
 import { BLANK } from '../format';
 import type { Cell } from './campaignsModel';
 import { compareSortValues } from './sorting';
-import type { SortValue } from './sorting';
+import type { SortValue, TableSort } from './sorting';
 import { VIEW_LABELS } from './viewLabels';
 
-export type LocationColumnKey = 'name' | 'calls' | 'answerRate' | 'bookings' | 'bookingRate' | 'revenueUsd' | 'bestCampaign';
+/** Every column the Locations table sorts by. The URL accepts only these. */
+export const LOCATION_SORT_KEYS = ['name', 'calls', 'answerRate', 'bookings', 'bookingRate', 'revenueUsd', 'bestCampaign'] as const;
+
+export type LocationColumnKey = (typeof LOCATION_SORT_KEYS)[number];
 
 export interface LocationFlagModel {
   metric: 'answer' | 'booking';
@@ -37,18 +40,12 @@ export interface LocationsModel {
 
 export type LocationSortKey = LocationColumnKey;
 
-export interface LocationSort {
-  key: LocationSortKey;
-  dir: 'asc' | 'desc';
-}
+export type LocationSort = TableSort<LocationSortKey>;
 
 export const DEFAULT_LOCATION_SORT: LocationSort = { key: 'calls', dir: 'desc' };
 
-/** The same key flips; name and bestCampaign start ascending, the rest descending. */
-export function nextLocationSort(current: LocationSort, key: LocationSortKey): LocationSort {
-  if (current.key === key) return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' };
-  return { key, dir: key === 'name' || key === 'bestCampaign' ? 'asc' : 'desc' };
-}
+/** The text columns: a first click sorts them A to Z; every other column starts highest first. */
+export const LOCATION_TEXT_KEYS: readonly LocationSortKey[] = ['name', 'bestCampaign'];
 
 const COLUMNS: LocationsModel['columns'] = [
   { key: 'name', label: 'Office', numeric: false },

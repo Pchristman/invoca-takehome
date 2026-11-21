@@ -4,20 +4,21 @@
 import type { RowClass, UploadKind, UploadPreview } from '../../db/upload/types';
 import { formatCount } from '../../core/views/format';
 import { formatLongDate } from '../format';
+import { shorten } from '../../server/api'; // long file names and ids are cut so one cannot stretch the panel
 
 export type UploadState =
   | { step: 'choose' }
   | { step: 'checking'; fileName: string }
   | { step: 'preview'; fileName: string; preview: UploadPreview }
   | { step: 'saving'; fileName: string; preview: UploadPreview }
-  | { step: 'done'; fileName: string; preview: UploadPreview; written: number; spanEnd: string | null }
+  | { step: 'done'; fileName: string; preview: UploadPreview; spanEnd: string | null; warning: string | null }
   | { step: 'error'; fileName: string | null; message: string };
 
 export type UploadAction =
   | { type: 'choose'; fileName: string }
   | { type: 'previewed'; preview: UploadPreview }
   | { type: 'confirm' }
-  | { type: 'committed'; preview: UploadPreview; written: number; spanEnd: string | null }
+  | { type: 'committed'; preview: UploadPreview; spanEnd: string | null; warning: string | null }
   | { type: 'failed'; message: string }
   | { type: 'reset' };
 
@@ -35,7 +36,7 @@ export function uploadReducer(state: UploadState, action: UploadAction): UploadS
     case 'confirm':
       return state.step === 'preview' ? { step: 'saving', fileName: state.fileName, preview: state.preview } : state;
     case 'committed':
-      return state.step === 'saving' ? { step: 'done', fileName: state.fileName, preview: action.preview, written: action.written, spanEnd: action.spanEnd } : state;
+      return state.step === 'saving' ? { step: 'done', fileName: state.fileName, preview: action.preview, spanEnd: action.spanEnd, warning: action.warning } : state;
     case 'failed':
       return { step: 'error', fileName: state.step === 'choose' ? null : state.fileName, message: action.message };
     case 'reset':
@@ -62,6 +63,8 @@ export interface UploadView {
   confirmLabel: string | null;
   emptyMessage: string | null;
   done: string | null;
+  /** Rows were saved but something after the write failed (the server's own text); shown in an alert. */
+  warning: string | null;
   seeNewDataHref: string;
 }
 
@@ -70,14 +73,6 @@ const NOUNS: Record<UploadKind, readonly [string, string]> = {
   campaigns: ['campaign', 'campaigns'],
   locations: ['location', 'locations'],
 };
-
-const MAX_TEXT = 40;
-
-/** Long file names and ids are cut so one cannot stretch the panel. */
-export function shorten(text: string): string {
-  const chars = Array.from(text);
-  return chars.length <= MAX_TEXT ? text : `${chars.slice(0, MAX_TEXT - 1).join('')}…`;
-}
 
 function exampleLine(example: { row: number; id: string; note: string }): string {
   return `row ${formatCount(example.row)}: ${shorten(example.id)} (${example.note})`;
@@ -135,6 +130,7 @@ export function uploadModel(state: UploadState, seeNewDataHref: string): UploadV
     confirmLabel: null,
     emptyMessage: null,
     done: null,
+    warning: null,
     seeNewDataHref,
   };
   if (state.step === 'choose') return view;
@@ -151,7 +147,7 @@ export function uploadModel(state: UploadState, seeNewDataHref: string): UploadV
     hints: preview.hints,
     badReasons: badReasonsFor(preview),
   };
-  if (state.step === 'done') return { ...shown, done: doneText(preview, state.spanEnd) };
+  if (state.step === 'done') return { ...shown, done: doneText(preview, state.spanEnd), warning: state.warning };
   if (state.step === 'saving') return { ...shown, busy: 'Saving...' };
   if (addable === 0) return { ...shown, emptyMessage: emptyMessageFor(preview) };
   return { ...shown, canConfirm: true, confirmLabel: `Add ${formatCount(addable, noun)}` };

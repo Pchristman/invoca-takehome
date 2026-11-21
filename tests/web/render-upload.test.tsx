@@ -5,7 +5,7 @@ import { Header } from '../../src/web/components/Header';
 import { UploadPanelView } from '../../src/web/components/UploadPanel';
 import { INITIAL_UPLOAD } from '../../src/web/models/uploadModel';
 import type { UploadState } from '../../src/web/models/uploadModel';
-import { shouldCloseUpload } from '../../src/web/models/escapeKey';
+import { panelToClose } from '../../src/web/models/escapeKey';
 import { EmptyScreen } from '../../src/web/App';
 import { defaultsHref, parseUrlState, printHref } from '../../src/web/urlState';
 import { serverFixture } from '../server/helpers';
@@ -58,7 +58,7 @@ describe('UploadPanel', () => {
   it('done shows the added text and a plain link that keeps view and dev only', () => {
     const state = parseUrlState('?view=campaigns&dev&start=2026-09-01&end=2026-09-07&campaign=c1');
     const href = defaultsHref(state);
-    const html = panel({ step: 'done', fileName: 'f.csv', preview: previewOf('calls', { newRows: 40 }), written: 40, spanEnd: null }, href);
+    const html = panel({ step: 'done', fileName: 'f.csv', preview: previewOf('calls', { newRows: 40 }), spanEnd: null, warning: null }, href);
     expect(html).toContain('Added 40 new calls.');
     expect(html).toContain('Choose another file');
     const match = /<a [^>]*href="([^"]*)"/.exec(html);
@@ -119,16 +119,40 @@ describe('Header upload button', () => {
   });
 });
 
-describe('Escape on the upload panel', () => {
-  const key = (over: Partial<Parameters<typeof shouldCloseUpload>[0]> = {}) => shouldCloseUpload({ key: 'Escape', defaultPrevented: false, targetTag: 'BODY', step: 'preview', ...over });
-
-  it('closes on Escape', () => expect(key()).toBe(true));
-  it('ignores other keys, handled events, and a select', () => {
-    expect(key({ key: 'a' })).toBe(false);
-    expect(key({ defaultPrevented: true })).toBe(false);
-    expect(key({ targetTag: 'SELECT' })).toBe(false);
+describe('upload panel focus and warning', () => {
+  it('the heading can take focus, so a step that removes the focused control moves focus there', () => {
+    expect(panel({ step: 'choose' })).toMatch(/<h2 tabindex="-1">/);
   });
-  it('does not close while saving', () => expect(key({ step: 'saving' })).toBe(false));
+
+  it('done shows the server warning as an alert, and no alert without one', () => {
+    const done = { step: 'done' as const, fileName: 'f.csv', preview: previewOf('calls', { newRows: 4 }), spanEnd: null };
+    const warning = 'The rows were saved, but AI could not be set up for the new data, so AI is off until the server restarts.';
+    const html = panel({ ...done, warning });
+    expect(html).toContain('Added 4 new calls.');
+    expect(html).toContain(`<p role="alert">${warning}</p>`);
+    expect(panel({ ...done, warning: null })).not.toContain('role="alert"');
+  });
+});
+
+describe('Escape closes one panel', () => {
+  const panels = { uploadOpen: true, uploadStep: 'preview', dataNotesOpen: true };
+  const escape = (over: Partial<Parameters<typeof panelToClose>[0]> = {}, open: Partial<typeof panels> = {}) =>
+    panelToClose({ key: 'Escape', defaultPrevented: false, targetTag: 'BODY', ...over }, { ...panels, ...open });
+
+  it('closes the upload panel first, then the data notes, never both at once', () => {
+    expect(escape()).toBe('upload');
+    expect(escape({}, { uploadOpen: false })).toBe('data-notes');
+    expect(escape({}, { uploadOpen: false, dataNotesOpen: false })).toBeNull();
+  });
+  it('ignores other keys, handled events, and a select', () => {
+    expect(escape({ key: 'a' })).toBeNull();
+    expect(escape({ defaultPrevented: true })).toBeNull();
+    expect(escape({ targetTag: 'SELECT' })).toBeNull();
+  });
+  it('never closes the upload panel while saving; the data notes still close', () => {
+    expect(escape({}, { uploadStep: 'saving', dataNotesOpen: false })).toBeNull();
+    expect(escape({}, { uploadStep: 'saving' })).toBe('data-notes');
+  });
 });
 
 describe('the empty screen can upload', () => {

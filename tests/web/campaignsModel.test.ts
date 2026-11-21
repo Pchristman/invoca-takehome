@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { THRESHOLDS } from '../../src/core/thresholds';
 import type { CampaignRow, CampaignsView } from '../../src/core/views';
 import { BLANK } from '../../src/web/format';
-import { campaignsModel, DEFAULT_SORT, nextSort, sortCampaignRows } from '../../src/web/models/campaignsModel';
-import type { CampaignRowModel, CampaignSort } from '../../src/web/models/campaignsModel';
+import { CAMPAIGN_TEXT_KEYS, campaignsModel, DEFAULT_SORT, sortCampaignRows } from '../../src/web/models/campaignsModel';
+import { nextSort as nextTableSort } from '../../src/web/models/sorting';
+import type { CampaignRowModel, CampaignSort, SortKey } from '../../src/web/models/campaignsModel';
 import { campaignsFor, emptyRangeStore, storeWithNames, storeWithZeroBudget } from './fixtures';
+
+// The shared header-click rule, with the Campaigns text columns.
+const nextSort = (current: CampaignSort, key: SortKey) => nextTableSort(current, key, CAMPAIGN_TEXT_KEYS);
 
 const server = campaignsFor('range=all');
 const rowOf = (view: CampaignsView, id: string): CampaignRow => view.rows.find((r) => r.campaignId === id)!;
@@ -47,7 +51,6 @@ describe('columns', () => {
       'Est. cost per booking',
       'Est. revenue per budget $',
     ]);
-    expect(columns.map((c) => c.estimate)).toEqual([false, false, false, false, false, false, false, true, true, true]);
     expect(columns.map((c) => c.numeric)).toEqual([false, false, true, true, true, true, true, true, true, true]);
   });
 });
@@ -133,6 +136,14 @@ describe('blank cells explain themselves', () => {
     for (const key of ['estimatedSpendUsd', 'estimatedCostPerBookingUsd', 'revenuePerBudgetDollar'] as const) {
       expect(cells[key].text).toBe(BLANK);
       expect(cells[key].note).toContain('Not applicable');
+    }
+  });
+
+  it('a campaign whose budget is not given has every budget cell blank, saying so (not "no campaign")', () => {
+    const unknown = row('x', { bookings: 2, estimatedSpendUsd: null, estimatedCostPerBookingUsd: null, revenuePerBudgetDollar: null });
+    const cells = campaignsModel({ ...view, rows: [unknown] }, DEFAULT_SORT).rows[0]!.cells;
+    for (const key of ['estimatedSpendUsd', 'estimatedCostPerBookingUsd', 'revenuePerBudgetDollar'] as const) {
+      expect(cells[key]).toEqual({ text: BLANK, note: 'No estimate: this campaign has no budget in the campaigns file.' });
     }
   });
 

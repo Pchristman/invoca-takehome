@@ -56,11 +56,11 @@ describe.each(exports)('motion on and off on the $name export', ({ dir }) => {
       overview,
       list: [
         { name: 'Overview', node: <OverviewView view={overview} state={state} span={span} /> },
-        { name: 'Campaigns', node: <CampaignsView view={campaigns} state={state} span={span} onSelectCampaign={noop} /> },
-        { name: 'Locations', node: <LocationsView view={locations} state={state} span={span} /> },
+        { name: 'Campaigns', node: <CampaignsView view={campaigns} state={state} span={span} onSelectCampaign={noop} onSort={noop} /> },
+        { name: 'Locations', node: <LocationsView view={locations} state={state} span={span} onSort={noop} /> },
         {
           name: 'Missed calls',
-          node: <MissedCallsView view={missed} state={state} span={span} offices={meta.locations} onSelectOffice={noop} />,
+          node: <MissedCallsView view={missed} state={state} span={span} offices={meta.locations} onSelectOffice={noop} onHeatmap={noop} />,
         },
       ],
     };

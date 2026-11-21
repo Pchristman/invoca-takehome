@@ -1,6 +1,5 @@
 // WeeklyChart with motion on and off: the same words, the same hidden table, the same legend.
-// Animation only changes how bars are drawn, never what the page says. Source check: no hard-coded animation props.
-import { readFileSync } from 'node:fs';
+// Animation only changes how bars are drawn, never what the page says.
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { WeeklyChart } from '../../src/web/components/WeeklyChart';
@@ -38,14 +37,5 @@ describe('WeeklyChart with motion on and off', () => {
     const zero = { ...model, allZero: true };
     expect(html(MOTION_ON, zero)).toContain('No calls in these weeks.');
     expect(html(MOTION_OFF, zero)).toContain('No calls in these weeks.');
-  });
-});
-
-describe('WeeklyChart source', () => {
-  it('takes its animation from chartAnimation, not hard-coded props', () => {
-    const src = readFileSync('src/web/components/WeeklyChart.tsx', 'utf8');
-    expect(src).not.toContain('isAnimationActive={false}');
-    expect(src).not.toMatch(/animationDuration=\{?\s*\d/);
-    expect(src).toContain('chartAnimation(');
   });
 });

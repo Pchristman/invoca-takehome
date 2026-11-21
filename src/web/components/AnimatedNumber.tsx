@@ -39,5 +39,5 @@ export function AnimatedNumber({ id, text, figure }: { id: string; text: string;
   // Leaving the screen cancels whatever is running.
   useLayoutEffect(() => () => ticker.current?.stop(), []);
 
-  return <span ref={span} className="figure">{text}</span>;
+  return <span ref={span}>{text}</span>;
 }

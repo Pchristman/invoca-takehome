@@ -331,13 +331,13 @@ describe('estimateFormulas', () => {
   it('uses the exact copy', () => {
     const [spend, cost, revenue] = estimateFormulas(14);
     expect(spend?.formula).toBe(
-      'Estimated spend = daily budget × 14 days in this range. The export has no actual spend, so this is an estimate.',
+      'Estimated spend = daily budget × 14 days in this range. The export has no actual spend, so this is an estimate. Blank when the budget is not given.',
     );
     expect(cost?.formula).toBe(
-      'Estimated cost per booking = estimated spend ÷ bookings. Blank when the budget is $0 or there are no bookings.',
+      'Estimated cost per booking = estimated spend ÷ bookings. Blank when the budget is $0 or not given, or there are no bookings.',
     );
     expect(revenue?.formula).toBe(
-      'Revenue per budget dollar = revenue ÷ estimated spend. Blank when estimated spend is $0.',
+      'Revenue per budget dollar = revenue ÷ estimated spend. Blank when estimated spend is $0 or the budget is not given.',
     );
   });
 });

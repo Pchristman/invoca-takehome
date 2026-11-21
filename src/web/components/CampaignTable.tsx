@@ -1,16 +1,7 @@
-import type { Cell, Mark, CampaignRowModel, CampaignSort, CampaignsModel, SortKey } from '../models/campaignsModel';
+import type { Mark, CampaignRowModel, CampaignSort, CampaignsModel, SortKey } from '../models/campaignsModel';
+import { CellText, SortHeader } from './TableParts';
 
 const MARK_LABELS: Record<Mark, string> = { best: 'Best', worst: 'Worst', jump: 'Calls jumped', drop: 'Calls dropped' };
-
-function CellText({ cell }: { cell: Cell }) {
-  if (cell.note === undefined) return <>{cell.text}</>;
-  return (
-    <>
-      <span title={cell.note}>{cell.text}</span>
-      <span className="visually-hidden"> {cell.note}</span>
-    </>
-  );
-}
 
 function cellClass(key: SortKey): string | undefined {
   return key === 'name' || key === 'channel' ? undefined : 'num';
@@ -74,16 +65,9 @@ export function CampaignTable({
           <thead>
             <tr>
               {model.columns.map((column) => (
-                <th
-                  key={column.key}
-                  scope="col"
-                  className={column.numeric ? 'num' : undefined}
-                  aria-sort={sort.key === column.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
-                >
-                  <button type="button" className="sort-button" onClick={() => onSort(column.key)}>
-                    {column.label}
-                  </button>
-                </th>
+                <SortHeader key={column.key} columnKey={column.key} numeric={column.numeric} sort={sort} onSort={onSort}>
+                  {column.label}
+                </SortHeader>
               ))}
             </tr>
           </thead>

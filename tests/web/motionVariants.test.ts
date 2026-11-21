@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MOTION_OFF, type MotionSettings } from '../../src/web/models/motionSettings';
-import { chartAnimation, contentKey, revealFor, transitionKey, type RevealKind } from '../../src/web/models/motionVariants';
+import { chartAnimation, contentKey, revealFor, type RevealKind } from '../../src/web/models/motionVariants';
 import { parseUrlState } from '../../src/web/urlState';
 
 const ON: MotionSettings = { enabled: true, fast: 0.15, base: 0.25, slow: 0.3, ease: [0.2, 0, 0, 1] };
@@ -23,10 +23,16 @@ describe('revealFor', () => {
     expect(revealFor(ON, 'takeaway').transition.duration).toBe(ON.fast);
   });
 
-  it.each(KINDS)('%s: exit runs over fast, with the same ease', (kind) => {
+  it.each(KINDS)('%s: exit takes at most the fast time, with the same ease', (kind) => {
     const reveal = revealFor(ON, kind);
-    expect(reveal.exit.transition.duration).toBe(ON.fast);
+    expect(reveal.exit.transition.duration).toBeLessThanOrEqual(ON.fast);
     expect(reveal.exit.transition.ease).toEqual(ON.ease);
+  });
+
+  it('a view leaves in half the fast time, since the next view waits for it; panels and takeaways take fast', () => {
+    expect(revealFor(ON, 'view').exit.transition.duration).toBe(ON.fast / 2);
+    expect(revealFor(ON, 'panel').exit.transition.duration).toBe(ON.fast);
+    expect(revealFor(ON, 'takeaway').exit.transition.duration).toBe(ON.fast);
   });
 
   it.each(KINDS)('%s: with motion off the exit takes no time', (kind) => {
@@ -55,33 +61,6 @@ describe('chartAnimation', () => {
   });
 });
 
-describe('transitionKey', () => {
-  const base = parseUrlState('?view=campaigns');
-
-  it('ignores everything except the view', () => {
-    const other = parseUrlState(
-      '?view=campaigns&range=last_7_days&start=2025-01-01&end=2025-01-31&compare_start=2025-02-01&compare_end=2025-02-28&campaign=c1&location=l1&dev=1&print=1',
-    );
-    expect(transitionKey(other)).toBe(transitionKey(base));
-    expect(transitionKey({ ...base, campaign: 'x', location: 'y', dev: true, print: true })).toBe(transitionKey(base));
-    expect(transitionKey({ ...base, range: null, compare: { start: 'a', end: 'b' } })).toBe(transitionKey(base));
-  });
-
-  it('differs for each of the four views', () => {
-    const views = ['overview', 'campaigns', 'locations', 'missed-calls'] as const;
-    const keys = views.map((view) => transitionKey({ ...base, view }));
-    expect(new Set(keys).size).toBe(4);
-  });
-
-  it('is "answer" for an answer state, whatever its view', () => {
-    const answer = parseUrlState('?answer&q=hello');
-    expect(answer.answer).not.toBeNull();
-    for (const view of ['overview', 'locations'] as const) {
-      expect(transitionKey({ ...answer, view })).toBe('answer');
-    }
-  });
-});
-
 describe('contentKey', () => {
   const base = parseUrlState('?view=campaigns');
   it('changes when the range or the comparison changes, so the content transitions like a tab switch', () => {
@@ -92,7 +71,17 @@ describe('contentKey', () => {
   it('still ignores the campaign, the office, dev and print', () => {
     expect(contentKey({ ...base, campaign: 'x', location: 'y', dev: true, print: true })).toBe(contentKey(base));
   });
-  it('differs for each view and for the answer page', () => {
-    expect(contentKey({ ...base, view: 'overview' })).not.toBe(contentKey(base));
+  it('still ignores the sorts and the heatmap mode, which live in the URL and survive the remount', () => {
+    const sorted = { ...base, campaignSort: { key: 'name', dir: 'asc' } as const, heatmap: 'weekday' as const };
+    expect(contentKey(sorted)).toBe(contentKey(base));
+  });
+  it('differs for each of the four views', () => {
+    const views = ['overview', 'campaigns', 'locations', 'missed-calls'] as const;
+    expect(new Set(views.map((view) => contentKey({ ...base, view }))).size).toBe(4);
+  });
+  it('is the same answer key for an answer state, whatever its view', () => {
+    const answer = parseUrlState('?answer');
+    expect(contentKey({ ...answer, view: 'overview' })).toBe(contentKey({ ...answer, view: 'locations' }));
+    expect(contentKey({ ...answer, view: 'overview' })).not.toBe(contentKey({ ...answer, answer: null, view: 'overview' }));
   });
 });

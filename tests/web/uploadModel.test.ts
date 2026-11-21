@@ -49,7 +49,7 @@ describe('uploadModel rows', () => {
     const long = view.rows[0]!.examples[1]!;
     expect(long).toContain('row 1,200: ');
     expect(long).not.toContain('x'.repeat(100));
-    expect(long).toContain('…');
+    expect(long).toContain('...');
   });
 });
 
@@ -88,7 +88,7 @@ describe('uploadModel confirm', () => {
 
   it('says what was added once done, from the commit own counts, and links to the default view', () => {
     const done = (kind: UploadKind, counts: Partial<UploadPreview['counts']>, spanEnd: string | null = null): UploadState => ({
-      step: 'done', fileName: 'f.csv', preview: previewOf(kind, counts), written: (counts.newRows ?? 0) + (counts.newVersions ?? 0), spanEnd,
+      step: 'done', fileName: 'f.csv', preview: previewOf(kind, counts), spanEnd, warning: null,
     });
     const text = (state: UploadState) => uploadModel(state, '/').done;
     expect(text(done('calls', { newRows: 40 }))).toBe('Added 40 new calls.');
@@ -102,7 +102,7 @@ describe('uploadModel confirm', () => {
   });
 
   it('shows the commit preview rows once done, not the earlier preview', () => {
-    const view = uploadModel({ step: 'done', fileName: 'f.csv', preview: previewOf('calls', { newRows: 1 }), written: 1, spanEnd: null }, '/');
+    const view = uploadModel({ step: 'done', fileName: 'f.csv', preview: previewOf('calls', { newRows: 1 }), spanEnd: null, warning: null }, '/');
     expect(view.rows[0]).toMatchObject({ label: 'New calls', count: '1' });
   });
 
@@ -126,8 +126,8 @@ describe('uploadReducer', () => {
     s = uploadReducer(s, { type: 'confirm' });
     expect(s).toEqual({ step: 'saving', fileName: 'a.csv', preview: p });
     const fresh = previewOf('calls', { newRows: 1 });
-    s = uploadReducer(s, { type: 'committed', preview: fresh, written: 1, spanEnd: '2026-09-30' });
-    expect(s).toEqual({ step: 'done', fileName: 'a.csv', preview: fresh, written: 1, spanEnd: '2026-09-30' });
+    s = uploadReducer(s, { type: 'committed', preview: fresh, spanEnd: '2026-09-30', warning: null });
+    expect(s).toEqual({ step: 'done', fileName: 'a.csv', preview: fresh, spanEnd: '2026-09-30', warning: null });
   });
 
   it('goes to error from every step, and reset goes back to choose', () => {
@@ -136,7 +136,7 @@ describe('uploadReducer', () => {
       { step: 'checking', fileName: 'a.csv' },
       { step: 'preview', fileName: 'a.csv', preview: p },
       { step: 'saving', fileName: 'a.csv', preview: p },
-      { step: 'done', fileName: 'a.csv', preview: p, written: 2, spanEnd: null },
+      { step: 'done', fileName: 'a.csv', preview: p, spanEnd: null, warning: null },
     ];
     for (const step of steps) {
       const s = uploadReducer(step, { type: 'failed', message: 'Nope.' });
@@ -158,13 +158,13 @@ describe('uploadReducer', () => {
   });
 
   it('choose another file after done goes back to choose', () => {
-    const done: UploadState = { step: 'done', fileName: 'a.csv', preview: p, written: 2, spanEnd: null };
+    const done: UploadState = { step: 'done', fileName: 'a.csv', preview: p, spanEnd: null, warning: null };
     expect(uploadReducer(done, { type: 'reset' })).toEqual({ step: 'choose' });
   });
 
   it('ignores a late reply after a reset', () => {
     expect(uploadReducer(INITIAL_UPLOAD, { type: 'previewed', preview: p })).toBe(INITIAL_UPLOAD);
-    expect(uploadReducer(INITIAL_UPLOAD, { type: 'committed', preview: p, written: 2, spanEnd: null })).toBe(INITIAL_UPLOAD);
+    expect(uploadReducer(INITIAL_UPLOAD, { type: 'committed', preview: p, spanEnd: null, warning: null })).toBe(INITIAL_UPLOAD);
     expect(uploadReducer(INITIAL_UPLOAD, { type: 'confirm' })).toBe(INITIAL_UPLOAD);
   });
 });

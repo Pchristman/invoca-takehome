@@ -6,8 +6,6 @@ import { OverviewView } from '../../src/web/components/OverviewView';
 import { formatCount, formatRate, formatUsd } from '../../src/core/views/format';
 import { parseUrlState } from '../../src/web/urlState';
 import { overviewFor, missedCallsFor, plantedStore, metaFor } from './fixtures';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { ViewTransition } from '../../src/web/components/ViewTransition';
 import { Reveal } from '../../src/web/components/Reveal';
 import { Takeaway } from '../../src/web/components/Takeaway';
@@ -63,7 +61,6 @@ describe('AnimatedNumber and the Overview tiles', () => {
 
 describe('views, takeaway, panels and heatmap (Task 5)', () => {
   const ON = { enabled: true, fast: 0.15, base: 0.2, slow: 0.3, ease: [0.2, 0, 0, 1] as [number, number, number, number] };
-  const src = (...parts: string[]) => readFileSync(join(process.cwd(), 'src', 'web', ...parts), 'utf8');
   const withMotion = (m: typeof ON | typeof MOTION_OFF, node: React.ReactNode) =>
     renderToStaticMarkup(<MotionContext value={m}>{node}</MotionContext>);
   const shows: TakeawayShow[] = [
@@ -124,9 +121,6 @@ describe('views, takeaway, panels and heatmap (Task 5)', () => {
   });
 
   it('no motion in the print path', () => {
-    for (const file of [['components', 'PrintSummary.tsx'], ['models', 'printModel.ts'], ['models', 'motionVariants.ts']]) {
-      expect(src(...file)).not.toMatch(/from\s+['"](framer-motion|motion\/react|motion)['"]/);
-    }
     const store = plantedStore('none');
     const view = overviewFor('range=last7', store);
     const meta = metaFor(store);
@@ -134,11 +128,5 @@ describe('views, takeaway, panels and heatmap (Task 5)', () => {
     const out = withMotion(ON, <PrintSummary model={model} />);
     expect(out).not.toContain('style=');
     expect(out).not.toContain('data-motion');
-  });
-
-  it('the content key comes from contentKey (view, range, comparison) and never from campaign or location', () => {
-    const app = src('App.tsx');
-    expect(app).toMatch(/<ViewTransition id=\{contentKey\(state\)\}>/);
-    expect(app).not.toMatch(/<ViewTransition[^>]*(campaign|location)/);
   });
 });

@@ -90,6 +90,16 @@ describe('dataNotesModel values', () => {
     expect(valueOf(response, 'Outcome lag', 'Longest wait for an outcome')).toBe('3 days');
   });
 
+  it('shows unreadable updated_at and ended_at counts only when non-zero', () => {
+    const UPDATED = 'Rows with an unreadable updated_at (dedupe falls back to file order)';
+    const ENDED = 'Rows with an unreadable ended_at';
+    expect(valueOf(response, 'Rows and duplicates', UPDATED)).toBeUndefined();
+    expect(valueOf(response, 'Rows and duplicates', ENDED)).toBeUndefined();
+    const odd = respond(notesWith({ unparseableUpdatedAt: 12, unparseableEndedAt: 1 }));
+    expect(valueOf(odd, 'Rows and duplicates', UPDATED)).toBe('12');
+    expect(valueOf(odd, 'Rows and duplicates', ENDED)).toBe('1');
+  });
+
   it('lists every tracking number with its calls', () => {
     const unattributed = dataNotesModel(response).find((s) => s.title === 'Unattributed');
     expect(unattributed?.list).toHaveLength(10);

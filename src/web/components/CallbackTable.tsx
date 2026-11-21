@@ -3,8 +3,7 @@ import type { MissedCallsModel } from '../models/missedCallsModel';
 type Column = MissedCallsModel['callbacks']['columns'][number];
 
 function cellClass(column: Column): string | undefined {
-  const names = [column.numeric ? 'num' : '', column.estimate ? 'est' : ''].filter((n) => n !== '');
-  return names.length === 0 ? undefined : names.join(' ');
+  return column.numeric ? 'num' : undefined;
 }
 
 export function CallbackTable({
@@ -19,7 +18,7 @@ export function CallbackTable({
     <>
       <div className="table-wrap">
         <table className="callbacks">
-          <caption className="visually-hidden">Callers to call back</caption>
+          <caption className="visually-hidden">Callers whose latest call went unanswered</caption>
           <thead>
             <tr>
               {model.columns.map((column) => (

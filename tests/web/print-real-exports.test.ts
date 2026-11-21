@@ -20,11 +20,11 @@ const extended = cleanExport(readExportFromDir(join(ROOT, 'data', 'extended')));
 
 // Probed visible text length (markup with tags stripped) for range=last28 with AI-off takeaways:
 //   shipped export:  1780 characters (ceiling 2000)
-//   extended export: 1988 characters (ceiling 2000)
+//   extended export: 2012 characters (ceiling 2250), after the call-back action was reworded
 // The ceilings below are each probe rounded up to the next 250. This is a tripwire against the page
 // growing, not proof of fit: the print preview on paper is the proof.
 const CEILING_SHIPPED = 2000;
-const CEILING_EXTENDED = 2000;
+const CEILING_EXTENDED = 2250;
 
 function template(view: TakeawayResponse['view'], text: string) {
   const data: TakeawayResponse = { view, text, source: 'template', reason: 'ai_off' };

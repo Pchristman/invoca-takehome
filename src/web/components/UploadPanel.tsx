@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { postUpload } from '../api';
-import { shouldCloseUpload } from '../models/escapeKey';
+import { uploadLocked } from '../models/escapeKey';
 import { INITIAL_UPLOAD, uploadModel, uploadReducer } from '../models/uploadModel';
 import type { UploadState } from '../models/uploadModel';
 import type { UploadCommitResponse } from '../../server/api';
@@ -25,12 +25,17 @@ export function UploadPanelView({
   onClose(): void;
 }) {
   const view = uploadModel(state, resetHref);
+  // The file input, the Add button and Choose another file go away when used, so each step moves focus to the heading.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), [state.step]);
   return (
     <aside className="notes-panel" role="complementary" aria-label="Upload data">
       <div className="row">
-        <h2>{view.title}</h2>
+        <h2 ref={heading} tabIndex={-1}>
+          {view.title}
+        </h2>
         {/* While the file is being written the panel stays open, so the result is never lost. */}
-        <button type="button" className="button" disabled={state.step === 'saving'} onClick={onClose}>
+        <button type="button" className="button" disabled={uploadLocked(state.step)} onClick={onClose}>
           Close
         </button>
       </div>
@@ -92,6 +97,7 @@ export function UploadPanelView({
       {view.done !== null && (
         <>
           <p role="status">{view.done}</p>
+          {view.warning !== null && <p role="alert">{view.warning}</p>}
           {/* A plain link: a full page load, so the date span, pickers, views and takeaways are all fetched fresh. */}
           <a href={view.seeNewDataHref}>See the new data</a>
         </>
@@ -105,22 +111,28 @@ export function UploadPanelView({
   );
 }
 
-/** The panel with its steps: preview a chosen file, then post the same File again to confirm. */
-export function UploadPanel({ resetHref, onClose, onWritten }: { resetHref: string; onClose(): void; onWritten(written: number): void }) {
+/**
+ * The panel with its steps: preview a chosen file, then post the same File again to confirm.
+ * It tells its owner each step, so the owner's Escape and header toggle can stay shut while a file is written.
+ */
+export function UploadPanel({
+  resetHref,
+  onClose,
+  onWritten,
+  onStep,
+}: {
+  resetHref: string;
+  onClose(): void;
+  onWritten(commit: UploadCommitResponse): void;
+  onStep(step: UploadState['step']): void;
+}) {
   const [state, dispatch] = useReducer(uploadReducer, INITIAL_UPLOAD);
   const file = useRef<File | null>(null); // the chosen File, kept out of the URL and out of storage
   const previewing = useRef<AbortController | null>(null);
 
   useEffect(() => () => previewing.current?.abort(), []);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const targetTag = event.target instanceof Element ? event.target.tagName : '';
-      if (shouldCloseUpload({ key: event.key, defaultPrevented: event.defaultPrevented, targetTag, step: state.step })) onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [state.step, onClose]);
+  useEffect(() => onStep(state.step), [state.step, onStep]);
 
   const choose = async (chosen: File) => {
     previewing.current?.abort();
@@ -141,10 +153,9 @@ export function UploadPanel({ resetHref, onClose, onWritten }: { resetHref: stri
     const result = await postUpload('commit', chosen);
     if (result.ok) {
       const commit = result.data as UploadCommitResponse;
-      onWritten(commit.written); // told even if the panel was closed meanwhile, so the page still reloads
-      dispatch({ type: 'committed', preview: commit.preview, written: commit.written, spanEnd: commit.meta.span?.end ?? null });
-    }
-    else dispatch({ type: 'failed', message: result.error.message });
+      onWritten(commit); // told even if the panel was closed meanwhile, so the page still reloads
+      dispatch({ type: 'committed', preview: commit.preview, spanEnd: commit.meta.span?.end ?? null, warning: commit.warning ?? null });
+    } else dispatch({ type: 'failed', message: result.error.message });
   };
 
   const reset = () => {

@@ -82,6 +82,8 @@
   --motion-base: 300ms;
   --motion-slow: 300ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* How long a wait lasts before "Loading..." shows. A wait, not a movement, so reduced motion keeps it. */
+  --loading-delay: 300ms;
 }
 
 /* Print: a compact type and space scale so the summary fits one page. No colour is overridden. */

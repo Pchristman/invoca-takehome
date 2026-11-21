@@ -37,6 +37,13 @@ describe('weeklyChartModel', () => {
     expect(model?.bars[0]?.range).toBe('Sep 7 – Sep 13');
   });
 
+  it('keys each bar by its Monday, so a range over a year has no two bars alike', () => {
+    const week = (weekStart: string, weekEnd: string) => ({ weekStart, weekEnd, calls: 1, partial: false });
+    const model = weeklyChartModel(weekly('Alpha', [week('2025-09-08', '2025-09-14'), week('2026-09-07', '2026-09-13')]));
+    expect(model?.bars.map((b) => b.key)).toEqual(['2025-09-08', '2026-09-07']);
+    expect(model?.bars.map((b) => b.range)).toEqual(['Sep 8, 2025 – Sep 14, 2025', 'Sep 7, 2026 – Sep 13, 2026']);
+  });
+
   it('keeps a zero-call week', () => {
     const model = weeklyChartModel(
       weekly('Alpha', [
@@ -123,16 +130,16 @@ describe('weeklyChartModel on real server data', () => {
     expect(model.bars[0]?.range).toBe('Aug 31 – Sep 6');
   });
 
-  it('reads correctly across a year boundary', () => {
+  it('reads correctly across a year boundary, with the year on every label', () => {
     // Mon Dec 28 2026 to Sun Jan 10 2027: two whole weeks, so neither is partial.
     const whole = realModel('range=all', storeOverDates('2026-12-28', '2027-01-10'));
-    expect(whole.bars.map((b) => b.label)).toEqual(['Dec 28', 'Jan 4']);
-    expect(whole.bars.map((b) => b.range)).toEqual(['Dec 28 – Jan 3', 'Jan 4 – Jan 10']);
+    expect(whole.bars.map((b) => b.label)).toEqual(['Dec 28, 2026', 'Jan 4, 2027']);
+    expect(whole.bars.map((b) => b.range)).toEqual(['Dec 28, 2026 – Jan 3, 2027', 'Jan 4, 2027 – Jan 10, 2027']);
     expect(whole.bars.map((b) => b.calls)).toEqual([7, 7]);
     expect(flags(whole)).toEqual([false, false]);
     // Wed Dec 30 to Tue Jan 12: the weeks at both ends are partial and the middle one is not.
     const cut = realModel('range=all', storeOverDates('2026-12-30', '2027-01-12'));
-    expect(cut.bars.map((b) => b.range)).toEqual(['Dec 28 – Jan 3', 'Jan 4 – Jan 10', 'Jan 11 – Jan 17']);
+    expect(cut.bars.map((b) => b.range)).toEqual(['Dec 28, 2026 – Jan 3, 2027', 'Jan 4, 2027 – Jan 10, 2027', 'Jan 11, 2027 – Jan 17, 2027']);
     expect(flags(cut)).toEqual([true, false, true]);
     expect(cut.bars.map((b) => b.calls)).toEqual([5, 7, 2]);
   });

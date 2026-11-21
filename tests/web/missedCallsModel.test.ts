@@ -53,6 +53,12 @@ describe('missedCallsModel', () => {
     expect(m.lostValue.label.toLowerCase()).toContain('est.');
     expect(m.lostValue.formula).toBe(view.lostValue.formula);
     expect(m.lostValue.sources.length).toBeGreaterThan(0);
+    // The upper-bound sentence is said once, in the formula; the note only adds how the call-back list differs.
+    expect(m.lostValue.formula).toContain('upper bound');
+    expect(m.lostValue.note).not.toContain('upper bound');
+    expect(m.lostValue.note).toBe(
+      'The call-back list is smaller: only callers whose latest call went unanswered, each once.',
+    );
     const edited = toJson(view);
     edited.lostValue.bySource = { campaign: 1, channel: 0, overall: 3 };
     expect(model(edited).lostValue.sources).toEqual([
@@ -98,7 +104,7 @@ describe('missedCallsModel', () => {
   test('summary and total', () => {
     const view = withRows(40);
     for (const page of [1, 2]) {
-      expect(model(view, page).callbacks.summary).toBe('40 callers to call back, est. $1,234 in bookings.');
+      expect(model(view, page).callbacks.summary).toBe('40 callers whose latest call went unanswered, est. $1,234 in bookings.');
     }
   });
 
@@ -209,10 +215,9 @@ describe('missedCallsModel', () => {
   });
 
   test('download note', () => {
-    expect(model().callbacks.downloadNote).toBe(
-      'The file has every caller, one per row. Tracking numbers start with an apostrophe so a spreadsheet keeps them as text.',
-    );
-    expect(model(real(`${RANGE}&location=loc_a`)).callbacks.downloadNote).toContain('apostrophe');
+    // The server writes tracking numbers as they are (no leading apostrophe), so the note must not claim one.
+    expect(model().callbacks.downloadNote).toBe('The file has every caller, one per row.');
+    expect(model(real(`${RANGE}&location=loc_a`)).callbacks.downloadNote).not.toContain('apostrophe');
   });
 
   test('names and hashes stay whole', () => {

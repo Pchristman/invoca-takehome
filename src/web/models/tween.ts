@@ -37,10 +37,6 @@ export function recallFigure(id: string): number | null {
   return remembered.get(id) ?? null;
 }
 
-export function forgetFigures(): void {
-  remembered.clear();
-}
-
 export function forgetFigure(id: string): void {
   remembered.delete(id);
 }

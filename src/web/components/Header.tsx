@@ -13,6 +13,7 @@ export function Header({
   onToggleDataNotes,
   printLink,
   uploadOpen = false,
+  uploadLocked = false,
   onToggleUpload,
 }: {
   meta: Meta;
@@ -21,6 +22,8 @@ export function Header({
   onToggleDataNotes(): void;
   printLink: string;
   uploadOpen?: boolean;
+  /** A file is being written: the panel cannot be closed until it is done, from here or anywhere. */
+  uploadLocked?: boolean;
   /** Without it there is no upload button. */
   onToggleUpload?: () => void;
 }) {
@@ -36,7 +39,14 @@ export function Header({
           Print summary
         </a>
         {onToggleUpload && (
-          <button id={UPLOAD_BUTTON_ID} type="button" className="button" aria-pressed={uploadOpen} onClick={onToggleUpload}>
+          <button
+            id={UPLOAD_BUTTON_ID}
+            type="button"
+            className="button"
+            aria-pressed={uploadOpen}
+            disabled={uploadLocked}
+            onClick={onToggleUpload}
+          >
             Upload data
           </button>
         )}

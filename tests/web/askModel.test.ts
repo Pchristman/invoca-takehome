@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { QuestionReason } from '../../src/ai/types';
 import type { QuestionResponse } from '../../src/server/api';
-import { AI_OFF_NOTE, EXAMPLE_QUESTIONS, askModel, replyWanted } from '../../src/web/models/askModel';
+import { AI_OFF_NOTE, EXAMPLE_QUESTIONS, askModel } from '../../src/web/models/askModel';
 import type { RequestState } from '../../src/web/requestState';
 import { metaFor } from './fixtures';
 import { serverFixture } from '../server/helpers';
@@ -53,12 +53,6 @@ describe('askModel', () => {
       data: { ok: true, source: 'ai', cached: false, query: 'view=overview' },
     };
     expect(askModel({ aiStatus: 'on' }, ok)).toMatchObject({ message: null, busy: false });
-  });
-
-  it('a reply is wanted only from the latest submit that was not aborted (M9)', () => {
-    expect(replyWanted({ submitId: 2, latestId: 2, aborted: false })).toBe(true);
-    expect(replyWanted({ submitId: 1, latestId: 2, aborted: false })).toBe(false); // a newer submit exists
-    expect(replyWanted({ submitId: 2, latestId: 2, aborted: true })).toBe(false); // unmounted or cancelled
   });
 
   it('loading is busy', () => {

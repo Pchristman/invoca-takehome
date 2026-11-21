@@ -11,7 +11,7 @@ export function DataNotesPanel({ sections, onClose }: { sections: NotesSection[]
         </button>
       </div>
       {sections.map((section) => (
-        <section key={section.title} className="notes-section">
+        <section key={section.title}>
           <h3>{section.title}</h3>
           {section.items.length > 0 && (
             <dl className="notes-items">

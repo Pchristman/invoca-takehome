@@ -42,7 +42,7 @@ describe('Campaigns screen on an empty range', () => {
   const view = campaignsFor('start=2026-09-10&end=2026-09-20', store);
   const span = dataSpan(store.calls)!;
   const html = renderToStaticMarkup(
-    <CampaignsScreen view={view} state={parseUrlState('')} span={span} onSelectCampaign={noop} />,
+    <CampaignsScreen view={view} state={parseUrlState('')} span={span} onSelectCampaign={noop} onSort={noop} />,
   );
 
   it('says "No calls in this range." and draws no campaign table', () => {
@@ -59,7 +59,7 @@ describe('Campaigns screen on an empty range', () => {
   it('draws the campaign table when there are calls', () => {
     const full = campaignsFor('range=all');
     const withCalls = renderToStaticMarkup(
-      <CampaignsScreen view={full} state={parseUrlState('')} span={dataSpan(serverFixture().calls)!} onSelectCampaign={noop} />,
+      <CampaignsScreen view={full} state={parseUrlState('')} span={dataSpan(serverFixture().calls)!} onSelectCampaign={noop} onSort={noop} />,
     );
     expect(withCalls).not.toContain('No calls in this range.');
     expect(withCalls).toContain('Booking rate');
@@ -70,7 +70,7 @@ describe('Campaigns screen on an empty range', () => {
 describe('Campaigns screen comparison line and per-day caveat', () => {
   const span = dataSpan(serverFixture().calls)!;
   const render = (view: ReturnType<typeof campaignsFor>) =>
-    renderToStaticMarkup(<CampaignsScreen view={view} state={parseUrlState('')} span={span} onSelectCampaign={noop} />);
+    renderToStaticMarkup(<CampaignsScreen view={view} state={parseUrlState('')} span={span} onSelectCampaign={noop} onSort={noop} />);
   const count = (html: string, needle: string) => html.split(needle).length - 1;
   const perDay = campaignsFor('start=2026-09-08&end=2026-09-10&compareStart=2026-09-01&compareEnd=2026-09-02');
   const PER_DAY = 'compare per day.';
@@ -102,7 +102,7 @@ describe('Campaigns screen alerts', () => {
   const span = dataSpan(serverFixture().calls)!;
   const real = campaignsFor('range=all');
   const render = (view: typeof real) =>
-    renderToStaticMarkup(<CampaignsScreen view={view} state={parseUrlState('')} span={span} onSelectCampaign={noop} />);
+    renderToStaticMarkup(<CampaignsScreen view={view} state={parseUrlState('')} span={span} onSelectCampaign={noop} onSort={noop} />);
   /** A hand-built comparison: the first row dropped, the second is named like markup. */
   const flagged = (): typeof real => {
     const [first, second, ...rest] = real.rows;
@@ -173,7 +173,7 @@ describe('Campaigns screen caveats for the comparison period', () => {
   const span = dataSpan(store.calls)!;
   const renderFor = (search: string) =>
     renderToStaticMarkup(
-      <CampaignsScreen view={campaignsFor(search, store)} state={parseUrlState('')} span={span} onSelectCampaign={noop} />,
+      <CampaignsScreen view={campaignsFor(search, store)} state={parseUrlState('')} span={span} onSelectCampaign={noop} onSort={noop} />,
     );
 
   it("says the comparison period includes the first day when it starts on the data's first day", () => {
@@ -212,7 +212,7 @@ describe('Campaigns screen in an outage (calls before, none now)', () => {
 
   it('keeps the table, the drop badge and the rule, and does not say there were no calls', () => {
     const html = renderToStaticMarkup(
-      <CampaignsScreen view={outage()} state={parseUrlState('')} span={dataSpan(store.calls)!} onSelectCampaign={noop} />,
+      <CampaignsScreen view={outage()} state={parseUrlState('')} span={dataSpan(store.calls)!} onSelectCampaign={noop} onSort={noop} />,
     );
     expect(html).not.toContain('No calls in this range.');
     expect(html).toContain('Booking rate');
@@ -247,12 +247,32 @@ describe('Campaigns screen when unattributed calls stopped', () => {
       },
     };
     const html = renderToStaticMarkup(
-      <CampaignsScreen view={stopped} state={parseUrlState('')} span={dataSpan(store.calls)!} onSelectCampaign={noop} />,
+      <CampaignsScreen view={stopped} state={parseUrlState('')} span={dataSpan(store.calls)!} onSelectCampaign={noop} onSort={noop} />,
     );
     expect(html).toContain('Unattributed');
     expect(html).toContain('(was 30)');
     expect(html).not.toContain('NaN');
     expect(html).not.toContain('undefined');
     expect(html).not.toContain('Infinity');
+  });
+});
+
+describe('the weekly chart campaign picker', () => {
+  const view = campaignsFor('range=all');
+  const span = dataSpan(serverFixture().calls)!;
+  const selected = (search: string) => {
+    const html = renderToStaticMarkup(<CampaignsScreen view={view} state={parseUrlState(search)} span={span} onSelectCampaign={noop} onSort={noop} />);
+    const options = html.match(/<option[ >].*?<\/option>/g) ?? [];
+    return { options, picked: options.filter((o) => o.includes('selected=""')) };
+  };
+
+  it('shows the campaign in the URL before the reply for it lands', () => {
+    const { options, picked } = selected('?view=campaigns');
+    expect(picked).toHaveLength(1); // the reply's own campaign
+    const other = options.find((o) => o !== picked[0])!;
+    const id = /value="([^"]*)"/.exec(other)![1]!;
+    const now = selected(`?view=campaigns&campaign=${encodeURIComponent(id)}`).picked;
+    expect(now).toHaveLength(1);
+    expect(now[0]).toContain(`value="${id}"`);
   });
 });

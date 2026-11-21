@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ClientError } from '../../src/web/api';
 import { displayState, keepPreviousFor } from '../../src/web/models/keepPrevious';
-import { shouldCloseDataNotes } from '../../src/web/models/escapeKey';
+import { escapeMayClose } from '../../src/web/models/escapeKey';
 import { VIEW_LABELS } from '../../src/web/models/viewLabels';
 import { screenFor } from '../../src/web/models/screen';
 import type { RequestState } from '../../src/web/requestState';
@@ -77,18 +77,18 @@ describe('displayState', () => {
   it('passes null through', () => expect(displayState(ready, null)).toEqual({ state: null, busy: false }));
 });
 
-describe('shouldCloseDataNotes', () => {
+describe('escapeMayClose', () => {
   it('closes on a plain Escape', () => {
-    expect(shouldCloseDataNotes({ key: 'Escape', defaultPrevented: false, targetTag: 'BODY' })).toBe(true);
-    expect(shouldCloseDataNotes({ key: 'Escape', defaultPrevented: false, targetTag: 'BUTTON' })).toBe(true);
+    expect(escapeMayClose({ key: 'Escape', defaultPrevented: false, targetTag: 'BODY' })).toBe(true);
+    expect(escapeMayClose({ key: 'Escape', defaultPrevented: false, targetTag: 'BUTTON' })).toBe(true);
   });
   it('ignores other keys', () => {
-    expect(shouldCloseDataNotes({ key: 'a', defaultPrevented: false, targetTag: 'BODY' })).toBe(false);
+    expect(escapeMayClose({ key: 'a', defaultPrevented: false, targetTag: 'BODY' })).toBe(false);
   });
   it('ignores Escape already handled or inside a select, input or textarea', () => {
-    expect(shouldCloseDataNotes({ key: 'Escape', defaultPrevented: true, targetTag: 'BODY' })).toBe(false);
+    expect(escapeMayClose({ key: 'Escape', defaultPrevented: true, targetTag: 'BODY' })).toBe(false);
     for (const tag of ['SELECT', 'INPUT', 'TEXTAREA', 'select']) {
-      expect(shouldCloseDataNotes({ key: 'Escape', defaultPrevented: false, targetTag: tag })).toBe(false);
+      expect(escapeMayClose({ key: 'Escape', defaultPrevented: false, targetTag: tag })).toBe(false);
     }
   });
 });

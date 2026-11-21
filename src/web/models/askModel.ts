@@ -25,11 +25,6 @@ function failureMessage(reply: Extract<QuestionResponse, { ok: false }>): string
   return reply.message !== '' ? reply.message : FALLBACK_MESSAGE;
 }
 
-/** Is a reply still wanted? Not if a newer question was submitted, or this one was cancelled (unmount, new submit). */
-export function replyWanted(submit: { submitId: number; latestId: number; aborted: boolean }): boolean {
-  return !submit.aborted && submit.submitId === submit.latestId;
-}
-
 export function askModel(meta: Pick<Meta, 'aiStatus'>, request: RequestState<QuestionResponse> | null): AskShow {
   if (meta.aiStatus === 'off') return { box: 'hidden', note: AI_OFF_NOTE };
   if (request === null) return { box: 'shown', busy: false, message: null, examples: null };

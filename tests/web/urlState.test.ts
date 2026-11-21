@@ -8,11 +8,10 @@ import {
   withView,
   withRange,
   withCompare,
-  customCompare,
+  customDates,
   withCampaign,
   withLocation,
   csvHref,
-  customRange,
   presetOf,
   actionHref,
   defaultsHref,
@@ -22,6 +21,10 @@ import {
   printRequests,
   answerParams,
   answerHref,
+  presetClick,
+  withCampaignSort,
+  withLocationSort,
+  withHeatmap,
   type UrlState,
 } from '../../src/web/urlState';
 
@@ -31,6 +34,9 @@ const DEFAULTS: UrlState = {
   compare: null,
   campaign: null,
   location: null,
+  campaignSort: null,
+  locationSort: null,
+  heatmap: 'office',
   dev: false,
   print: false,
   answer: null,
@@ -267,21 +273,6 @@ describe('csvHref', () => {
   });
 });
 
-describe('customRange', () => {
-  it('trims', () => {
-    expect(customRange('2026-09-01', ' 2026-09-05 ')).toEqual({
-      kind: 'custom',
-      start: '2026-09-01',
-      end: '2026-09-05',
-    });
-  });
-
-  it('is null when either is blank', () => {
-    expect(customRange('', '2026-09-05')).toBeNull();
-    expect(customRange('2026-09-01', '   ')).toBeNull();
-  });
-});
-
 describe('presetOf', () => {
   it('uses the default when range is null', () => {
     expect(presetOf(DEFAULTS, 'last28')).toBe('last28');
@@ -390,15 +381,16 @@ describe('withCompare', () => {
   });
 });
 
-describe('customCompare', () => {
+describe('customDates', () => {
   it('trims', () => {
-    expect(customCompare(' 2026-09-01 ', '2026-09-07')).toEqual({ start: '2026-09-01', end: '2026-09-07' });
+    expect(customDates(' 2026-09-01 ', '2026-09-07')).toEqual({ start: '2026-09-01', end: '2026-09-07' });
   });
 
   it('is null when either is blank', () => {
-    expect(customCompare('2026-09-01', '')).toBeNull();
-    expect(customCompare('', '2026-09-07')).toBeNull();
-    expect(customCompare('', '')).toBeNull();
+    expect(customDates('2026-09-01', '')).toBeNull();
+    expect(customDates('', '2026-09-07')).toBeNull();
+    expect(customDates('', '')).toBeNull();
+    expect(customDates('2026-09-01', '   ')).toBeNull();
   });
 });
 
@@ -599,5 +591,85 @@ describe('answer state (S4)', () => {
     expect(defaultsHref(asked)).toBe('/?view=missed-calls');
     expect(withView(asked, 'campaigns').answer).toBeNull();
     expect(actionHref(asked, { view: 'locations' } as never)).not.toContain('answer');
+  });
+});
+
+describe('sorts and heatmap mode in the URL', () => {
+  it('round-trip on their own view', () => {
+    for (const search of [
+      '?view=campaigns&sort=name&dir=asc',
+      '?view=campaigns&sort=revenueUsd&dir=asc',
+      '?view=locations&sort=bestCampaign&dir=desc',
+      '?view=missed-calls&heatmap=weekday',
+    ]) {
+      expect(toSearch(parseUrlState(search))).toBe(search);
+    }
+    expect(parseUrlState('?view=campaigns&sort=name&dir=asc').campaignSort).toEqual({ key: 'name', dir: 'asc' });
+    expect(parseUrlState('?view=locations&sort=answerRate&dir=asc').locationSort).toEqual({ key: 'answerRate', dir: 'asc' });
+    expect(parseUrlState('?view=missed-calls&heatmap=weekday').heatmap).toBe('weekday');
+  });
+
+  it('invalid values read as the defaults', () => {
+    for (const search of [
+      '?view=campaigns&sort=banana&dir=asc',
+      '?view=campaigns&sort=name&dir=up',
+      '?view=campaigns&sort=name',
+      '?view=campaigns&dir=asc',
+      '?view=campaigns&sort=answerRate&dir=asc', // a Locations column
+      '?view=locations&sort=channel&dir=asc', // a Campaigns column
+    ]) {
+      const state = parseUrlState(search);
+      expect(state.campaignSort, search).toBeNull();
+      expect(state.locationSort, search).toBeNull();
+    }
+    for (const bad of ['office', 'Weekday', '', 'x']) expect(parseUrlState(`?view=missed-calls&heatmap=${bad}`).heatmap).toBe('office');
+  });
+
+  it('are read only on their own view', () => {
+    expect(parseUrlState('?view=overview&sort=name&dir=asc').campaignSort).toBeNull();
+    expect(parseUrlState('?view=campaigns&heatmap=weekday').heatmap).toBe('office');
+    expect(toSearch(parseUrlState('?view=locations&sort=name&dir=asc&heatmap=weekday'))).toBe('?view=locations&sort=name&dir=asc');
+  });
+
+  it('the defaults stay out of the URL', () => {
+    expect(toSearch(parseUrlState('?view=campaigns&sort=calls&dir=desc'))).toBe('?view=campaigns');
+    expect(toSearch(withCampaignSort(state({ view: 'campaigns' }), { key: 'calls', dir: 'desc' }))).toBe('?view=campaigns');
+    expect(toSearch(withLocationSort(state({ view: 'locations' }), { key: 'calls', dir: 'desc' }))).toBe('?view=locations');
+    expect(toSearch(withHeatmap(state({ view: 'missed-calls' }), 'office'))).toBe('?view=missed-calls');
+  });
+
+  it('survive a range change and a comparison change, which remount the content', () => {
+    const sorted = withCampaignSort(state({ view: 'campaigns' }), { key: 'name', dir: 'asc' });
+    expect(withRange(sorted, { kind: 'preset', preset: 'last7' }).campaignSort).toEqual({ key: 'name', dir: 'asc' });
+    expect(withCompare(sorted, { start: '2026-09-01', end: '2026-09-07' }).campaignSort).toEqual({ key: 'name', dir: 'asc' });
+    const offices = withLocationSort(state({ view: 'locations' }), { key: 'answerRate', dir: 'asc' });
+    expect(withRange(offices, null).locationSort).toEqual({ key: 'answerRate', dir: 'asc' });
+    const weekday = withHeatmap(state({ view: 'missed-calls' }), 'weekday');
+    expect(withRange(weekday, { kind: 'custom', start: '2026-09-01', end: '2026-09-07' }).heatmap).toBe('weekday');
+    expect(withLocation(weekday, 'loc_a').heatmap).toBe('weekday');
+  });
+
+  it('stay behind on their view: another view, an action link and Reset drop them', () => {
+    const sorted = parseUrlState('?view=campaigns&sort=name&dir=asc');
+    expect(withView(sorted, 'locations').campaignSort).toBeNull();
+    expect(toSearch(withView(sorted, 'campaigns'))).toBe('?view=campaigns');
+    expect(actionHref(sorted, { view: 'campaigns' } as never)).toBe('/?view=campaigns');
+    expect(defaultsHref(sorted)).toBe('/?view=campaigns');
+    expect(appHref(parseUrlState('?view=campaigns&sort=name&dir=asc&print'))).toBe('/?view=campaigns&sort=name&dir=asc');
+  });
+});
+
+describe('presetClick', () => {
+  it('is a no-op for the active preset, including the default when the URL has no range', () => {
+    expect(presetClick(state({}), 'last28', 'last28')).toBeNull();
+    expect(presetClick(state({ range: { kind: 'preset', preset: 'last7' } }), 'last7', 'last28')).toBeNull();
+  });
+
+  it('picks any other preset, also from a custom range', () => {
+    expect(presetClick(state({}), 'last7', 'last28')).toEqual({ kind: 'preset', preset: 'last7' });
+    expect(presetClick(state({ range: { kind: 'custom', start: '2026-09-01', end: '2026-09-07' } }), 'last28', 'last28')).toEqual({
+      kind: 'preset',
+      preset: 'last28',
+    });
   });
 });

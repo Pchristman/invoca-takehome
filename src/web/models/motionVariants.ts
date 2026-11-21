@@ -30,8 +30,8 @@ export function revealFor(settings: MotionSettings, kind: RevealKind): Reveal {
   return {
     initial: { opacity: 0, y: RISE_PX },
     animate: { ...AT_REST },
-    // Leaving is quicker than arriving.
-    exit: { opacity: 0, y: 0, transition: { duration: settings.fast, ease: settings.ease } },
+    // Leaving is quicker than arriving. A view leaves in half the fast time, because the next view waits for it.
+    exit: { opacity: 0, y: 0, transition: { duration: kind === 'view' ? settings.fast / 2 : settings.fast, ease: settings.ease } },
     transition: { duration: kind === 'takeaway' ? settings.fast : settings.base, ease: settings.ease },
   };
 }
@@ -49,13 +49,10 @@ export function chartAnimation(settings: MotionSettings): {
   };
 }
 
-// Views transition; range, campaign and office changes do not (they keep focus and sort).
-export function transitionKey(state: UrlState): string {
-  return state.answer !== null ? 'answer' : state.view;
-}
-
-// The key of the content under the takeaway: the view, plus the range and the comparison, so a new range
-// transitions the same way a tab switch does. Campaign and office choices do not (they keep focus and sort).
+// The key of the content under the range control: the view (or the answer page), the range and the comparison.
+// A change of any of them remounts the content, so a new range transitions the same way a tab switch does.
+// Table sorts and the heatmap mode live in the URL, so the remount keeps them. Campaign and office choices are
+// not in the key: the screen (and focus) stays in place while only the chart or the list updates.
 export function contentKey(state: UrlState): string {
-  return JSON.stringify([transitionKey(state), state.range, state.compare]);
+  return JSON.stringify([state.answer !== null ? 'answer' : state.view, state.range, state.compare]);
 }

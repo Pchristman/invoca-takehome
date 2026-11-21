@@ -36,7 +36,7 @@ function ready(data: AnswerResponse): RequestState<AnswerResponse> {
 }
 
 const box = (aiStatus: 'on' | 'off' | 'budget_reached', request: RequestState<QuestionResponse> | null = null, value = '') =>
-  renderToStaticMarkup(<AskBoxView show={askModel({ aiStatus }, request)} value={value} onChange={() => {}} onSubmit={() => {}} />);
+  renderToStaticMarkup(<AskBoxView show={askModel({ aiStatus }, request)} value={value} onChange={() => {}} onSubmit={() => {}} onCancel={() => {}} />);
 
 const page = (request: RequestState<AnswerResponse>, search = '?answer&view=missed-calls&f_office=loc_a&range=last7') =>
   renderToStaticMarkup(
@@ -76,9 +76,15 @@ describe('AskBox', () => {
     expect(markup).toContain('value="show me the busy times"');
   });
 
-  it('a busy box disables the button', () => {
+  it('a busy box turns the button into Cancel, a plain button that is never disabled', () => {
     const markup = box('on', { status: 'loading', key: 'k' });
-    expect(markup).toMatch(/<button[^>]*disabled/);
+    expect(markup).toMatch(/<button type="button"[^>]*>Cancel<\/button>/);
+    expect(markup).not.toContain('type="submit"');
+    expect(markup).not.toContain('disabled');
+  });
+
+  it('the status region is there before it has text, so its first message is announced', () => {
+    expect(box('on')).toMatch(/<div role="status" class="ask-result"><\/div>/);
   });
 });
 

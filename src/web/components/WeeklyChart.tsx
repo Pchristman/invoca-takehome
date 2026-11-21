@@ -51,7 +51,7 @@ export function WeeklyChart({ model }: { model: WeeklyChartModel }) {
             <Tooltip content={BarTooltip} cursor={false} />
             <Bar dataKey="calls" {...chartAnimation(motion)} radius={[4, 4, 0, 0]}>
               {model.bars.map((bar) => (
-                <Cell key={bar.range} fill={bar.partial ? BAR_FILL_PARTIAL : BAR_FILL} />
+                <Cell key={bar.key} fill={bar.partial ? BAR_FILL_PARTIAL : BAR_FILL} />
               ))}
             </Bar>
           </BarChart>
@@ -65,25 +65,28 @@ export function WeeklyChart({ model }: { model: WeeklyChartModel }) {
           </span>
         </p>
       )}
-      <table className="visually-hidden">
-        <caption>{model.title}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Week</th>
-            <th scope="col">Calls</th>
-            <th scope="col">Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {model.bars.map((bar) => (
-            <tr key={bar.range}>
-              <th scope="row">{bar.range}</th>
-              <td>{formatCount(bar.calls)}</td>
-              <td>{bar.partial ? 'partial week' : ''}</td>
+      {/* Hidden on a div, not the table: a table ignores width: 1px and would widen the page on a narrow screen. */}
+      <div className="visually-hidden">
+        <table>
+          <caption>{model.title}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Week</th>
+              <th scope="col">Calls</th>
+              <th scope="col">Note</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {model.bars.map((bar) => (
+              <tr key={bar.key}>
+                <th scope="row">{bar.range}</th>
+                <td>{formatCount(bar.calls)}</td>
+                <td>{bar.partial ? 'partial week' : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

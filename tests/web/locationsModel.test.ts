@@ -6,10 +6,11 @@ import { BLANK } from '../../src/web/format';
 import {
   DEFAULT_LOCATION_SORT,
   locationsModel,
-  nextLocationSort,
+  LOCATION_TEXT_KEYS,
   sortLocationRows,
 } from '../../src/web/models/locationsModel';
-import type { LocationRowModel } from '../../src/web/models/locationsModel';
+import type { LocationRowModel, LocationSortKey } from '../../src/web/models/locationsModel';
+import { nextSort } from '../../src/web/models/sorting';
 import { THRESHOLDS } from '../../src/core/thresholds';
 import { busyOfficeOnlyStore, idleOfficeStore, locationsFor, plantedStore } from './fixtures';
 import { serverFixture } from '../server/helpers';
@@ -117,10 +118,10 @@ describe('sorting', () => {
   });
 
   it('flips on the same key and starts each new key in its natural direction', () => {
-    expect(nextLocationSort(DEFAULT_LOCATION_SORT, 'calls')).toEqual({ key: 'calls', dir: 'asc' });
-    expect(nextLocationSort(DEFAULT_LOCATION_SORT, 'name')).toEqual({ key: 'name', dir: 'asc' });
-    expect(nextLocationSort(DEFAULT_LOCATION_SORT, 'bestCampaign')).toEqual({ key: 'bestCampaign', dir: 'asc' });
-    expect(nextLocationSort(DEFAULT_LOCATION_SORT, 'revenueUsd')).toEqual({ key: 'revenueUsd', dir: 'desc' });
+    expect(nextSort<LocationSortKey>(DEFAULT_LOCATION_SORT, 'calls', LOCATION_TEXT_KEYS)).toEqual({ key: 'calls', dir: 'asc' });
+    expect(nextSort<LocationSortKey>(DEFAULT_LOCATION_SORT, 'name', LOCATION_TEXT_KEYS)).toEqual({ key: 'name', dir: 'asc' });
+    expect(nextSort<LocationSortKey>(DEFAULT_LOCATION_SORT, 'bestCampaign', LOCATION_TEXT_KEYS)).toEqual({ key: 'bestCampaign', dir: 'asc' });
+    expect(nextSort<LocationSortKey>(DEFAULT_LOCATION_SORT, 'revenueUsd', LOCATION_TEXT_KEYS)).toEqual({ key: 'revenueUsd', dir: 'desc' });
   });
 });
 

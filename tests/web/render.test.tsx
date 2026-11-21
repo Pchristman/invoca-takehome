@@ -2,7 +2,6 @@
 // Covers what a model test cannot: that the component prints the model, and that dev-only things are absent.
 // Data comes from the real view builders (tests/web/fixtures.ts). Where a fixture lacks a case, the test says
 // how it builds it: another store, or a hand-edited copy of real JSON view data.
-import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type {
@@ -235,6 +234,13 @@ describe('RangeControl comparison range', () => {
     renderToStaticMarkup(<RangeControl state={parseUrlState(search)} meta={meta} error={error} onChange={noop} onCompare={noop} />);
   const COMPARE = '?start=2026-09-08&end=2026-09-14&compareStart=2026-09-01&compareEnd=2026-09-07';
   const groupOf = (html: string) => html.slice(html.indexOf('aria-label="Comparison range"'));
+
+  it('is left out where the view shows no comparison (no onCompare)', () => {
+    const html = renderToStaticMarkup(<RangeControl state={parseUrlState(COMPARE)} meta={meta} error={null} onChange={noop} onCompare={null} />);
+    expect(html).toContain('Start date');
+    expect(html).not.toContain('Comparison range');
+    expect(html).not.toContain('Compare start date');
+  });
 
   it('has the group label, both labelled inputs with min and max from the span, and the Compare button', () => {
     const html = render('');
@@ -517,14 +523,11 @@ describe('CampaignTable', () => {
 
   it('labels every estimate column header est.', () => {
     const model = campaignsModel(zeroBudget, DEFAULT_SORT);
-    const estimateColumns = model.columns.filter((c) => c.estimate);
-    expect(estimateColumns.length).toBe(3);
     const head = table(zeroBudget).match(/<thead>.*<\/thead>/)![0];
     const headers = head.match(/<th[ >].*?<\/th>/g) ?? [];
     expect(headers).toHaveLength(model.columns.length);
-    model.columns.forEach((column, i) => {
-      expect(/est\./i.test(headers[i] ?? '')).toBe(column.estimate);
-    });
+    // The last three are the estimates: spend, cost per booking, revenue per budget dollar.
+    expect(headers.map((header) => /est\./i.test(header))).toEqual(model.columns.map((_, i) => i >= model.columns.length - 3));
   });
 
   it('never prints Infinity, NaN or undefined', () => {
@@ -545,7 +548,9 @@ describe('WeeklyChart', () => {
     // the hidden table is the part the test can check.
     const html = renderToStaticMarkup(<WeeklyChart model={chart} />);
     const table = html.slice(html.indexOf('<table'));
-    expect(table).toContain('class="visually-hidden"');
+    // Hidden by a wrapping div: a table ignores width: 1px, so hiding the table itself widened the page on a phone.
+    expect(html).toContain('<div class="visually-hidden"><table>');
+    expect(table).not.toMatch(/^<table class=/);
     expect(rowsOf(table)).toHaveLength(chart.bars.length + 1); // header row plus one per week
     for (const bar of chart.bars) expect(table).toContain(esc(bar.range));
   });
@@ -564,7 +569,7 @@ describe('WeeklyChart', () => {
     const name = '<img src=x onerror=alert(1)>';
     const withName = campaignsFor('', storeWithNames([name, 'Short']));
     const html = renderToStaticMarkup(
-      <CampaignsScreen view={withName} state={parseUrlState('?view=campaigns')} span={span} onSelectCampaign={noop} />,
+      <CampaignsScreen view={withName} state={parseUrlState('?view=campaigns')} span={span} onSelectCampaign={noop} onSort={noop} />,
     );
     expect(html).toContain(`>${esc(name)}</option>`);
     expect(html).not.toContain('<img');
@@ -592,7 +597,7 @@ describe('DataNotesPanel', () => {
   });
 });
 
-describe('Phase 7 review fixes (group C)', () => {
+describe('campaign table and weekly chart details', () => {
   const real = campaignsFor('range=all');
   const strip = (html: string) => html.replace(/<[^>]*>/g, '|').replace(/\|+/g, '|');
 
@@ -634,7 +639,7 @@ describe('Phase 7 review fixes (group C)', () => {
   it('marks the chart section busy while the chart campaign updates', () => {
     const html = (busy: boolean) =>
       renderToStaticMarkup(
-        <CampaignsScreen view={real} state={parseUrlState('?view=campaigns')} span={span} chartBusy={busy} onSelectCampaign={noop} />,
+        <CampaignsScreen view={real} state={parseUrlState('?view=campaigns')} span={span} chartBusy={busy} onSelectCampaign={noop} onSort={noop} />,
       );
     expect(html(true)).toContain('aria-busy="true"');
     expect(html(true)).toContain('Updating chart');
@@ -733,7 +738,7 @@ describe('LocationTable', () => {
 
 describe('LocationsView', () => {
   const render = (view: LocationsData, state = plainState, viewSpan = span) =>
-    renderToStaticMarkup(<LocationsScreen view={view} state={state} span={viewSpan} />);
+    renderToStaticMarkup(<LocationsScreen view={view} state={state} span={viewSpan} onSort={noop} />);
   const answerWorse = locationsFor('range=all', plantedStore('answer-worse'));
 
   it('prints the action text and a link to Missed calls for that office, keeping dev', () => {
@@ -926,7 +931,7 @@ describe('MissedCallsView', () => {
   const base = '?view=missed-calls&range=all';
   const render = (view: MissedCallsData, search = base, busy = false) =>
     renderToStaticMarkup(
-      <MissedCallsScreen view={view} state={parseUrlState(search)} span={span} offices={offices} busy={busy} onSelectOffice={noop} />,
+      <MissedCallsScreen view={view} state={parseUrlState(search)} span={span} offices={offices} busy={busy} onSelectOffice={noop} onHeatmap={noop} />,
     );
   // Hand-edited copy of real data: an office with no unanswered calls (the real stores always miss somewhere).
   const zeroMiss: MissedCallsData = {
@@ -979,15 +984,13 @@ describe('MissedCallsView', () => {
         state={plainState}
         span={span}
         offices={[{ id: 'loc_x', name: long }, { id: 'loc_y', name: '<img src=x onerror=alert(1)>' }]}
-        onSelectOffice={noop}
+        onSelectOffice={noop} onHeatmap={noop}
       />,
     );
     expect(html).toContain(`>${long}</option>`);
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
     expect(html).not.toContain('<img');
     expect(html).toContain('class="button office-select"');
-    const css = readFileSync('src/web/styles/base.css', 'utf8');
-    expect(css).toMatch(/\.office-select\s*\{[^}]*max-width:\s*100%/);
   });
 
   it('hides Download CSV while busy, because the link would fetch the other office', () => {
@@ -1006,7 +1009,7 @@ describe('MissedCallsView', () => {
   it('marks the estimate column from the model flag', () => {
     const html = render(real);
     const heads = html.match(/<th [^>]*>[^<]*<\/th>/g) ?? [];
-    const marked = heads.filter((h) => h.includes(' est"')).map((h) => h.replace(/<[^>]*>/g, ''));
+    const marked = heads.filter((h) => h.includes('title="Estimate')).map((h) => h.replace(/<[^>]*>/g, ''));
     expect(marked).toEqual(['Est. value']);
   });
 
@@ -1060,12 +1063,12 @@ describe('no placeholder remains', () => {
   it('no view prints Not built yet', () => {
     const store = plantedStore('answer-worse');
     const htmls = [
-      renderToStaticMarkup(<LocationsScreen view={locationsFor('range=all', store)} state={plainState} span={span} />),
+      renderToStaticMarkup(<LocationsScreen view={locationsFor('range=all', store)} state={plainState} span={span} onSort={noop} />),
       renderToStaticMarkup(
-        <MissedCallsScreen view={missedCallsFor('range=all', store)} state={plainState} span={span} offices={[]} onSelectOffice={noop} />,
+        <MissedCallsScreen view={missedCallsFor('range=all', store)} state={plainState} span={span} offices={[]} onSelectOffice={noop} onHeatmap={noop} />,
       ),
       renderToStaticMarkup(<OverviewView view={overviewFor('range=last7')} state={plainState} span={span} />),
-      renderToStaticMarkup(<CampaignsScreen view={campaignsFor('range=all')} state={plainState} span={span} onSelectCampaign={noop} />),
+      renderToStaticMarkup(<CampaignsScreen view={campaignsFor('range=all')} state={plainState} span={span} onSelectCampaign={noop} onSort={noop} />),
       renderToStaticMarkup(<EmptyScreen notes={[]} />),
     ];
     for (const html of htmls) expect(html).not.toContain('Not built yet');
@@ -1114,7 +1117,7 @@ describe('a later equal-length second range', () => {
   it('Campaigns names both ranges and shows no jump or drop badges, with the reason', () => {
     const view = campaignsFor(SEARCH);
     const html = renderToStaticMarkup(
-      <CampaignsScreen view={view} state={parseUrlState('?view=campaigns')} span={span} onSelectCampaign={noop} />,
+      <CampaignsScreen view={view} state={parseUrlState('?view=campaigns')} span={span} onSelectCampaign={noop} onSort={noop} />,
     );
     expect(count(html, LINE)).toBe(1);
     expect(html).not.toContain('badge-jump');

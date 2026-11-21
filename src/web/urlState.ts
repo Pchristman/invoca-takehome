@@ -1,6 +1,12 @@
 // The URL is the only state of the web app. This module turns a search string
 // into a UrlState and back. It is pure: no browser, no React.
 import type { ActionLink, ViewName } from '../core/views/facts';
+import { CAMPAIGN_SORT_KEYS, DEFAULT_SORT } from './models/campaignsModel';
+import type { CampaignSort } from './models/campaignsModel';
+import { DEFAULT_LOCATION_SORT, LOCATION_SORT_KEYS } from './models/locationsModel';
+import type { LocationSort } from './models/locationsModel';
+import type { HeatmapMode } from './models/heatmapModel';
+import type { TableSort } from './models/sorting';
 
 export type RangeChoice =
   | { kind: 'preset'; preset: string } // raw: the server judges it
@@ -24,6 +30,10 @@ export interface UrlState {
   compare: { start: string; end: string } | null; // either may be ''
   campaign: string | null;
   location: string | null;
+  // The in-view choices. Each is read only on its own view, and null (or 'office') is the default, left out of the URL.
+  campaignSort: CampaignSort | null;
+  locationSort: LocationSort | null;
+  heatmap: HeatmapMode;
   dev: boolean;
   print: boolean; // the one-page print summary
   answer: AnswerParams | null; // non-null exactly when the bare `answer` parameter is present
@@ -77,15 +87,27 @@ function parseAnswer(params: URLSearchParams): AnswerParams | null {
   };
 }
 
+/** A table sort from ?sort=key&dir=asc|desc. Anything unknown, or the default itself, is null. */
+function parseSort<K extends string>(params: URLSearchParams, keys: readonly K[], fallback: TableSort<K>): TableSort<K> | null {
+  const key = keys.find((k) => k === params.get('sort'));
+  const dir = params.get('dir');
+  if (key === undefined || (dir !== 'asc' && dir !== 'desc')) return null;
+  return key === fallback.key && dir === fallback.dir ? null : { key, dir };
+}
+
 // Never throws: URLSearchParams accepts any string.
 export function parseUrlState(search: string): UrlState {
   const params = new URLSearchParams(search);
+  const view = parseView(params);
   return {
-    view: parseView(params),
+    view,
     range: parseRange(params),
     compare: parseCompare(params),
     campaign: firstValue(params, 'campaign'),
     location: firstValue(params, 'location'),
+    campaignSort: view === 'campaigns' ? parseSort(params, CAMPAIGN_SORT_KEYS, DEFAULT_SORT) : null,
+    locationSort: view === 'locations' ? parseSort(params, LOCATION_SORT_KEYS, DEFAULT_LOCATION_SORT) : null,
+    heatmap: view === 'missed-calls' && params.get('heatmap') === 'weekday' ? 'weekday' : 'office',
     dev: params.has('dev'),
     print: params.has('print'),
     answer: parseAnswer(params),
@@ -117,6 +139,14 @@ function filterPairs(answer: AnswerParams): Array<[string, string]> {
   return pairs;
 }
 
+// The current view's sort or heatmap mode, only when it is not the default.
+function choicePairs(state: UrlState): Array<[string, string]> {
+  const sort = state.view === 'campaigns' ? state.campaignSort : state.view === 'locations' ? state.locationSort : null;
+  if (sort) return [['sort', sort.key], ['dir', sort.dir]];
+  if (state.view === 'missed-calls' && state.heatmap !== 'office') return [['heatmap', state.heatmap]];
+  return [];
+}
+
 // '' for the defaults, else '?view=campaigns&range=last7&dev' (answer, print and dev are written bare, in that order).
 export function toSearch(state: UrlState): string {
   const pairs: Array<[string, string]> = [];
@@ -124,6 +154,7 @@ export function toSearch(state: UrlState): string {
   pairs.push(...rangePairs(state));
   if (state.campaign) pairs.push(['campaign', state.campaign]);
   if (state.location) pairs.push(['location', state.location]);
+  pairs.push(...choicePairs(state));
   if (state.answer) pairs.push(...filterPairs(state.answer));
 
   const parts = pairs.map(([name, value]) => `${name}=${encodeURIComponent(value)}`);
@@ -142,12 +173,15 @@ export function apiParams(state: UrlState, view: ViewName): URLSearchParams {
   return params;
 }
 
-// A nav link always leaves the answer page.
+// The in-view choices at their defaults: they belong to the view they were made on.
+const DEFAULT_CHOICES = { campaignSort: null, locationSort: null, heatmap: 'office' } as const;
+
+// A nav link always leaves the answer page, and the old view's sort or heatmap mode stays behind.
 export function withView(state: UrlState, view: ViewName): UrlState {
-  return { ...state, view, answer: null };
+  return { ...state, ...DEFAULT_CHOICES, view, answer: null };
 }
 
-// A new range makes the old comparison meaningless, so it is cleared.
+// A new range makes the old comparison meaningless, so it is cleared. Sort and heatmap mode stay.
 export function withRange(state: UrlState, range: RangeChoice | null): UrlState {
   return { ...state, range, compare: null };
 }
@@ -165,6 +199,21 @@ export function withLocation(state: UrlState, id: string | null): UrlState {
   return { ...state, location: id };
 }
 
+// The default sort is stored as null, so the URL stays clean.
+export function withCampaignSort(state: UrlState, sort: CampaignSort): UrlState {
+  const isDefault = sort.key === DEFAULT_SORT.key && sort.dir === DEFAULT_SORT.dir;
+  return { ...state, campaignSort: isDefault ? null : sort };
+}
+
+export function withLocationSort(state: UrlState, sort: LocationSort): UrlState {
+  const isDefault = sort.key === DEFAULT_LOCATION_SORT.key && sort.dir === DEFAULT_LOCATION_SORT.dir;
+  return { ...state, locationSort: isDefault ? null : sort };
+}
+
+export function withHeatmap(state: UrlState, mode: HeatmapMode): UrlState {
+  return { ...state, heatmap: mode };
+}
+
 // The callback CSV for what is on screen: same range and office, no view, dev, campaign or comparison
 // (Missed calls has no comparison, and a half-typed one would make the export fail).
 export function csvHref(state: UrlState): string {
@@ -172,14 +221,8 @@ export function csvHref(state: UrlState): string {
   return query === '' ? '/api/missed-calls/callbacks.csv' : `/api/missed-calls/callbacks.csv?${query}`;
 }
 
-export function customRange(start: string, end: string): RangeChoice | null {
-  const trimmedStart = start.trim();
-  const trimmedEnd = end.trim();
-  if (trimmedStart === '' || trimmedEnd === '') return null;
-  return { kind: 'custom', start: trimmedStart, end: trimmedEnd };
-}
-
-export function customCompare(start: string, end: string): { start: string; end: string } | null {
+/** Both dates trimmed, or null when either is blank. Used for the range and the comparison alike. */
+export function customDates(start: string, end: string): { start: string; end: string } | null {
   const trimmedStart = start.trim();
   const trimmedEnd = end.trim();
   if (trimmedStart === '' || trimmedEnd === '') return null;
@@ -192,10 +235,16 @@ export function presetOf(state: UrlState, defaultPreset: string): string | null 
   return state.range.kind === 'preset' ? state.range.preset : null;
 }
 
+/** The range a preset button picks, or null when it is already the active one: clicking it again changes nothing. */
+export function presetClick(state: UrlState, preset: string, defaultPreset: string): RangeChoice | null {
+  return presetOf(state, defaultPreset) === preset ? null : { kind: 'preset', preset };
+}
+
 // A link to another view: keeps range, comparison and dev; drops the campaign.
 export function actionHref(state: UrlState, link: ActionLink): string {
   const target: UrlState = {
     ...state,
+    ...DEFAULT_CHOICES,
     view: link.view,
     campaign: null,
     location: link.locationId ?? null,
@@ -212,6 +261,7 @@ export function defaultsHref(state: UrlState): string {
     compare: null,
     campaign: null,
     location: null,
+    ...DEFAULT_CHOICES,
     dev: state.dev,
     print: state.print,
     answer: null,
@@ -269,6 +319,7 @@ export function answerHref(state: UrlState, query: string): string {
     compare: null,
     campaign: null,
     location: null,
+    ...DEFAULT_CHOICES,
     dev: state.dev,
     print: false,
     answer: fromQuery.answer,
@@ -278,7 +329,7 @@ export function answerHref(state: UrlState, query: string): string {
 
 /** The Overview for the same range, off the answer page. dev is kept. */
 export function clearHref(state: UrlState): string {
-  return `/${toSearch({ view: 'overview', range: state.range, compare: null, campaign: null, location: null, dev: state.dev, print: false, answer: null })}`;
+  return `/${toSearch({ ...state, ...DEFAULT_CHOICES, view: 'overview', compare: null, campaign: null, location: null, print: false, answer: null })}`;
 }
 
 /** An in-app href (path and query) with dev set as the state has it. */

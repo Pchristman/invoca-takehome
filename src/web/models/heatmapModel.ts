@@ -38,7 +38,7 @@ interface SourceRow {
 }
 
 /** The column headings read as clock times: 12am, 1am ... 12pm ... 11pm. */
-export function hourHeading(hour: number): string {
+function hourHeading(hour: number): string {
   const twelve = hour % 12 === 0 ? 12 : hour % 12;
   return `${twelve}${hour < 12 ? 'am' : 'pm'}`;
 }

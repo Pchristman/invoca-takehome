@@ -72,9 +72,5 @@ export function formatSpendUsd(usd: number): string {
 
 /** True only for a real calendar date written YYYY-MM-DD (so not Feb 30, and not "nope"). */
 export function isIsoDate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const d = new Date(Date.UTC(year, month - 1, day));
-  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
+  return parseDate(value) !== null;
 }

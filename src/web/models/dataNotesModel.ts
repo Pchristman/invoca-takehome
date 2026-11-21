@@ -15,10 +15,12 @@ export interface NotesSection {
 // A Record, so adding a reason to BAD_REASONS is a compile error until it has a label here.
 const REASON_LABELS: Record<BadReason, string> = {
   missing_call_id: 'Missing call id',
+  truncated_row: 'Row cut off (fewer cells than the header)',
   bad_timestamp: 'Bad timestamp',
   unknown_location: 'Unknown location',
   invalid_timezone: 'Invalid time zone',
   unknown_campaign: 'Unknown campaign',
+  invalid_campaign: 'Campaign row unusable',
   bad_boolean: 'Bad yes/no value',
   bad_outcome: 'Bad outcome',
   inconsistent_outcome: 'Outcome contradicts answered',
@@ -55,6 +57,10 @@ export function dataNotesModel(response: DataNotesResponse): NotesSection[] {
         { label: 'Calls after removing duplicates', value: formatCount(n.callsAfterDedup) },
         { label: 'Duplicate rows collapsed', value: formatCount(n.duplicateRowsCollapsed) },
         { label: 'Calls whose duplicate rows tied on updated_at', value: formatCount(n.tiedCalls) },
+        ...(n.unparseableUpdatedAt > 0
+          ? [{ label: 'Rows with an unreadable updated_at (dedupe falls back to file order)', value: formatCount(n.unparseableUpdatedAt) }]
+          : []),
+        ...(n.unparseableEndedAt > 0 ? [{ label: 'Rows with an unreadable ended_at', value: formatCount(n.unparseableEndedAt) }] : []),
       ],
     },
     {

@@ -47,11 +47,11 @@ const COLUMNS: MissedCallsModel['callbacks']['columns'] = [
   { label: 'Est. value', numeric: true, estimate: true },
 ];
 
+// The "upper bound" sentence lives in the formula (the API and the print summary use it too), so it is not repeated here.
 const LOST_VALUE_NOTE =
-  'This covers every unanswered call in range. The call-back list is smaller: a caller who got through later is left out, and each caller counts once.';
+  'The call-back list is smaller: only callers whose latest call went unanswered, each once.';
 const EMPTY_NOTE = 'No one to call back from this range.';
-const DOWNLOAD_NOTE =
-  'The file has every caller, one per row. Tracking numbers start with an apostrophe so a spreadsheet keeps them as text.';
+const DOWNLOAD_NOTE = 'The file has every caller, one per row.';
 
 /** Out of range, zero, negative and NaN all land on a real page. */
 function clampPage(page: number, pages: number): number {
@@ -98,7 +98,7 @@ export function missedCallsModel(view: MissedCallsView, span: DateRange, page = 
       sources,
     },
     callbacks: {
-      summary: `${formatCount(total, CALLERS)} to call back, est. ${formatUsd(view.callbacks.totalValueUsd)} in bookings.`,
+      summary: `${formatCount(total, CALLERS)} whose latest call went unanswered, est. ${formatUsd(view.callbacks.totalValueUsd)} in bookings.`,
       columns: COLUMNS,
       rows: shown.map((r) => ({
         key: r.callerHash,
