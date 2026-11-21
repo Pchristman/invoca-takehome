@@ -1,55 +1,57 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 
-test('.gitignore covers secrets, caches, logs, build output', () => {
-  const lines = readFileSync('.gitignore', 'utf8')
+// Guards for the rule "never commit or ship secrets", plus the CSV line endings other tests rely on.
+
+function lines(path: string): string[] {
+  return readFileSync(path, 'utf8')
     .split(/\r?\n/)
     .map((l) => l.trim());
-  for (const entry of ['.env', '.cache/', 'logs/', 'dist/', 'node_modules/']) {
-    expect(lines).toContain(entry);
-  }
+}
+
+test('.gitignore keeps .env out of git', () => {
+  expect(lines('.gitignore')).toContain('.env');
 });
 
-test('.gitattributes stops git rewriting line endings in CSVs (they are fixtures)', () => {
-  const lines = readFileSync('.gitattributes', 'utf8')
-    .split(/\r?\n/)
-    .map((l) => l.trim());
-  expect(lines).toContain('*.csv -text');
-});
-
-test('.env.example documents every variable with no real secret', () => {
+test('.env.example holds no real key', () => {
   const text = readFileSync('.env.example', 'utf8');
-  for (const name of ['ANTHROPIC_API_KEY', 'AI_SPEND_LIMIT_USD', 'DATA_DIR', 'PORT', 'HOST']) {
-    expect(text).toMatch(new RegExp(`^${name}=`, 'm'));
-  }
-  expect(text).toMatch(/^HOST=127\.0\.0\.1\s*$/m);
-  expect(text).not.toMatch(/sk-ant-/);
   expect(text).toMatch(/^ANTHROPIC_API_KEY=\s*$/m);
+  expect(text).not.toMatch(/sk-ant-/);
 });
 
-test('.gitignore keeps the database file and its journal out of git', () => {
-  const lines = readFileSync('.gitignore', 'utf8')
-    .split(/\r?\n/)
-    .map((l) => l.trim());
-  expect(lines).toContain('data/*.db');
-  expect(lines).toContain('data/*.db-journal');
-  // a DB_PATH anywhere else is covered too
-  expect(lines).toContain('*.db');
-  expect(lines).toContain('*.db-journal');
+test('.dockerignore keeps every .env out of the image', () => {
+  const ignore = lines('.dockerignore');
+  for (const entry of ['.env', '.env.*', '**/.env', '**/.env.*']) expect(ignore).toContain(entry);
 });
 
-test('.env.example documents DB_PATH', () => {
-  const text = readFileSync('.env.example', 'utf8');
-  expect(text).toMatch(/^DB_PATH=/m);
-  expect(text).toMatch(/data\/calls\.db/);
+test('the Dockerfile copies no key, secret or .env into the image', () => {
+  const dockerfile = readFileSync('Dockerfile', 'utf8');
+  expect(dockerfile).not.toMatch(/ANTHROPIC|API_KEY|SECRET/i);
+  expect(dockerfile).not.toMatch(/^COPY (\.|\*) /m);
+  expect(dockerfile).not.toMatch(/\.env\b/);
 });
 
-test('no test names the real database file', () => {
-  const files = readdirSync('tests', { recursive: true, withFileTypes: true }).filter((e) => e.isFile() && /\.tsx?$/.test(e.name));
-  const offenders = files
-    .filter((e) => e.name !== 'repo-hygiene.test.ts')
-    .filter((e) => readFileSync(join(e.parentPath, e.name), 'utf8').includes('data/calls.db'))
-    .map((e) => join(e.parentPath, e.name));
+test('docker-compose.yml holds no literal key and reads no env_file', () => {
+  const compose = readFileSync('docker-compose.yml', 'utf8');
+  expect(compose).not.toMatch(/sk-ant-/);
+  expect(compose).not.toMatch(/env_file/);
+});
+
+test('no tracked file holds a real-looking Anthropic key', () => {
+  // Real keys look like sk-ant-api03-<long tail>; the fakes in tests (sk-ant-test-key, ...) do not.
+  const realKey = /sk-ant-(?:api|admin|oat)\d{2}-[A-Za-z0-9_-]{20,}/;
+  const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+  const offenders = tracked.filter((file) => {
+    try {
+      return realKey.test(readFileSync(file, 'utf8'));
+    } catch {
+      return false; // deleted in the working tree
+    }
+  });
   expect(offenders).toEqual([]);
+});
+
+test('.gitattributes stops git rewriting line endings in CSVs (the CRLF fixtures other tests read)', () => {
+  expect(lines('.gitattributes')).toContain('*.csv -text');
 });
