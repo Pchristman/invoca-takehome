@@ -36,7 +36,7 @@ These controls sit above all four pages. Whatever you choose here stays in the w
 2. **Pick the period.** Last 28 days is the default. Every number on the page follows this choice.
 3. **Or set your own dates.** Fill in a start and end date, then press Apply.
 4. **Compare with another period (optional, on Overview and Campaigns).** Leave it empty and the app compares with the same number of days just before your range.
-5. **The takeaway.** A short summary of the page that restates its suggested action and adds no advice of its own. The tag shows who wrote it: `AI`, or `TEMPLATE` when AI is off or its text failed the checks twice (the AI gets one more try before the app falls back to its own sentence). The numbers always come from the app, never from the AI.
+5. **The takeaway.** A short summary of the page. The AI is asked to restate the page's suggested action and add no advice of its own. The tag shows who wrote it: `AI`, or `TEMPLATE` when AI is off or its text failed the checks twice (the AI gets one more try before the app falls back to its own sentence). The numbers always come from the app, never from the AI.
 6. **Data as of.** The latest date in your data. "Last 7 days" counts back from this date, not from today.
 7. **Ask a question.** Type a question in plain English. See "Ask a question" below.
 8. **Print summary.** A one-page version for reporting up.
@@ -149,7 +149,7 @@ Type a question about offices, campaigns, weekdays, hours or dates. The AI only 
 
 ![The answer page for the question](user-guide/11-answer.webp)
 
-3. **How your question was read.** Check this line first. Here: missed calls, all offices, Fridays, all hours, all dates. If it is not what you meant, reword and ask again.
+3. **How your question was read.** Check this line first. Here: missed calls, all offices, Fridays, all hours, Aug 31 – Oct 29, 2026 (all the data). If it is not what you meant, reword and ask again.
 4. **The answer.** Here Bayside Office had 37 unanswered calls out of its 154 Friday calls.
 5. **Totals** for everything the filter matched.
 6. **The rows behind the answer,** so you can see the runners-up.

@@ -38,7 +38,7 @@ Tables: `raw_calls` (every row version), `campaigns`, `locations`, `bad_rows`, `
 - Revenue counts only on booked calls. Answered calls with no outcome yet are "pending" (41): calls, but in no booking rate.
 - Spend is estimated (daily budget × days) and labelled. Cost per booking is blank at a $0 budget, never infinity. A blank or unreadable budget keeps the campaign but blanks its spend figures and leaves it unranked.
 - A comparison period the data doesn't fully cover shows no change and says why.
-- Bad rows are counted by reason and shown in the header, never crash the app. Both exports load with 0.
+- Bad rows are counted by reason in the data core, the header shows the total skipped, and they never crash the app. Both exports load with 0.
 
 ## Trade-offs, shortcuts, and what I'd do with more time
 
@@ -61,7 +61,7 @@ With more time I would:
 - **Startup:** a missing folder, file or column prints one `Cannot start: ...` line and exits non-zero. A corrupt, locked or older-schema database is refused with a message, never deleted or emptied.
 - **Uploads:** the server re-checks the file inside the write transaction, so a stale preview can't write the wrong thing. A failure partway rolls back. Over 10 MB is refused.
 
-**Tests.** `npm test`: 2,341 pass, 17 skipped, 133 files; typecheck is clean. The 17 are the Docker checks (`npm run test:docker`, need Docker running).
+**Tests.** `npm test`: 2,341 pass, 17 skipped, 133 files; typecheck is clean. 16 of the 17 are the Docker checks (`npm run test:docker`, need Docker running); the other one is a shutdown test that cannot run on Windows.
 
 - A test per data rule, each on a 5–20 row hand-written fixture, plus table-driven metric tests (zero budget, previous value 0, partial periods, midnight UTC, Phoenix beside a daylight-saving zone, week boundaries, threshold maths).
 - Snapshot totals on both exports, identical from the database and from the CSVs; results independent of the machine's time zone.
