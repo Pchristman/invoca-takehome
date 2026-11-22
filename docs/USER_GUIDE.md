@@ -30,7 +30,7 @@ This guide shows how to read each page of Inbound Call Performance and what to d
 
 These controls sit above all four pages. Whatever you choose here stays in the web address, so a bookmark or a link you send to a colleague opens the same screen.
 
-![Overview page with the header, tabs, date range controls, takeaway and five tiles](user-guide/01-overview-top.png)
+![Overview page with the header, tabs, date range controls, takeaway and five tiles](user-guide/01-overview-top.webp)
 
 1. **The four pages.** Overview is the summary. Campaigns, Locations and Missed calls each answer one question and end in one thing to do.
 2. **Pick the period.** Last 28 days is the default. Every number on the page follows this choice.
@@ -46,7 +46,7 @@ These controls sit above all four pages. Whatever you choose here stays in the w
 
 Start here each week. Five headline numbers, then the suggested action from each of the other pages.
 
-![Overview page scrolled to the tiles and the Suggested actions by page list](user-guide/02-overview-actions.png)
+![Overview page scrolled to the tiles and the Suggested actions by page list](user-guide/02-overview-actions.webp)
 
 1. **Five headline numbers.** Each tile shows the value now, what it was in the comparison period, and the change. Counts and money change in percent. Rates change in points: 79.6% to 77.5% is "-2.1 points".
 2. **Suggested actions by page.** One suggestion from each other page, always with the number behind it.
@@ -56,7 +56,7 @@ Start here each week. Five headline numbers, then the suggested action from each
 
 On Overview and Campaigns you can compare your range with any other range. If the two are different lengths, the app compares them per day and says so.
 
-![Overview with a custom range of 14 days compared with a 30-day range](user-guide/03-range-custom.png)
+![Overview with a custom range of 14 days compared with a 30-day range](user-guide/03-range-custom.webp)
 
 1. **Your comparison range.** Here a 14-day range is compared with a 30-day one.
 2. **Different lengths.** The note says the periods are not the same length, so changes are worked out per day.
@@ -70,14 +70,14 @@ On Overview and Campaigns you can compare your range with any other range. If th
 
 The page opens with what to do, then shows the table behind it.
 
-![Campaigns page with the takeaway, two actions and the start of the campaign table](user-guide/04a-campaigns-actions.png)
+![Campaigns page with the takeaway, two actions and the start of the campaign table](user-guide/04a-campaigns-actions.webp)
 
 1. **Consider moving budget.** Names the weakest and the strongest campaign by estimated revenue per budget dollar. Returns at a higher budget are unknown.
 2. **Fix attribution.** Calls that came in on phone numbers not tied to any campaign.
 3. **How the estimates work.** Click to see the formulas. Spend is not in the data, so it is estimated as daily budget times the days in your range. It assumes the full budget was spent every day.
 4. **Sort the table.** Click any column heading. Your sort stays when you change the date range and is part of the link.
 
-![Campaign table with the highest and lowest est. return marked](user-guide/04-campaigns-table.png)
+![Campaign table with the highest and lowest est. return marked](user-guide/04-campaigns-table.webp)
 
 5. **Calls vs comparison.** How each campaign's calls changed against the comparison period.
 6. **"Est." columns.** Anything marked est. is an estimate built from the daily budget, not actual spend.
@@ -85,7 +85,7 @@ The page opens with what to do, then shows the table behind it.
 8. **Highest est. return.** Highest estimated revenue per budget dollar among campaigns with a budget above $0 and at least 5 bookings in the range.
 9. **Lowest est. return.** Lowest estimated revenue per budget dollar among campaigns with a budget above $0 and at least 10 calls in the range. A campaign with no bookings at all can be the lowest. If no two campaigns qualify, or none does worse than the highest, nothing is marked and the page says why.
 
-![Unattributed row with its tracking numbers, and the calls per week chart](user-guide/05-campaigns-chart.png)
+![Unattributed row with its tracking numbers, and the calls per week chart](user-guide/05-campaigns-chart.webp)
 
 10. **Unattributed.** Calls with no campaign are kept in their own row, never dropped. Their tracking numbers are listed with call counts.
 11. **Pick a campaign for the chart.**
@@ -96,7 +96,7 @@ The page opens with what to do, then shows the table behind it.
 
 Compares offices on how many calls they answer and how many become bookings.
 
-![Locations page with the action and the office table](user-guide/06-locations.png)
+![Locations page with the action and the office table](user-guide/06-locations.webp)
 
 1. **The action.** If an office is doing worse than the rest, it is named here with both rates. "No office stands out" is a real result: it means no office differs from the others by more than is likely to be chance. The takeaway then sums up all offices together rather than singling one out.
 2. **Highest booking rate (20+ calls).** The campaign with the highest booking rate at that office, among campaigns with at least 20 calls there.
@@ -107,7 +107,7 @@ Compares offices on how many calls they answer and how many become bookings.
 
 Shows when calls go unanswered, what they may be worth, and a list of people to call back.
 
-![Missed calls page with the action, office filter and the heatmap by office](user-guide/07-missed-heatmap.png)
+![Missed calls page with the action, office filter and the heatmap by office](user-guide/07-missed-heatmap.webp)
 
 1. **The action.** How many callers to call back.
 2. **Filter to one office.** The heatmap and the list below follow it.
@@ -115,24 +115,24 @@ Shows when calls go unanswered, what they may be worth, and a list of people to 
 4. **Darker means more missed calls.** Each cell is one office and one hour, in that office's local time.
 5. **Total** unanswered calls per row.
 
-![Heatmap switched to weekday by hour](user-guide/08-missed-weekday.png)
+![Heatmap switched to weekday by hour](user-guide/08-missed-weekday.webp)
 
 6. **By weekday.** The same calls, grouped by day of the week. Use it to see which shifts need cover.
 7. **Darkest cell.** The hour with the most unanswered calls in this view.
 
-![Estimated lost value with its formula opened](user-guide/07b-missed-lost-value.png)
+![Estimated lost value with its formula opened](user-guide/07b-missed-lost-value.webp)
 
 8. **Estimated lost value.** What the unanswered calls might have been worth. It is a model, not a measured loss, and likely overstates the loss: it counts every unanswered call, including repeat attempts and callers who got through later.
 9. **How this estimate works.** Click to see the formula: each missed call is valued at its campaign's usual booking rate times its average booking value.
 
-![Top of the call-back list](user-guide/09a-missed-callbacks-top.png)
+![Top of the call-back list](user-guide/09a-missed-callbacks-top.webp)
 
 10. **The call-back list.** Callers whose latest call in the range went unanswered and who have not been answered since.
 11. **Caller.** The export only has a scrambled caller ID, not a phone number. Match it in your call platform using the tracking number and time.
 12. **Tracking number** the caller dialled.
 13. **Est. value.** The estimate for that caller's latest missed call. The list is sorted by it, highest first.
 
-![Bottom of the call-back list with the pager and CSV download](user-guide/09-missed-callbacks.png)
+![Bottom of the call-back list with the pager and CSV download](user-guide/09-missed-callbacks.webp)
 
 14. **25 callers per page.**
 15. **Download CSV.** The whole list for your range, ready to hand to the team making the calls.
@@ -142,12 +142,12 @@ Shows when calls go unanswered, what they may be worth, and a list of people to 
 
 Type a question about offices, campaigns, weekdays, hours or dates. The AI only turns your words into a filter. The app then runs that filter and works out every number itself. This needs AI to be switched on.
 
-![A question typed into the ask box](user-guide/10-ask-box.png)
+![A question typed into the ask box](user-guide/10-ask-box.webp)
 
 1. **Type the question.** For example: "Which office misses the most calls on Fridays?" or "How did Search - Brand Terms do last week?"
 2. **Ask.** While it is working, the button becomes Cancel.
 
-![The answer page for the question](user-guide/11-answer.png)
+![The answer page for the question](user-guide/11-answer.webp)
 
 3. **How your question was read.** Check this line first. Here: missed calls, all offices, Fridays, all hours, all dates. If it is not what you meant, reword and ask again.
 4. **The answer.** Here Bayside Office had 37 unanswered calls out of its 154 Friday calls.
@@ -160,7 +160,7 @@ If the app cannot turn the question into a filter, it says so and nothing is sho
 
 One page with the headline numbers, the takeaways and the action from each page, for the range and comparison you had open.
 
-![The print summary page](user-guide/12-print.png)
+![The print summary page](user-guide/12-print.webp)
 
 1. **Print,** or save as PDF from your browser's print window.
 2. **The range** and data date are printed at the top, so the page explains itself.
@@ -171,7 +171,7 @@ One page with the headline numbers, the takeaways and the action from each page,
 
 When you have a newer export, add it here. You upload one CSV at a time: calls, campaigns or locations. The app works out which one it is from the column names.
 
-![The upload panel open under the header](user-guide/13-upload-panel.png)
+![The upload panel open under the header](user-guide/13-upload-panel.webp)
 
 1. **Open the panel.**
 2. **Choose a CSV.** The app first shows a preview: how many rows are new, already stored, or have a problem. Nothing is saved until you confirm.

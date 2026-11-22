@@ -36,3 +36,9 @@ Budget: $250 hard cap on the provided Claude API key, for building and running.
 | 2026-11-20 | claude-sonnet-5-5 ($0.91), claude-haiku-5-5 ($0.0002) | Stretch S5 plan: docs/plans/s5-visual-polish.md | 0.91 |
 | 2026-11-20 | claude-sonnet-5-5 ($3.57), claude-opus-5-5 review ($1.52), claude-haiku-5-5 ($0.0071) | Stretch S5 build and adversarial review: docs/plans/s5-visual-polish.md | 5.10 |
 | 2026-11-20 | claude-sonnet-5-5 ($0.78), claude-haiku-5-5 ($0.0003) | Stretch S6 plan: docs/plans/s6-database.md | 0.78 |
+| 2026-11-20 | claude-sonnet-5-5 ($2.92), claude-opus-5-5 review ($1.31), claude-haiku-5-5 ($0.0024) | Stretch S6 build and adversarial review: docs/plans/s6-database.md | 4.23 |
+| 2026-11-20 | claude-sonnet-5-5 ($1.10), claude-haiku-5-5 ($0.0003) | Stretch S7 plan: docs/plans/s7-upload-csv.md | 1.10 |
+| 2026-11-20 | claude-sonnet-5-5 ($5.88), claude-opus-5-5 review ($2.21), claude-haiku-5-5 ($0.0109) | Stretch S7 build and adversarial review: docs/plans/s7-upload-csv.md | 8.09 |
+| 2026-11-21 | claude-haiku-5-5 ($0.0108) | In-app AI calls logged in logs/ai-calls.jsonl, 2026-11-20 to 2026-11-22 UTC: 43 paid calls (takeaways and one question) during review, live checks and guide screenshots | 0.01 |
+| 2026-11-21 | claude-haiku-5-5 ($0.0100) | In-app AI calls logged in the Docker container (/app/logs/ai-calls.jsonl), 2026-11-20 to 2026-11-22 UTC: 42 paid calls (takeaways and one question) while running the app in Docker | 0.01 |
+| 2026-11-21 | claude-sonnet-5-5 ($1.03), claude-haiku-5-5 ($0.0002) | Phase 11 submission docs: TECHNICAL.md, decision summary and architecture diagram | 1.03 |

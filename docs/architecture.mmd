@@ -1,0 +1,27 @@
+%% Source for docs/architecture.png. Render with:
+%%   npx -y @mermaid-js/mermaid-cli -i docs/architecture.mmd -o docs/architecture.png -s 2 -b white
+flowchart LR
+  IN["CSV files<br/>or an upload<br/>(preview, then confirm)"]
+
+  subgraph SERVER["Node server (Hono), localhost only"]
+    direction LR
+    DB[("SQLite file<br/>every row version<br/>+ bad rows")]
+    CLEAN["Validate and clean<br/>latest row per call<br/>Unattributed kept<br/>UTC to office time zone<br/>= CallStore in memory"]
+    VIEWS["View builders<br/>Overview, Campaigns,<br/>Locations, Missed calls<br/>= fact sheet + template action<br/>(every number made here)"]
+    API["JSON API<br/>+ callback CSV"]
+  end
+
+  subgraph AI["AI service (optional, server only)"]
+    direction LR
+    PROMPT["Cache, spend guard,<br/>call log<br/>Prompt = fact sheet only,<br/>text with placeholders"]
+    CLAUDE["Claude Haiku 5.5"]
+    CHECK["Checker<br/>no digits, number words<br/>or off-sheet names<br/>Fail: one retry,<br/>then template text"]
+    PROMPT --> CLAUDE --> CHECK
+  end
+
+  WEB["React app (Vite)<br/>formats and draws,<br/>does no arithmetic"]
+
+  IN --> DB --> CLEAN --> VIEWS --> API --> WEB
+  VIEWS -- "fact sheet" --> AI
+  AI -- "checked takeaway" --> API
+  IN -. "upload refreshes<br/>every view" .-> CLEAN
