@@ -18,26 +18,27 @@ A small local web product that helps a marketing manager track inbound call perf
    ```
 
    This builds the web app, loads the three CSVs in the repo root into a local database on first start, and serves the app. Then open `http://127.0.0.1:3000`.
+
 4. Optional: to turn on the AI features, copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY`. The app works fully without it.
 
 With Docker instead, `docker compose up --build` is the only command needed, and the app is at `http://localhost:3000`.
 
 ## Commands
 
-| Command | Status |
-| --- | --- |
-| `npm install` | available |
-| `npm test` | available (vitest) |
-| `npm run typecheck` | available |
-| `npm run generate:extended` | available; rewrites `data/extended/` from the shipped export and a fixed seed |
-| `npm run seed [folder]` | available; loads the three CSVs from the folder (default `DATA_DIR`, else the current folder) into the database; see Database below |
-| `npm run build` | available; builds the web app into `dist/` |
-| `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (`HOST`, default 127.0.0.1; `PORT`, default 3000; `DATA_DIR`; `DB_PATH`, default `data/calls.db`) |
-| `docker compose up --build` | available; builds one image and serves the app at `http://localhost:3000`; see Docker below |
-| `npm run test:docker` | available; real Docker checks (needs Docker running; builds the image, starts containers, makes no real API call) |
-| `npm run ai:try -- <view\|all>` | available; makes REAL API calls (needs a key); see AI takeaways below |
-| `npm run ai:try -- --question "..."` | available; one REAL call per question (needs a key); see Ask a question below |
-| `npm run dev` | available; the server (restarting on change) and Vite with hot reload together, `/api` proxied to the server; the page is at the address Vite prints on start |
+| Command                              | Status                                                                                                                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm install`                        | available                                                                                                                                                                                                 |
+| `npm test`                           | available (vitest)                                                                                                                                                                                        |
+| `npm run typecheck`                  | available                                                                                                                                                                                                 |
+| `npm run generate:extended`          | available; rewrites `data/extended/` from the shipped export and a fixed seed                                                                                                                             |
+| `npm run seed [folder]`              | available; loads the three CSVs from the folder (default `DATA_DIR`, else the current folder) into the database; see Database below                                                                       |
+| `npm run build`                      | available; builds the web app into `dist/`                                                                                                                                                                |
+| `npm start`                          | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (`HOST`, default 127.0.0.1; `PORT`, default 3000; `DATA_DIR`; `DB_PATH`, default `data/calls.db`) |
+| `docker compose up --build`          | available; builds one image and serves the app at `http://localhost:3000`; see Docker below                                                                                                               |
+| `npm run test:docker`                | available; real Docker checks (needs Docker running; builds the image, starts containers, makes no real API call)                                                                                         |
+| `npm run ai:try -- <view\|all>`      | available; makes REAL API calls (needs a key); see AI takeaways below                                                                                                                                     |
+| `npm run ai:try -- --question "..."` | available; one REAL call per question (needs a key); see Ask a question below                                                                                                                             |
+| `npm run dev`                        | available; the server (restarting on change) and Vite with hot reload together, `/api` proxied to the server; the page is at the address Vite prints on start                                             |
 
 Needs Node.js 22.18 or later, or 24 or later (the Docker image uses 24): the app uses `node:sqlite`, `process.loadEnvFile`, and runs `.ts` scripts with Node's own type stripping.
 
@@ -133,19 +134,19 @@ The **Upload data** button in the header opens a panel where you add one CSV to 
 
 `npm start` reads the database at start (seeding it first if the file is missing) and again after each confirmed upload and serves JSON on **127.0.0.1** unless `HOST` says otherwise (the callback list carries caller hashes; see the `HOST` warning under Docker). On a first start (no database yet), a missing folder, file or column prints one `Cannot start: ...` line and exits 1; once the database holds data the data folder is optional. A bad `PORT` or a busy port always does. Every route is GET only except the two upload routes. Every `/api` route refuses (403) a request whose Host header is not `localhost`, `127.0.0.1`, `[::1]` or the address the server is bound to, so a web page that points its own domain at 127.0.0.1 (DNS rebinding) cannot read the data or spend on AI; the AI routes also refuse a request a browser marks as cross-site.
 
-| Route | Query parameters | 200 body |
-| --- | --- | --- |
-| `/api/meta` | none | data span, campaign and office lists, presets, skipped rows, load notes |
-| `/api/overview` | range, compare | overview view |
-| `/api/campaigns` | range, compare, `campaign` | campaigns view |
-| `/api/locations` | range, compare | locations view |
-| `/api/missed-calls` | range, compare, `location` | missed-calls view |
-| `/api/missed-calls/callbacks.csv` | range, compare, `location` | CSV file |
-| `/api/takeaway/:view` | as that view | the takeaway: checked AI text, or the template text (AI off, over budget, or the AI text failed its check) |
-| `/api/answer` | range, `view`, `f_*` filter | answer panel: totals and a table for the filter (code only) |
-| `/api/question` | `q` (at most 300 characters) | a validated filter as a query string (the only AI step; needs a key) |
-| `POST /api/upload/preview` | one CSV in the multipart field `file` | what the file would add: counts, examples, hints (writes nothing) |
-| `POST /api/upload/commit` | one CSV in the multipart field `file` | what was written, and the fresh `/api/meta` body |
+| Route                             | Query parameters                      | 200 body                                                                                                   |
+| --------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `/api/meta`                       | none                                  | data span, campaign and office lists, presets, skipped rows, load notes                                    |
+| `/api/overview`                   | range, compare                        | overview view                                                                                              |
+| `/api/campaigns`                  | range, compare, `campaign`            | campaigns view                                                                                             |
+| `/api/locations`                  | range, compare                        | locations view                                                                                             |
+| `/api/missed-calls`               | range, compare, `location`            | missed-calls view                                                                                          |
+| `/api/missed-calls/callbacks.csv` | range, compare, `location`            | CSV file                                                                                                   |
+| `/api/takeaway/:view`             | as that view                          | the takeaway: checked AI text, or the template text (AI off, over budget, or the AI text failed its check) |
+| `/api/answer`                     | range, `view`, `f_*` filter           | answer panel: totals and a table for the filter (code only)                                                |
+| `/api/question`                   | `q` (at most 300 characters)          | a validated filter as a query string (the only AI step; needs a key)                                       |
+| `POST /api/upload/preview`        | one CSV in the multipart field `file` | what the file would add: counts, examples, hints (writes nothing)                                          |
+| `POST /api/upload/commit`         | one CSV in the multipart field `file` | what was written, and the fresh `/api/meta` body                                                           |
 
 - **Range:** `range=last7|last28|all`, or `start=YYYY-MM-DD&end=YYYY-MM-DD`. Neither given means `last28`.
 - **Compare (optional):** `compareStart` and `compareEnd` together.
@@ -164,19 +165,19 @@ Open `http://127.0.0.1:3000/` after `npm start`. The nav has four views: Overvie
 
 The URL holds the screen, so a link, a refresh or the back button reproduces it:
 
-| Parameter | Meaning |
-| --- | --- |
-| `view` | `campaigns`, `locations` or `missed-calls`; absent means Overview |
-| `range` | `last7`, `last28` or `all` |
-| `start`, `end` | a custom range, `YYYY-MM-DD` |
-| `campaign` | the campaign shown in the Campaigns weekly chart |
-| `location` | the office Missed calls is filtered to |
-| `print` | add `?print` for the one-page print summary |
-| `answer` | bare parameter: show the answer panel for the filter in the `f_` parameters |
-| `f_office`, `f_campaign` | repeatable; office or campaign ids the answer is limited to |
-| `f_unattributed` | `1` adds calls with no campaign to the campaign filter |
-| `f_weekday` | repeatable, 0 (Monday) to 6 (Sunday), in the office's local time |
-| `f_hour` | repeatable, 0 to 23, in the office's local time |
+| Parameter                | Meaning                                                                     |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `view`                   | `campaigns`, `locations` or `missed-calls`; absent means Overview           |
+| `range`                  | `last7`, `last28` or `all`                                                  |
+| `start`, `end`           | a custom range, `YYYY-MM-DD`                                                |
+| `campaign`               | the campaign shown in the Campaigns weekly chart                            |
+| `location`               | the office Missed calls is filtered to                                      |
+| `print`                  | add `?print` for the one-page print summary                                 |
+| `answer`                 | bare parameter: show the answer panel for the filter in the `f_` parameters |
+| `f_office`, `f_campaign` | repeatable; office or campaign ids the answer is limited to                 |
+| `f_unattributed`         | `1` adds calls with no campaign to the campaign filter                      |
+| `f_weekday`              | repeatable, 0 (Monday) to 6 (Sunday), in the office's local time            |
+| `f_hour`                 | repeatable, 0 to 23, in the office's local time                             |
 
 To open the extended export: on a first run (no `data/calls.db`) `DATA_DIR=data/extended npm start`; on a later run `npm run seed data/extended`, then restart. There, Locations flags only the two planted weak offices ("worse"); the shipped export flags none.
 
