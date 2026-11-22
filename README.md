@@ -2,6 +2,26 @@
 
 A small local web product that helps a marketing manager track inbound call performance and act on it. Every number comes from code; AI is an optional add-on and the app works fully without it.
 
+## Setup
+
+1. Install Node.js 22.18 or later, or 24 or later.
+2. Install the dependencies:
+
+   ```
+   npm install
+   ```
+
+3. Build and start the app:
+
+   ```
+   npm start
+   ```
+
+   This builds the web app, loads the three CSVs in the repo root into a local database on first start, and serves the app. Then open `http://127.0.0.1:3000`.
+4. Optional: to turn on the AI features, copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY`. The app works fully without it.
+
+With Docker instead, `docker compose up --build` is the only command needed, and the app is at `http://localhost:3000`.
+
 ## Commands
 
 | Command | Status |
