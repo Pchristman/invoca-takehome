@@ -88,12 +88,10 @@ describe('PrintSummary', () => {
     for (const block of hidden.model.blocks) for (const a of block.actions) expect(hidden.markup).toContain(escape(a.text));
   });
 
-  it('has no dev content and no links', () => {
+  it('has no links and no buttons', () => {
     const { markup } = html();
     expect(markup).not.toContain('<a ');
     expect(markup).not.toContain('<button');
-    expect(markup).not.toContain('Data notes');
-    expect(markup).not.toContain('dev');
   });
 
   it('long names wrap: shown in full inside a print-page root', () => {

@@ -90,7 +90,6 @@ describe('interpret', () => {
     const lines = logLines();
     expect(lines).toHaveLength(3);
     expect(lines[1]).toMatchObject({ purpose: 'question', cached: true, costUsd: 0, checkPassed: true });
-    expect(service.status().cacheHits).toBe(2);
   });
 
   it('the cache survives a restart', async () => {
@@ -173,7 +172,6 @@ describe('interpret', () => {
       });
       expect(readFileSync(paths().logPath, 'utf8')).not.toContain('Secret Name');
       expect(service.status().spendUsd).toBe(0.0003);
-      expect(service.status().checkerFailures).toBe(1);
       expect(await service.interpret(QUESTION, CONTEXT, accept)).toMatchObject({ ok: false, reason: 'invalid_filter' });
       expect(model.calls).toBe(1);
     });

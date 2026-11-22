@@ -3,7 +3,7 @@ import type { AnswerResponse } from '../../server/api';
 import { answerModel } from '../models/answerModel';
 import type { RequestState } from '../requestState';
 import { useApi } from '../useApi';
-import { answerParams, clearHref, withDevOf } from '../urlState';
+import { answerParams, clearHref } from '../urlState';
 import type { UrlState } from '../urlState';
 import { Caveats } from './Caveats';
 import { Link } from './Link';
@@ -71,7 +71,7 @@ export function AnswerPage({
             </div>
             )}
             <p className="row">
-              <Link href={withDevOf(show.link.href, state)}>{show.link.label}</Link>
+              <Link href={show.link.href}>{show.link.label}</Link>
               <Link href={clearHref(state)}>Clear question</Link>
             </p>
           </section>

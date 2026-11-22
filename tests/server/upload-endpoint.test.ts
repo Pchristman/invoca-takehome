@@ -168,7 +168,7 @@ describe('POST /api/upload/commit', () => {
   });
 
   it('the rebuilt service is the one the next request uses', async () => {
-    const rebuilt: TakeawayService = { ...offService(), status: () => ({ status: 'on', spendUsd: 0, cacheHits: 0, checkerFailures: 0 }) };
+    const rebuilt: TakeawayService = { ...offService(), status: () => ({ status: 'on', spendUsd: 0 }) };
     const { app } = setup({ rebuildAi: () => rebuilt });
     expect((await meta(app)).aiStatus).toBe('off');
     await commit(app, { file: callsFile([later('c_a')]) });
@@ -406,7 +406,7 @@ describe('host and origin checks on the upload routes (DNS rebinding)', () => {
 
 describe('the swap after a commit', () => {
   it('a rebuildAi that throws still returns the written result (200 with a warning) and adopts the new data with AI off', async () => {
-    const on: TakeawayService = { ...offService(), status: () => ({ status: 'on', spendUsd: 0, cacheHits: 0, checkerFailures: 0 }) };
+    const on: TakeawayService = { ...offService(), status: () => ({ status: 'on', spendUsd: 0 }) };
     const { app, rows } = setup({ ai: on, rebuildAi: () => { throw new Error('boom'); } });
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const r = await commit(app, { file: callsFile([later('c_a')]) });

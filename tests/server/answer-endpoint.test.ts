@@ -22,7 +22,7 @@ const throwing: TakeawayService = {
 };
 
 describe('GET /api/answer', () => {
-  it('returns the answer with names, without ?dev and without touching the AI service', async () => {
+  it('returns the answer with names, without touching the AI service', async () => {
     const app = createApp(serverFixture(), { ai: throwing });
     const r = await get(app, '/api/answer?view=missed-calls&f_office=loc_b&range=all');
     expect(r.status).toBe(200);

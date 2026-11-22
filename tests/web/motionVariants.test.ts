@@ -68,8 +68,8 @@ describe('contentKey', () => {
     expect(contentKey({ ...base, range: { kind: 'custom', start: '2026-09-01', end: '2026-09-07' } })).not.toBe(contentKey(base));
     expect(contentKey({ ...base, compare: { start: '2026-08-01', end: '2026-08-07' } })).not.toBe(contentKey(base));
   });
-  it('still ignores the campaign, the office, dev and print', () => {
-    expect(contentKey({ ...base, campaign: 'x', location: 'y', dev: true, print: true })).toBe(contentKey(base));
+  it('still ignores the campaign, the office and print', () => {
+    expect(contentKey({ ...base, campaign: 'x', location: 'y', print: true })).toBe(contentKey(base));
   });
   it('still ignores the sorts and the heatmap mode, which live in the URL and survive the remount', () => {
     const sorted = { ...base, campaignSort: { key: 'name', dir: 'asc' } as const, heatmap: 'weekday' as const };

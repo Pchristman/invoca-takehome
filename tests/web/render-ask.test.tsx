@@ -101,15 +101,6 @@ describe('AnswerView', () => {
     expect(markup).toContain('href="/?range=last7"');
   });
 
-  it('?dev is kept on the links', () => {
-    const markup = page(ready(answer({ view: 'missed-calls' })), '?answer&view=missed-calls&range=last7&dev');
-    const hrefs = [...markup.matchAll(/href="([^"]*)"/g)].map((m) => m[1]!);
-    const open = hrefs.find((h) => h.includes('view=missed-calls'))!;
-    expect(open).toMatch(/&amp;dev$/);
-    expect(hrefs.find((h) => h.startsWith('/?range=last7'))!).toMatch(/dev$/);
-    expect(markup.match(/dev"/g)!.length).toBeGreaterThanOrEqual(2);
-  });
-
   it('shows a blank cell for a null rate', () => {
     const data = answer({ view: 'locations' }, (a) => {
       a.rows[0]!.answerRate = null;
@@ -191,7 +182,7 @@ describe('routing pieces', () => {
 
   it('the header carries no ask box', () => {
     const markup = renderToStaticMarkup(
-      <Header meta={metaFor(store)} dev={false} dataNotesOpen={false} onToggleDataNotes={() => {}} printLink="/?print" />,
+      <Header meta={metaFor(store)} printLink="/?print" />,
     );
     expect(markup).not.toContain('<form');
   });

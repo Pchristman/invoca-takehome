@@ -102,15 +102,15 @@ describe('printModel', () => {
 
   it('takeaway markers: AI', () => {
     const { model } = build('range=last7', allTakeaways((v) => ready(v, 'AI said this.', 'ai')));
-    expect(model.overviewTakeaway).toEqual({ kind: 'ready', text: 'AI said this.', marker: 'AI', note: null });
+    expect(model.overviewTakeaway).toEqual({ kind: 'ready', text: 'AI said this.', marker: 'AI' });
   });
 
   const REASONS: TakeawayReason[] = [
     'ai_off', 'budget_reached', 'no_facts', 'timeout', 'api_error', 'refusal', 'malformed', 'check_failed', 'log_unavailable',
   ];
-  it.each(REASONS)('a template takeaway (%s) is marked template with no note', (reason) => {
+  it.each(REASONS)('a template takeaway (%s) is marked template', (reason) => {
     const { model } = build('range=last7', allTakeaways((v) => ready(v, 'Template text.', 'template', reason)));
-    const expected = { kind: 'ready', text: 'Template text.', marker: 'template', note: null };
+    const expected = { kind: 'ready', text: 'Template text.', marker: 'template' };
     expect(model.overviewTakeaway).toEqual(expected);
     for (const block of model.blocks) expect(block.takeaway).toEqual(expected);
   });

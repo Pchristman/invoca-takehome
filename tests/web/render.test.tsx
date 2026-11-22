@@ -1,5 +1,5 @@
 // Render the dumb components to a string (no browser, no DOM) and assert on the markup.
-// Covers what a model test cannot: that the component prints the model, and that dev-only things are absent.
+// Covers what a model test cannot: that the component prints the model.
 // Data comes from the real view builders (tests/web/fixtures.ts). Where a fixture lacks a case, the test says
 // how it builds it: another store, or a hand-edited copy of real JSON view data.
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -18,7 +18,6 @@ import { EmptyScreen } from '../../src/web/App';
 import { CampaignTable } from '../../src/web/components/CampaignTable';
 import { CampaignsView as CampaignsScreen } from '../../src/web/components/CampaignsView';
 import { Caveats } from '../../src/web/components/Caveats';
-import { DataNotesPanel } from '../../src/web/components/DataNotesPanel';
 import { EstimateNote } from '../../src/web/components/EstimateNote';
 import { CallbackTable } from '../../src/web/components/CallbackTable';
 import { Header } from '../../src/web/components/Header';
@@ -79,40 +78,28 @@ const span: DateRange = dataSpan(fixtureStore.calls)!;
 const plainState = parseUrlState('');
 
 describe('Header', () => {
-  const render = (m: Meta, dev: boolean) =>
-    renderToStaticMarkup(
-      <Header meta={m} dev={dev} dataNotesOpen={false} onToggleDataNotes={noop} printLink={printHref(parseUrlState(dev ? '?dev' : ''))} />,
-    );
+  const render = (m: Meta) => renderToStaticMarkup(<Header meta={m} printLink={printHref(plainState)} />);
   // Hand-edited copy of real meta: a span ending 2026-10-29.
   const october: Meta = { ...meta, span: { start: '2026-10-01', end: '2026-10-29' } };
 
-  it('without dev has no data notes entry, with dev has the button', () => {
-    const off = render(meta, false);
-    expect(off).not.toContain('Data notes');
-    expect(off).not.toContain('<button');
-    const on = render(meta, true);
-    expect(on).toContain('<button');
-    expect(on).toContain('Data notes');
+  it('has no button without an upload toggle', () => {
+    expect(render(meta)).not.toContain('<button');
   });
 
-  it('has a Print summary link that opens a new tab, with or without dev, never carrying dev', () => {
-    for (const dev of [false, true]) {
-      const html = render(meta, dev);
-      const href = printHref(parseUrlState(dev ? '?dev' : ''));
-      expect(html).toContain(`href="${href}"`);
-      expect(html).toMatch(/<a [^>]*target="_blank"[^>]*>Print summary<\/a>/);
-      expect(html).toMatch(/rel="[^"]*noopener/);
-      expect(href).not.toContain('dev');
-    }
+  it('has a Print summary link that opens a new tab', () => {
+    const html = render(meta);
+    expect(html).toContain(`href="${printHref(plainState)}"`);
+    expect(html).toMatch(/<a [^>]*target="_blank"[^>]*>Print summary<\/a>/);
+    expect(html).toMatch(/rel="[^"]*noopener/);
   });
 
   it('prints the as-of date from the end of the span', () => {
-    expect(render(october, false)).toContain('Data as of Oct 29, 2026');
+    expect(render(october)).toContain('Data as of Oct 29, 2026');
   });
 
   it('says how many rows were skipped, and nothing when none', () => {
-    expect(render({ ...october, skippedRows: 12 }, false)).toContain('12 rows skipped');
-    expect(render({ ...october, skippedRows: 0 }, false)).not.toMatch(/skipped/i);
+    expect(render({ ...october, skippedRows: 12 })).toContain('12 rows skipped');
+    expect(render({ ...october, skippedRows: 0 })).not.toMatch(/skipped/i);
   });
 });
 
@@ -123,17 +110,6 @@ describe('Nav', () => {
     const found = links(renderToStaticMarkup(<Nav state={parseUrlState('?view=campaigns')} />));
     expect(found.map((m) => m[3])).toEqual(['Overview', 'Campaigns', 'Locations', 'Missed calls']);
     expect(found.map((m) => (m[2] ?? '').includes('aria-current="page"'))).toEqual([false, true, false, false]);
-  });
-
-  it('keeps dev on every link', () => {
-    const found = links(renderToStaticMarkup(<Nav state={parseUrlState('?view=campaigns&dev')} />));
-    expect(found).toHaveLength(4);
-    for (const m of found) expect((m[1] ?? '').endsWith('&amp;dev') || m[1] === '/?dev').toBe(true);
-  });
-
-  it('does not carry dev when dev is off', () => {
-    const html = renderToStaticMarkup(<Nav state={plainState} />);
-    expect(html).not.toContain('dev');
   });
 });
 
@@ -286,10 +262,6 @@ describe('RangeControl comparison range', () => {
     const other = render(COMPARE, { code: 'unknown_campaign', message, field: 'campaign' });
     expect(other).not.toContain(message);
   });
-
-  it('has no dev-only content', () => {
-    expect(render(`${COMPARE}&dev`)).toBe(render(COMPARE));
-  });
 });
 
 describe('ErrorBoundary', () => {
@@ -425,7 +397,7 @@ describe('OverviewView', () => {
       ...real,
       topActions: real.topActions.map((item, i) => ({ ...item, action: { ...item.action, actionable: i !== 1 } })),
     };
-    const state = parseUrlState('?range=last7&dev');
+    const state = parseUrlState('?range=last7');
     const html = render(view, state);
     const section = html.slice(html.indexOf('<h2>Top actions</h2>'));
     const items = section.match(/<li[ >].*?<\/li>/g) ?? [];
@@ -577,26 +549,6 @@ describe('WeeklyChart', () => {
   });
 });
 
-describe('DataNotesPanel', () => {
-  it('prints each section title and item, is a complementary region, and has a Close button', () => {
-    const sections = [
-      { title: 'First section', items: [{ label: 'Rows read', value: '1,234' }] },
-      { title: 'Second section', items: [{ label: 'Skipped', value: 'None' }], list: ['a list entry'] },
-    ];
-    const html = renderToStaticMarkup(<DataNotesPanel sections={sections} onClose={noop} />);
-    expect(html).toContain('role="complementary"');
-    expect(html).toMatch(/<button[^>]*>Close<\/button>/);
-    for (const section of sections) {
-      expect(html).toContain(section.title);
-      for (const item of section.items) {
-        expect(html).toContain(item.label);
-        expect(html).toContain(item.value);
-      }
-    }
-    expect(html).toContain('a list entry');
-  });
-});
-
 describe('campaign table and weekly chart details', () => {
   const real = campaignsFor('range=all');
   const strip = (html: string) => html.replace(/<[^>]*>/g, '|').replace(/\|+/g, '|');
@@ -741,7 +693,7 @@ describe('LocationsView', () => {
     renderToStaticMarkup(<LocationsScreen view={view} state={state} span={viewSpan} onSort={noop} />);
   const answerWorse = locationsFor('range=all', plantedStore('answer-worse'));
 
-  it('prints the action text and a link to Missed calls for that office, keeping dev', () => {
+  it('prints the action text and a link to Missed calls for that office', () => {
     const action = answerWorse.actions[0]!;
     expect(action.link.locationId).toBe('loc_a');
     const state = parseUrlState('?view=locations&range=all');
@@ -749,9 +701,6 @@ describe('LocationsView', () => {
     const html = render(answerWorse, state);
     expect(html).toContain(esc(action.text));
     expect(html).toContain(`href="${esc(actionHref(state, action.link))}"`);
-    const dev = parseUrlState('?view=locations&range=all&dev');
-    expect(actionHref(dev, action.link)).toContain('&dev');
-    expect(render(answerWorse, dev)).toContain(`href="${esc(actionHref(dev, action.link))}"`);
   });
 
   it('an empty view says there are no calls and has no table', () => {

@@ -4,7 +4,7 @@ import type { TakeawayShow } from '../models/takeawayModel';
 import { Caveats } from './Caveats';
 import { Link } from './Link';
 
-/** The one-page document. Plain text only: no links, no buttons, no dev content. Draws the model and decides nothing. */
+/** The one-page document. Plain text only: no links, no buttons. Draws the model and decides nothing. */
 export function PrintSummary({ model }: { model: PrintModel }) {
   return (
     <article className="print-page">

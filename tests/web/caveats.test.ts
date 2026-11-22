@@ -5,7 +5,6 @@ import type { ViewNotes } from '../../src/core/views';
 import { caveatsFor } from '../../src/web/models/caveats';
 import { estimateFormulas } from '../../src/web/models/estimates';
 import { callAt, campaign, makeStore, office } from '../core/views/fixtures';
-import { serverFixture } from '../server/helpers';
 import { overviewFor, toJson } from './fixtures';
 
 // The server fixture's data runs 2026-09-01 to 2026-09-14.
@@ -103,9 +102,7 @@ describe('caveatsFor', () => {
   });
 
   it('a range ending on the last data day carries no outcome-lag note', () => {
-    // The fixture export records outcomes at once, so give it a 3-day lag.
-    const base = serverFixture();
-    const view = overviewFor('range=last7', { ...base, dataNotes: { ...base.dataNotes, outcomeLagDays: 3 } });
+    const view = overviewFor('range=last7');
     expect(view.range.end).toBe(SPAN.end);
     const shown = caveatsFor(view.notes, SPAN, { comparing: false, range: view.range });
     expect(shown).toEqual([]);

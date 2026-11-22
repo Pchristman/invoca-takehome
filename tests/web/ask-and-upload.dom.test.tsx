@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Click-through tests for the question box and the upload panel, including Escape with two panels open.
+// Click-through tests for the question box and the upload panel, including Escape.
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { formatLongDate } from '../../src/web/format';
@@ -84,14 +84,13 @@ describe('Upload data', () => {
   const headerUpload = () => screen.getByRole('banner').querySelector('#upload-button') as HTMLButtonElement;
   const file = () => new File(['call_id\n'], 'calls.csv', { type: 'text/csv' });
 
-  async function openPanel(commit: Route, href = '/'): Promise<FetchCall[]> {
+  async function openPanel(commit: Route): Promise<FetchCall[]> {
     const calls = stubFetch({
       '/api/overview': () => ok(OVERVIEW),
       '/api/upload/preview': () => ok({ preview: PREVIEW }),
       '/api/upload/commit': commit,
-      '/api/data-notes': hangUntilAborted,
     });
-    renderApp(href);
+    renderApp('/');
     await screen.findByRole('heading', { name: 'Top actions' });
     fireEvent.click(headerUpload());
     await screen.findByRole('complementary', { name: 'Upload data' });
@@ -156,19 +155,10 @@ describe('Upload data', () => {
     expect(header.textContent).not.toContain(`Data as of ${formatLongDate('2026-09-14')}`);
   });
 
-  it('with the data notes and the upload panel both open, each Escape closes one panel', async () => {
-    await openPanel(() => commitReply(), '/?dev');
-    fireEvent.click(screen.getByRole('button', { name: 'Data notes' }));
-    await screen.findByRole('button', { name: 'Close data notes' });
-    expect(screen.getByRole('complementary', { name: 'Upload data' })).toBeTruthy();
-
+  it('Escape closes the upload panel and gives focus back to its header button', async () => {
+    await openPanel(() => commitReply());
     fireEvent.keyDown(document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Upload data' })).toBeNull());
-    expect(screen.getByRole('button', { name: 'Close data notes' })).toBeTruthy();
     expect(document.activeElement).toBe(headerUpload());
-
-    fireEvent.keyDown(document.body, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Close data notes' })).toBeNull());
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Data notes' }));
   });
 });

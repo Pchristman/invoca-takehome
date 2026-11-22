@@ -6,7 +6,7 @@ import { callAt, makeStore, range } from './fixtures';
 const days = Array.from({ length: 14 }, (_, i) => `2026-09-${String(i + 1).padStart(2, '0')}`);
 const store = makeStore(
   days.map((d) => callAt(`${d}T16:00:00Z`)),
-  { dataNotes: { outcomeLagDays: 3, badRows: 12 } },
+  { dataNotes: { badRows: 12 } },
 );
 
 describe('makeViewContext', () => {

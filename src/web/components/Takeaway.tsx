@@ -26,7 +26,6 @@ function TakeawayBody({ show }: { show: Exclude<TakeawayShow, { kind: 'hidden' }
     <section className="takeaway" aria-label="Takeaway">
       <span className="badge takeaway-marker">{show.marker}</span>
       <p className="takeaway-text">{show.text}</p>
-      {show.note !== null && <p className="takeaway-note small muted">{show.note}</p>}
     </section>
   );
 }

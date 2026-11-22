@@ -122,7 +122,7 @@ export interface CleanCall {
   localWeekday: number;
 }
 
-/** What the cleaning did, for the dev-mode data notes panel and the inline caveats. */
+/** What the cleaning did. Only badRows (the header's "rows skipped") and notes (the start-up message, the empty screen) are shown. */
 export interface DataNotes {
   rowsRead: number;
   /** Distinct calls, good or bad. */
@@ -151,8 +151,6 @@ export interface DataNotes {
   revenueOnNonBookedUsd: number;
   /** Booked calls whose revenue field is empty (counted as $0). */
   bookedWithoutRevenueCalls: number;
-  /** Whole days; 0 when no later row ever updated an outcome. */
-  outcomeLagDays: number;
   /** Carried over from LoadedExport. */
   unparseableUpdatedAt: number;
   /** Valid rows whose ended_at could not be parsed. */

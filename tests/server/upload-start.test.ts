@@ -91,7 +91,7 @@ describe('start with uploads', () => {
 
 describe('start with an injected AI service', () => {
   it('keeps the injected service after an upload', async () => {
-    const injected: TakeawayService = { ...offService(), status: () => ({ status: 'on', spendUsd: 0, cacheHits: 0, checkerFailures: 0 }) };
+    const injected: TakeawayService = { ...offService(), status: () => ({ status: 'on', spendUsd: 0 }) };
     const server = await begin({ dataDir: folder(), ai: injected });
     expect((await meta(server)).aiStatus).toBe('on');
     expect((await upload(server, 'commit')).status).toBe(200);

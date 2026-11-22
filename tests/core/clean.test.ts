@@ -157,7 +157,6 @@ describe('cleanExport', () => {
       revenueOnNonBookedCalls: 0,
       revenueOnNonBookedUsd: 0,
       bookedWithoutRevenueCalls: 0,
-      outcomeLagDays: 0,
     });
   });
 
@@ -166,14 +165,6 @@ describe('cleanExport', () => {
     const store = cleanExport(loaded);
     expect(store.campaigns).toBe(loaded.campaigns);
     expect(store.locations).toBe(loaded.locations);
-  });
-
-  test('cleanExport sets outcomeLagDays from the data', () => {
-    const store = clean([
-      goodRow({ outcome: '', revenue_usd: '', updated_at: '2026-03-02T10:05:00Z' }),
-      goodRow({ outcome: 'booked', updated_at: '2026-03-05T09:00:00Z' }),
-    ]);
-    expect(store.dataNotes.outcomeLagDays).toBe(3);
   });
 
   test('a tie between a good row and a later bad row makes the call bad and counts the tie', () => {

@@ -9,12 +9,3 @@ export function uploadLocked(step: string): boolean {
   return step === 'saving';
 }
 
-/** The one panel an Escape closes: the upload panel unless a file is being written, otherwise the data notes. */
-export function panelToClose(
-  event: { key: string; defaultPrevented: boolean; targetTag: string },
-  panels: { uploadOpen: boolean; uploadStep: string; dataNotesOpen: boolean },
-): 'upload' | 'data-notes' | null {
-  if (!escapeMayClose(event)) return null;
-  if (panels.uploadOpen && !uploadLocked(panels.uploadStep)) return 'upload';
-  return panels.dataNotesOpen ? 'data-notes' : null;
-}

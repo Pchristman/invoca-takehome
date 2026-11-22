@@ -14,7 +14,7 @@ describe('pageKey', () => {
 
   it('does not change with anything else in the state', () => {
     const base = pageKey(range, { location: 'loc_a' });
-    const other = { location: 'loc_a', campaign: 'c', dev: true, view: 'missed-calls' } as { location: string };
+    const other = { location: 'loc_a', campaign: 'c', view: 'missed-calls' } as { location: string };
     expect(pageKey({ ...range }, other)).toBe(base);
   });
 });

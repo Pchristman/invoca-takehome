@@ -3,7 +3,7 @@ import { VIEW_ORDER, withView, toSearch } from '../urlState';
 import type { UrlState } from '../urlState';
 import { Link } from './Link';
 
-/** Four links. Each keeps the range, comparison and dev, and drops the campaign and location pick. */
+/** Four links. Each keeps the range and comparison, and drops the campaign and location pick. */
 export function Nav({ state }: { state: UrlState }) {
   return (
     <nav aria-label="Views">

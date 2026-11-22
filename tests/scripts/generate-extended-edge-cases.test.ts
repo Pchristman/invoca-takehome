@@ -83,18 +83,6 @@ describe('surge and fade windows are office-local dates', () => {
 });
 
 describe('outcome lag', () => {
-  const dupPair = (lagSeconds: number): string[] => [
-    callLine({ id: 'd1', start: '2026-10-10T10:00:00Z', outcome: '' }),
-    callLine({ id: 'd1', start: '2026-10-10T10:00:00Z', outcome: 'booked', revenue: '120', lagSeconds }),
-  ];
-
-  it('new duplicates never push the outcome lag above what the data already shows (1 day)', () => {
-    const input = withCalls(callsText([ANCHOR_FIRST, ANCHOR_LAST], dupPair(12 * 3600)));
-    expect(cleaned(input.calls).dataNotes.outcomeLagDays).toBe(1);
-    const out = generateExtendedCalls(input, { ...OFF, duplicatedCalls: 40, threeRowCalls: 10 });
-    expect(cleaned(out).dataNotes.outcomeLagDays).toBe(1);
-  });
-
   it('data with no outcome lag at all cannot take duplicates: GenerateError naming the lag', () => {
     const noLag = withCalls(callsText([ANCHOR_FIRST, ANCHOR_LAST, { id: 'k1', start: '2026-10-10T10:00:00Z', outcome: 'booked', revenue: '50' }]));
     expect(() => generateExtendedCalls(noLag, { ...OFF, duplicatedCalls: 1 })).toThrow(GenerateError);

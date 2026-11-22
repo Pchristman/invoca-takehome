@@ -1,6 +1,5 @@
 import { dedupeRows } from './dedupe';
 import { localParts } from './localTime';
-import { measureOutcomeLagDays } from './outcomeLag';
 import { compareText } from './text';
 import { BAD_REASONS, type BadReason, type CallStore, type CleanCall, type LoadedExport } from './types';
 
@@ -94,7 +93,6 @@ export function cleanExport(loaded: LoadedExport): CallStore {
       revenueOnNonBookedCalls,
       revenueOnNonBookedUsd: revenueOnNonBookedCents / 100,
       bookedWithoutRevenueCalls,
-      outcomeLagDays: measureOutcomeLagDays(dedupe.groups, dedupe.winners),
       unparseableUpdatedAt: loaded.unparseableUpdatedAt,
       unparseableEndedAt: loaded.unparseableEndedAt,
       notes: loaded.notes,

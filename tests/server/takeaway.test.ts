@@ -12,7 +12,7 @@ import { get, serverFixture, tempDir } from './helpers';
 
 const VIEWS = ['overview', 'campaigns', 'locations', 'missed-calls'] as const;
 
-const STATUS: AiStatus = { status: 'on', spendUsd: 1.5, cacheHits: 2, checkerFailures: 3 };
+const STATUS: AiStatus = { status: 'on', spendUsd: 1.5 };
 
 interface Call { sheet: FactSheet; template: string }
 
@@ -108,12 +108,6 @@ describe('GET /api/takeaway/:view', () => {
     expect(JSON.stringify(spy.mock.calls)).not.toContain('secret');
   });
 
-  it("data-notes returns the service's status", async () => {
-    const app = createApp(serverFixture(), { ai: stub(AI_RESULT).service });
-    const r = await get(app, '/api/data-notes');
-    expect((r.json as { ai: AiStatus }).ai).toEqual(STATUS);
-  });
-
   describe('end to end with a fake model', () => {
     let dir: string;
     beforeEach(() => {
@@ -121,7 +115,7 @@ describe('GET /api/takeaway/:view', () => {
     });
     afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-    it('two identical requests make one model call; the second is still source ai; data-notes shows the cache hit', async () => {
+    it('two identical requests make one model call; the second is still source ai', async () => {
       const store = serverFixture();
       // Learn one real fact key from the overview's own sheet, so the reply uses only placeholders.
       const probe = stub(AI_RESULT);
@@ -144,10 +138,6 @@ describe('GET /api/takeaway/:view', () => {
       expect(first.json).toMatchObject({ source: 'ai', reason: null });
       expect(second.json).toMatchObject({ source: 'ai', reason: null });
       expect(model.calls).toBe(1);
-
-      const notes = (await get(app, '/api/data-notes')).json as { ai: AiStatus };
-      expect(notes.ai.cacheHits).toBe(1);
-      expect(notes.ai.spendUsd).toBeGreaterThan(0);
     });
   });
 });

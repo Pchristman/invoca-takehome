@@ -5,7 +5,6 @@ import { Header } from '../../src/web/components/Header';
 import { UploadPanelView } from '../../src/web/components/UploadPanel';
 import { INITIAL_UPLOAD } from '../../src/web/models/uploadModel';
 import type { UploadState } from '../../src/web/models/uploadModel';
-import { panelToClose } from '../../src/web/models/escapeKey';
 import { EmptyScreen } from '../../src/web/App';
 import { defaultsHref, parseUrlState, printHref } from '../../src/web/urlState';
 import { serverFixture } from '../server/helpers';
@@ -55,8 +54,8 @@ describe('UploadPanel', () => {
     expect(html).not.toContain('Add 40 calls');
   });
 
-  it('done shows the added text and a plain link that keeps view and dev only', () => {
-    const state = parseUrlState('?view=campaigns&dev&start=2026-09-01&end=2026-09-07&campaign=c1');
+  it('done shows the added text and a plain link that keeps the view only', () => {
+    const state = parseUrlState('?view=campaigns&start=2026-09-01&end=2026-09-07&campaign=c1');
     const href = defaultsHref(state);
     const html = panel({ step: 'done', fileName: 'f.csv', preview: previewOf('calls', { newRows: 40 }), spanEnd: null, warning: null }, href);
     expect(html).toContain('Added 40 new calls.');
@@ -65,7 +64,6 @@ describe('UploadPanel', () => {
     expect(match).not.toBeNull();
     const linked = match![1]!.replace(/&amp;/g, '&');
     expect(linked).toBe(href);
-    expect(parseUrlState(linked.slice(linked.indexOf('?'))).dev).toBe(true);
     expect(parseUrlState(linked.slice(linked.indexOf('?'))).view).toBe('campaigns');
     expect(linked).not.toContain('start');
     expect(linked).not.toContain('campaign=');
@@ -103,19 +101,18 @@ describe('UploadPanel', () => {
 });
 
 describe('Header upload button', () => {
-  const render = (dev: boolean, uploadOpen = false) =>
+  const render = (uploadOpen = false) =>
     renderToStaticMarkup(
-      <Header meta={meta} dev={dev} dataNotesOpen={false} onToggleDataNotes={noop} printLink={printHref(parseUrlState(''))} uploadOpen={uploadOpen} onToggleUpload={noop} />,
+      <Header meta={meta} printLink={printHref(parseUrlState(''))} uploadOpen={uploadOpen} onToggleUpload={noop} />,
     );
 
-  it('shows Upload data in normal mode and in dev mode', () => {
-    expect(render(false)).toContain('Upload data');
-    expect(render(true)).toContain('Upload data');
+  it('shows Upload data', () => {
+    expect(render()).toContain('Upload data');
   });
 
   it('marks the button pressed only while the panel is open', () => {
-    expect(render(false, false)).toContain('aria-pressed="false"');
-    expect(render(false, true)).toContain('aria-pressed="true"');
+    expect(render(false)).toContain('aria-pressed="false"');
+    expect(render(true)).toContain('aria-pressed="true"');
   });
 });
 
@@ -131,27 +128,6 @@ describe('upload panel focus and warning', () => {
     expect(html).toContain('Added 4 new calls.');
     expect(html).toContain(`<p role="alert">${warning}</p>`);
     expect(panel({ ...done, warning: null })).not.toContain('role="alert"');
-  });
-});
-
-describe('Escape closes one panel', () => {
-  const panels = { uploadOpen: true, uploadStep: 'preview', dataNotesOpen: true };
-  const escape = (over: Partial<Parameters<typeof panelToClose>[0]> = {}, open: Partial<typeof panels> = {}) =>
-    panelToClose({ key: 'Escape', defaultPrevented: false, targetTag: 'BODY', ...over }, { ...panels, ...open });
-
-  it('closes the upload panel first, then the data notes, never both at once', () => {
-    expect(escape()).toBe('upload');
-    expect(escape({}, { uploadOpen: false })).toBe('data-notes');
-    expect(escape({}, { uploadOpen: false, dataNotesOpen: false })).toBeNull();
-  });
-  it('ignores other keys, handled events, and a select', () => {
-    expect(escape({ key: 'a' })).toBeNull();
-    expect(escape({ defaultPrevented: true })).toBeNull();
-    expect(escape({ targetTag: 'SELECT' })).toBeNull();
-  });
-  it('never closes the upload panel while saving; the data notes still close', () => {
-    expect(escape({}, { uploadStep: 'saving', dataNotesOpen: false })).toBeNull();
-    expect(escape({}, { uploadStep: 'saving' })).toBe('data-notes');
   });
 });
 

@@ -54,7 +54,7 @@ export function offService(): TakeawayService {
   const service: TakeawayService = {
     takeaway: async (_sheet, template) => templateResult(template, 'ai_off'),
     interpret: async () => ({ ok: false, reason: 'ai_off', detail: null }),
-    status: () => ({ status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 }),
+    status: () => ({ status: 'off', spendUsd: 0 }),
     withData: () => service,
   };
   return service;
@@ -457,7 +457,7 @@ function buildService(options: ServiceOptions, ledger: Ledger): TakeawayService 
 
     status(): AiStatus {
       const { summary } = ledger;
-      const counts = { spendUsd: nanoToUsd(summary.spendNanoUsd), cacheHits: summary.cacheHits, checkerFailures: summary.checkerFailures };
+      const counts = { spendUsd: nanoToUsd(summary.spendNanoUsd) };
       if (model === null || !ledger.logUsable) return { status: 'off', ...counts };
       const oneMore = worstCaseNanoUsd(model.id, TYPICAL_PROMPT_CHARS);
       const reached = summary.spendNanoUsd + ledger.reservedNano + oneMore > limitNano;

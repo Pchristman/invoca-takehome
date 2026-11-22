@@ -64,8 +64,8 @@ describe('views, takeaway, panels and heatmap (Task 5)', () => {
   const withMotion = (m: typeof ON | typeof MOTION_OFF, node: React.ReactNode) =>
     renderToStaticMarkup(<MotionContext value={m}>{node}</MotionContext>);
   const shows: TakeawayShow[] = [
-    { kind: 'ready', text: 'Calls rose.', marker: 'AI', note: null },
-    { kind: 'ready', text: 'Calls fell.', marker: 'template', note: 'AI is off: no API key.' },
+    { kind: 'ready', text: 'Calls rose.', marker: 'AI' },
+    { kind: 'ready', text: 'Calls fell.', marker: 'template' },
     { kind: 'loading', label: 'Loading takeaway...' },
     { kind: 'hidden' },
   ];
@@ -99,7 +99,6 @@ describe('views, takeaway, panels and heatmap (Task 5)', () => {
       expect(ai).toContain('Calls rose.');
       expect(ai).toContain('AI');
       expect(template).toContain('template');
-      expect(template).toContain('AI is off: no API key.');
       expect(loading).toContain('Loading takeaway...');
       expect(loading).not.toContain('Calls rose.');
       expect(hidden).toBe('');

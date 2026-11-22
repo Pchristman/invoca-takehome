@@ -16,7 +16,6 @@ This guide shows how to read each page of Inbound Call Performance and what to d
 - [Ask a question](#ask-a-question)
 - [Print summary](#print-summary)
 - [Upload newer data](#upload-newer-data)
-- [Checking the data (optional)](#checking-the-data-optional)
 - [Keep in mind](#keep-in-mind)
 
 ## A weekly routine
@@ -179,16 +178,6 @@ When you have a newer export, add it here. You upload one CSV at a time: calls, 
 3. **Close.** After rows are added, the page refreshes to the new data and "Data as of" moves to the new latest date.
 
 A newer row for a call you already have replaces the older one. Rows with a problem are counted and reported; they never stop the upload.
-
-## Checking the data (optional)
-
-Add `?dev` to the end of the web address to show a Data notes button. It lists what the app cleaned up when it loaded your export. You do not need it day to day; it is there when a number looks off.
-
-![The data notes panel](user-guide/14-data-notes.png)
-
-1. **Duplicate rows.** The export can hold several rows for one call. The app keeps the latest one.
-2. **Unattributed calls** and the tracking numbers they came in on.
-3. **Rows skipped.** Rows the app could not use, counted by reason. If any exist, the header also says so on every page.
 
 ## Keep in mind
 

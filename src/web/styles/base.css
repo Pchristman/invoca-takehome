@@ -624,7 +624,7 @@ th .badge {
   border: 1px solid var(--color-chart-bar-partial);
 }
 
-/* ---------- notes panel (dev mode) ---------- */
+/* ---------- notes panel (upload) ---------- */
 .notes-panel {
   margin: var(--space-5) 0;
   padding: var(--space-3) var(--space-4);
@@ -678,7 +678,7 @@ th .badge {
   font-weight: 500;
 }
 
-/* ---------- data notes panel items ---------- */
+/* ---------- notes panel items ---------- */
 .notes-panel .row {
   justify-content: space-between;
   align-items: center;
@@ -794,18 +794,10 @@ th .badge {
   border-left-color: var(--color-rule);
 }
 
-.takeaway-text,
-.takeaway-note {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
 .takeaway-text {
   flex: 1 1 20rem;
-}
-
-.takeaway-note {
-  flex-basis: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- question box and answer page (S4) ---------- */

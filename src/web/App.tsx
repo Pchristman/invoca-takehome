@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { DataNotesResponse, Meta, TakeawayResponse, UploadCommitResponse } from '../server/api';
+import type { Meta, TakeawayResponse, UploadCommitResponse } from '../server/api';
 import type { ViewName } from '../core/views/facts';
 import type { DateRange } from '../core/ranges';
 import type {
@@ -12,9 +12,8 @@ import type {
 import { CampaignsView } from './components/CampaignsView';
 import { LocationsView } from './components/LocationsView';
 import { MissedCallsView } from './components/MissedCallsView';
-import { DataNotesPanel } from './components/DataNotesPanel';
 import { OverviewView } from './components/OverviewView';
-import { DATA_NOTES_BUTTON_ID, Header, UPLOAD_BUTTON_ID } from './components/Header';
+import { Header, UPLOAD_BUTTON_ID } from './components/Header';
 import { UploadPanel } from './components/UploadPanel';
 import { Nav } from './components/Nav';
 import { RangeControl } from './components/RangeControl';
@@ -23,14 +22,13 @@ import { PrintControls, PrintSummary } from './components/PrintSummary';
 import { AnswerView } from './components/AnswerView';
 import { AskBox } from './components/AskBox';
 import { Takeaway } from './components/Takeaway';
-import { dataNotesModel } from './models/dataNotesModel';
 import { canPrint, printModel } from './models/printModel';
 import type { PrintTakeaways } from './models/printModel';
 import { takeawayModel } from './models/takeawayModel';
 import { Reveal, RevealPresence } from './components/Reveal';
 import { ViewTransition } from './components/ViewTransition';
 import { contentKey } from './models/motionVariants';
-import { panelToClose, uploadLocked } from './models/escapeKey';
+import { escapeMayClose, uploadLocked } from './models/escapeKey';
 import type { UploadState } from './models/uploadModel';
 import { ContentErrorFallback, ErrorBoundary } from './components/ErrorBoundary';
 import { displayState } from './models/keepPrevious';
@@ -120,12 +118,11 @@ function reloadTo(href: string): void {
  * a write that finishes after the panel was closed reloads when it finishes. While a file is being written
  * (locked) nothing closes the panel: not Close, not Escape, not the header toggle.
  * `meta` is the commit's own meta once rows were written, so "Data as of", the date limits and the pickers update at once.
- * It holds the page's one Escape listener, so one Escape closes one panel: this one, or else the data notes.
+ * It holds the page's one Escape listener: Escape closes the panel unless a file is being written.
  */
 function useUploadPanel(
   resetHref: string,
   reload: (href: string) => void,
-  dataNotes?: { open: boolean; close(): void },
 ): { open: boolean; locked: boolean; toggle(): void; panel: ReactNode; meta: Meta | null } {
   const [open, setOpen] = useState(false); // not in the URL: a half-chosen file is not a screen to link to
   const [step, setStep] = useState<UploadState['step']>('choose');
@@ -152,13 +149,10 @@ function useUploadPanel(
     setOpen(true);
   };
   useEffect(() => {
-    // Added again after each render, so it always sees the panels as they are now.
+    // Added again after each render, so it always sees the panel as it is now.
     const onKeyDown = (event: KeyboardEvent) => {
       const targetTag = event.target instanceof Element ? event.target.tagName : '';
-      const panels = { uploadOpen: open, uploadStep: step, dataNotesOpen: dataNotes?.open ?? false };
-      const which = panelToClose({ key: event.key, defaultPrevented: event.defaultPrevented, targetTag }, panels);
-      if (which === 'upload') close();
-      if (which === 'data-notes') dataNotes?.close();
+      if (open && !locked && escapeMayClose({ key: event.key, defaultPrevented: event.defaultPrevented, targetTag })) close();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -177,13 +171,7 @@ function useUploadPanel(
 
 function ReadyShell({ state, meta: loadedMeta, resetHref }: { state: UrlState; meta: Meta; resetHref: string }) {
   const { navigate } = useUrlState();
-  const [dataNotesToggled, setDataNotesToggled] = useState(false);
-  const dataNotesOpen = state.dev && dataNotesToggled; // without ?dev there is no panel, whatever the state says
-  const closeDataNotes = () => {
-    setDataNotesToggled(false);
-    document.getElementById(DATA_NOTES_BUTTON_ID)?.focus();
-  };
-  const upload = useUploadPanel(resetHref, reloadTo, { open: dataNotesOpen, close: closeDataNotes });
+  const upload = useUploadPanel(resetHref, reloadTo);
   const meta = upload.meta ?? loadedMeta;
   const answering = state.answer !== null; // the answer page makes its own request, not the view's
   const view = useApi<unknown>(answering ? null : `/api/${state.view}`, apiParams(state, state.view));
@@ -202,22 +190,12 @@ function ReadyShell({ state, meta: loadedMeta, resetHref }: { state: UrlState; m
     <>
       <Header
         meta={meta}
-        dev={state.dev}
-        dataNotesOpen={dataNotesOpen}
-        onToggleDataNotes={() => setDataNotesToggled((open) => !open)}
         printLink={printHref(state)}
         uploadOpen={upload.open}
         uploadLocked={upload.locked}
         onToggleUpload={upload.toggle}
       />
       {upload.panel}
-      <RevealPresence>
-        {dataNotesOpen && (
-          <Reveal key="data-notes" kind="panel" id="data-notes">
-            <DataNotes resetHref={resetHref} onClose={closeDataNotes} />
-          </Reveal>
-        )}
-      </RevealPresence>
       <Nav state={state} />
       <AskBox meta={meta} state={state} onNavigate={(href) => pushUrl(href)} />
       {!showAnswer && (
@@ -239,7 +217,7 @@ function ReadyShell({ state, meta: loadedMeta, resetHref }: { state: UrlState; m
             <EmptyScreen notes={meta.notes} />
           ) : (
             <>
-              <Takeaway show={takeawayModel(takeaway.state, { dev: state.dev })} />
+              <Takeaway show={takeawayModel(takeaway.state)} />
               <RequestFrame state={shown.state} loadingLabel="Loading this view..." resetHref={resetHref} onRetry={view.retry}>
                 {(data) =>
                   state.view === 'overview' ? (
@@ -282,7 +260,7 @@ function ReadyShell({ state, meta: loadedMeta, resetHref }: { state: UrlState; m
 }
 
 /**
- * The one-page summary (?print): one overview and four takeaways, company-wide, never dev.
+ * The one-page summary (?print): one overview and four takeaways, company-wide.
  * It has no header, nav or range control. The takeaway requests use each view's own name, never state.view.
  */
 function PrintShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; resetHref: string }) {
@@ -306,24 +284,6 @@ function PrintShell({ state, meta, resetHref }: { state: UrlState; meta: Meta; r
           {(data) => <PrintSummary model={printModel({ view: data, meta, span, takeaways })} />}
         </RequestFrame>
       )}
-    </>
-  );
-}
-
-// Mounted only while the panel is open, so /api/data-notes is requested only then (and only with ?dev).
-function DataNotes({ resetHref, onClose }: { resetHref: string; onClose(): void }) {
-  const notes = useApi<DataNotesResponse>('/api/data-notes', NO_PARAMS);
-  const ready = notes.state?.status === 'ready';
-  return (
-    <>
-      {!ready && ( // the ready panel has its own Close button; while loading or failed this one is the way out
-        <button type="button" className="button" onClick={onClose}>
-          Close data notes
-        </button>
-      )}
-      <RequestFrame state={notes.state} loadingLabel="Loading data notes..." resetHref={resetHref} onRetry={notes.retry}>
-        {(data) => <DataNotesPanel sections={dataNotesModel(data)} onClose={onClose} />}
-      </RequestFrame>
     </>
   );
 }

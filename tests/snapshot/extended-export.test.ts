@@ -106,7 +106,6 @@ describe('extended export: loads clean', () => {
     expect(notes.tiedCalls).toBe(0);
     expect(notes.revenueOnNonBookedCalls).toBe(0);
     expect(notes.bookedWithoutRevenueCalls).toBe(0);
-    expect(notes.outcomeLagDays).toBe(3);
 
     // Observed values, recorded not derived: this is what the committed seed produces.
     const total = tally(callsInRange(extended.calls, allOf(extended.calls)));

@@ -98,7 +98,7 @@ describe('uploadModel confirm', () => {
     expect(text(done('campaigns', { newRows: 3 }))).toBe('Added 3 new campaigns.');
     expect(text(done('calls', { duplicates: 4 }))).toBe('Nothing was added.');
     expect(text(done('calls', { newRows: 2 }, '2026-09-30'))).toBe('Added 2 new calls. The data now runs to Sep 30, 2026.');
-    expect(uploadModel(done('calls', { newRows: 1 }), '/campaigns?dev').seeNewDataHref).toBe('/campaigns?dev');
+    expect(uploadModel(done('calls', { newRows: 1 }), '/?view=campaigns').seeNewDataHref).toBe('/?view=campaigns');
   });
 
   it('shows the commit preview rows once done, not the earlier preview', () => {

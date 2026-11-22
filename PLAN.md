@@ -27,7 +27,7 @@ Each phase in the build order gets its own implementation plan before any code i
 - A date range control (presets and custom) with a comparison to the previous period of equal length.
 - Four views, each ending in an action: **Overview**, **Campaigns**, **Locations**, **Missed calls**.
 - Inline caveats on each view wherever a number is estimated or may be incomplete.
-- A **data notes** panel in **dev mode** only, for checking the cleaning.
+- A count of skipped rows in the header when the export has bad rows. There is no data notes panel.
 - A downloadable CSV of callers to call back.
 - Optional AI: one short takeaway per view, checked before display, with template fallback.
 - The submission docs: README, TECHNICAL.md, architecture diagram, decision summary draft.
@@ -72,22 +72,9 @@ These sit inline on the view they affect, not behind a panel, because the rules 
 
 - **Estimates:** estimated spend, cost per booking, revenue per budget dollar and missed-call value are labeled "est.", with the formula one click away.
 - **Incomplete periods:** the notes from section 3.2 (no full previous period; the first data day may be incomplete; the last data day gets no note, see 3.2).
-- **Outcome lag:** the longest gap seen in this export between a call starting and a later row updating its outcome. The gap is measured from the data, never hard-coded, and shown only in the data notes panel (3.4). No note on the page says recent bookings and revenue may still rise: calls still waiting for an outcome are spread over the whole export, not concentrated in recent days.
-- **Skipped rows:** if any rows were bad, one line in the header ("12 rows skipped"). The breakdown lives in the data notes panel.
+- **Outcome lag:** not measured and not shown. No note on the page says recent bookings and revenue may still rise: calls still waiting for an outcome are spread over the whole export, not concentrated in recent days.
+- **Skipped rows:** if any rows were bad, one line in the header ("12 rows skipped"). There is no data notes panel, so the header count is all the app shows about them.
 - **Takeaway source:** the small "AI" or "template" marker on each takeaway.
-
-### 3.4 Data notes panel (dev mode)
-
-A panel for checking the cleaning and the AI, shown only in **dev mode**. Dev mode is switched on by adding `?dev` to the URL, so it can be shown in the review without a restart. Without the flag the panel and its entry point do not render. The server endpoint stays available, since the app is local only. The panel shows, for the loaded export:
-
-- Rows read, calls after removing duplicates, and how many duplicate rows were collapsed.
-- Duplicate rows that tied on `updated_at`.
-- Unattributed calls (no campaign) and the tracking numbers they came in on.
-- Answered calls with no outcome yet ("pending").
-- Bad rows, counted by reason.
-- Revenue found on non-booked rows (ignored), and booked calls with no revenue.
-- The measured outcome lag.
-- AI status: on, off (no key), or budget reached; spend so far; cache hits and checker failures.
 
 ---
 
@@ -230,7 +217,6 @@ CSV files ─▶ load + validate ─▶ clean (dedupe, attribute, localize) ─�
 
 2. **Server** (Hono). Loads the data once at startup, then serves:
    - One JSON endpoint per view, taking range A and optional range B.
-   - Data notes.
    - The callback list as CSV.
    - Takeaways, on their own endpoint so views never wait on AI.
    - The built front end, in production mode.
@@ -238,7 +224,7 @@ CSV files ─▶ load + validate ─▶ clean (dedupe, attribute, localize) ─�
    Bad query parameters return 400 with a message.
 
 3. **AI service** (server-side only). Turns a fact sheet into a checked takeaway or returns the template (section 7). The API key never reaches the browser.
-4. **Web app** (Vite + React). It has the view shell, the date range control, the inline caveats and the dev-mode data notes panel, and draws charts with one small library (Recharts). It formats numbers and draws; it never computes metrics. Colors, type, spacing and motion timings are design tokens from the first UI phase so S5 is a restyle, not a rewrite.
+4. **Web app** (Vite + React). It has the view shell, the date range control, and the inline caveats, and draws charts with one small library (Recharts). It formats numbers and draws; it never computes metrics. Colors, type, spacing and motion timings are design tokens from the first UI phase so S5 is a restyle, not a rewrite.
 
 ### Config (`.env`, documented in `.env.example`)
 
@@ -314,7 +300,7 @@ One JSON line per call in gitignored `logs/ai-calls.jsonl`. Each line holds:
 - whether it was served from the cache
 - whether the check passed, and the failure reason if not
 
-Cache hits are logged with zero cost. The dev-mode data notes panel shows total spend. (`docs/AI_COST_LOG.md` is maintained by me, not the app.)
+Cache hits are logged with zero cost. (`docs/AI_COST_LOG.md` is maintained by me, not the app.)
 
 ### Failure handling
 
@@ -356,7 +342,7 @@ The model fills a fixed filter schema (view, offices, campaigns, weekdays, hours
 - **Server:** in-process requests to every endpoint. Covers valid ranges, bad or missing params (400), an inverted range, a range outside the data, and the CSV download's headers and rows.
 - **AI:** checker tests with crafted good and bad outputs, one per rejection reason. Client, cache and guard are tested with a fake model: a cache hit makes no call; the guard blocks at the limit; every failure mode falls back. **No automated test calls the real API.** A manual script makes one real call when I choose to run it.
 - **Hard-coding guard:** a test runs the core on a fixture export with entirely different campaign names, office names, time zones and dates, and checks every view builds.
-- **Web:** decisions (text, order, blanks, caveat conditions, URL state, request state) live in pure modules with their own tests. Components are kept thin and are tested by rendering them to a string in Node with `react-dom/server`, checking what must be present or absent: dev-only elements, blank cells, escaped names, loading and error states. Click-through tests (`tests/web/*.dom.test.tsx`) render the whole app in happy-dom with Testing Library and a stubbed `fetch`, then click and type as a user would: navigation, the range control, the ask box and upload. No test matches CSS, Docker or source file text. Visual layout, wrapping and charts are not unit tested. Each UI phase also ends with a written click-through checklist, run in the browser and shown to me.
+- **Web:** decisions (text, order, blanks, caveat conditions, URL state, request state) live in pure modules with their own tests. Components are kept thin and are tested by rendering them to a string in Node with `react-dom/server`, checking what must be present or absent: blank cells, escaped names, loading and error states. Click-through tests (`tests/web/*.dom.test.tsx`) render the whole app in happy-dom with Testing Library and a stubbed `fetch`, then click and type as a user would: navigation, the range control, the ask box and upload. No test matches CSS, Docker or source file text. Visual layout, wrapping and charts are not unit tested. Each UI phase also ends with a written click-through checklist, run in the browser and shown to me.
 
 ---
 
@@ -389,7 +375,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 
 ### Phase 2: Clean
 
-- **Delivers:** dedupe, attribution, localization, pending outcomes, revenue rule, outcome lag measurement and the data notes summary.
+- **Delivers:** dedupe, attribution, localization, pending outcomes, revenue rule and the data notes summary.
 - **Done when:** the shipped export cleans to 5,000 calls, 1,204 bookings, $432,894 revenue and 144 unattributed, and every rule in section 5 has its own passing test.
 - **Edge cases to handle and test:**
   - three rows for one call arriving out of order
@@ -451,7 +437,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 
 ### Phase 6: Server
 
-- **Delivers:** Hono server loading data at startup, view, data notes, takeaway (template only for now) and callback CSV endpoints, plus serving the built front end.
+- **Delivers:** Hono server loading data at startup, view, takeaway (template only for now) and callback CSV endpoints, plus serving the built front end.
 - **Done when:** in-process endpoint tests pass, and `npm start` serves JSON for every view on the shipped data.
 - **Edge cases to handle and test:**
   - missing or malformed date params (400 with message)
@@ -461,13 +447,12 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - CSV escaping of fields
   - startup with a missing data folder (clear error, non-zero exit)
 
-### Phase 7: UI part 1 (shell, range, data notes, Overview, Campaigns)
+### Phase 7: UI part 1 (shell, range, Overview, Campaigns)
 
 - **Delivers:**
   - the app shell with navigation
   - date range control with presets and custom, state in the URL
   - the inline caveats (section 3.3)
-  - the dev-mode data notes panel
   - the Overview and Campaigns views with actions
   - design tokens (color, type, spacing, motion durations) in one place
 - **Done when:** the click-through checklist passes in the browser:
@@ -478,8 +463,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - best/worst marked
   - weekly chart switches campaign
   - partial weeks marked
-  - with `?dev`, the data notes panel opens from every view; without it, the panel and its entry point are absent
-  - estimates labeled, incomplete-day notes visible without dev mode
+  - estimates labeled, incomplete-day notes visible
 - **Edge cases:**
   - loading and error states for each request
   - empty range
@@ -566,7 +550,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 
 #### S3: Print-friendly one-page summary
 
-- **Delivers:** a print view for the current range with the Overview tiles, each view's action and its takeaway, plus the estimate labels and caveats from section 3.3. No dev-mode content. It fits on one page.
+- **Delivers:** a print view for the current range with the Overview tiles, each view's action and its takeaway, plus the estimate labels and caveats from section 3.3. It fits on one page.
 - **Done when:** browser print preview fits one A4/Letter page on both datasets; the README covers what this phase added.
 - **Edge cases:**
   - AI off (template text)

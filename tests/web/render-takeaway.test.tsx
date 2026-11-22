@@ -4,8 +4,8 @@ import { Takeaway } from '../../src/web/components/Takeaway';
 import type { TakeawayShow } from '../../src/web/models/takeawayModel';
 
 const html = (show: TakeawayShow) => renderToStaticMarkup(<Takeaway show={show} />);
-const ready = (text: string, marker: 'AI' | 'template' = 'AI', note: string | null = null): TakeawayShow => ({
-  kind: 'ready', text, marker, note,
+const ready = (text: string, marker: 'AI' | 'template' = 'AI'): TakeawayShow => ({
+  kind: 'ready', text, marker,
 });
 
 describe('<Takeaway>', () => {
@@ -34,10 +34,5 @@ describe('<Takeaway>', () => {
 
   it('hidden prints nothing', () => {
     expect(html({ kind: 'hidden' })).toBe('');
-  });
-
-  it('shows a note only when the model gives one', () => {
-    expect(html(ready('Text.', 'template', null))).not.toContain('AI is off');
-    expect(html(ready('Text.', 'template', 'AI is off: no API key.'))).toContain('AI is off: no API key.');
   });
 });

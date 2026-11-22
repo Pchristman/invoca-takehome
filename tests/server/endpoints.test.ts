@@ -12,7 +12,6 @@ type Body = Record<string, any>; // eslint-disable-line @typescript-eslint/no-ex
 const body = (json: unknown): Body => json as Body;
 
 const VIEWS = ['overview', 'campaigns', 'locations', 'missed-calls'] as const;
-const AI_OFF = { status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 };
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -37,27 +36,6 @@ const sentenceFor = (name: (typeof VIEWS)[number], preset: 'last7' | 'last28' | 
       return buildMissedCalls(store, range, undefined, { locationId: option }).templateSentence;
   }
 };
-
-describe('data notes', () => {
-  it('passes the store notes through and reports AI off', async () => {
-    const notesStore = makeStore([callAt('2026-09-01T16:00:00Z', { campaignId: null, locationId: 'loc_a' })], {
-      locations: [office('loc_a', 'Office A')],
-      dataNotes: { badRows: 12, duplicateRowsCollapsed: 7 },
-    });
-    const r = await get(createApp(notesStore), '/api/data-notes');
-    expect(r.status).toBe(200);
-    expect(r.json).toEqual({ dataNotes: JSON.parse(JSON.stringify(notesStore.dataNotes)), ai: AI_OFF });
-    expect(body(r.json).dataNotes).toMatchObject({ badRows: 12, duplicateRowsCollapsed: 7 });
-  });
-
-  it('answers with or without the dev parameter', async () => {
-    const plain = await get(app, '/api/data-notes');
-    const dev = await get(app, '/api/data-notes?dev');
-    expect(plain.status).toBe(200);
-    expect(dev.status).toBe(200);
-    expect(dev.json).toEqual(plain.json);
-  });
-});
 
 describe('takeaway', () => {
   it.each(VIEWS)('%s: the template sentence', async (name) => {
@@ -101,14 +79,14 @@ describe('takeaway', () => {
 
   it('a key in the environment changes nothing', async () => {
     const before = await get(app, '/api/takeaway/overview');
-    const notesBefore = await get(app, '/api/data-notes');
+    const metaBefore = await get(app, '/api/meta');
     vi.stubEnv('ANTHROPIC_API_KEY', 'not-a-real-key');
     const after = await get(app, '/api/takeaway/overview');
-    const notesAfter = await get(app, '/api/data-notes');
+    const metaAfter = await get(app, '/api/meta');
     expect(after.json).toEqual(before.json);
     expect(body(after.json).source).toBe('template');
-    expect(notesAfter.json).toEqual(notesBefore.json);
-    expect(body(notesAfter.json).ai.status).toBe('off');
+    expect(metaAfter.json).toEqual(metaBefore.json);
+    expect(body(metaAfter.json).aiStatus).toBe('off');
   });
 });
 

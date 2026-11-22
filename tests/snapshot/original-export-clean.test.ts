@@ -36,10 +36,6 @@ describe('shipped export, cleaned', () => {
     expect(dataNotes.bookedWithoutRevenueCalls).toBe(0);
   });
 
-  test('outcome lag is 3 days (about 71.7 hours)', () => {
-    expect(dataNotes.outcomeLagDays).toBe(3);
-  });
-
   test('every call has a plausible local date and hour', () => {
     for (const call of store.calls) {
       expect(call.localDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);

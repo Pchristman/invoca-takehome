@@ -34,7 +34,6 @@ export interface UrlState {
   campaignSort: CampaignSort | null;
   locationSort: LocationSort | null;
   heatmap: HeatmapMode;
-  dev: boolean;
   print: boolean; // the one-page print summary
   answer: AnswerParams | null; // non-null exactly when the bare `answer` parameter is present
 }
@@ -108,7 +107,6 @@ export function parseUrlState(search: string): UrlState {
     campaignSort: view === 'campaigns' ? parseSort(params, CAMPAIGN_SORT_KEYS, DEFAULT_SORT) : null,
     locationSort: view === 'locations' ? parseSort(params, LOCATION_SORT_KEYS, DEFAULT_LOCATION_SORT) : null,
     heatmap: view === 'missed-calls' && params.get('heatmap') === 'weekday' ? 'weekday' : 'office',
-    dev: params.has('dev'),
     print: params.has('print'),
     answer: parseAnswer(params),
   };
@@ -147,7 +145,7 @@ function choicePairs(state: UrlState): Array<[string, string]> {
   return [];
 }
 
-// '' for the defaults, else '?view=campaigns&range=last7&dev' (answer, print and dev are written bare, in that order).
+// '' for the defaults, else '?view=campaigns&range=last7&print' (answer and print are written bare, in that order).
 export function toSearch(state: UrlState): string {
   const pairs: Array<[string, string]> = [];
   if (state.view !== 'overview') pairs.push(['view', state.view]);
@@ -160,11 +158,10 @@ export function toSearch(state: UrlState): string {
   const parts = pairs.map(([name, value]) => `${name}=${encodeURIComponent(value)}`);
   if (state.answer) parts.push('answer');
   if (state.print) parts.push('print');
-  if (state.dev) parts.push('dev');
   return parts.length === 0 ? '' : `?${parts.join('&')}`;
 }
 
-// The query for the API: the URL minus view and dev, only what this view uses.
+// The query for the API: the URL minus view, only what this view uses.
 export function apiParams(state: UrlState, view: ViewName): URLSearchParams {
   const params = new URLSearchParams();
   for (const [name, value] of rangePairs(state)) params.set(name, value);
@@ -214,7 +211,7 @@ export function withHeatmap(state: UrlState, mode: HeatmapMode): UrlState {
   return { ...state, heatmap: mode };
 }
 
-// The callback CSV for what is on screen: same range and office, no view, dev, campaign or comparison
+// The callback CSV for what is on screen: same range and office, no view, campaign or comparison
 // (Missed calls has no comparison, and a half-typed one would make the export fail).
 export function csvHref(state: UrlState): string {
   const query = apiParams({ ...state, compare: null }, 'missed-calls').toString();
@@ -240,7 +237,7 @@ export function presetClick(state: UrlState, preset: string, defaultPreset: stri
   return presetOf(state, defaultPreset) === preset ? null : { kind: 'preset', preset };
 }
 
-// A link to another view: keeps range, comparison and dev; drops the campaign.
+// A link to another view: keeps range and comparison; drops the campaign.
 export function actionHref(state: UrlState, link: ActionLink): string {
   const target: UrlState = {
     ...state,
@@ -253,7 +250,7 @@ export function actionHref(state: UrlState, link: ActionLink): string {
   return `/${toSearch(target)}`;
 }
 
-// A link that keeps only the view and dev.
+// A link that keeps only the view.
 export function defaultsHref(state: UrlState): string {
   const target: UrlState = {
     view: state.view,
@@ -262,7 +259,6 @@ export function defaultsHref(state: UrlState): string {
     campaign: null,
     location: null,
     ...DEFAULT_CHOICES,
-    dev: state.dev,
     print: state.print,
     answer: null,
   };
@@ -274,9 +270,9 @@ export function takeawayParams(state: UrlState, view: ViewName): URLSearchParams
   return apiParams({ ...state, campaign: null }, view);
 }
 
-// The print page: the view, range and comparison, company-wide. Drops the filters and dev.
+// The print page: the view, range and comparison, company-wide. Drops the filters.
 export function printHref(state: UrlState): string {
-  return `/${toSearch({ ...state, campaign: null, location: null, dev: false, print: true, answer: null })}`;
+  return `/${toSearch({ ...state, campaign: null, location: null, print: true, answer: null })}`;
 }
 
 // The way back from the print page to the app: everything kept, print off.
@@ -298,7 +294,7 @@ export function printParams(state: UrlState, view: ViewName): URLSearchParams {
   return apiParams({ ...state, campaign: null, location: null }, view);
 }
 
-/** The query for /api/answer: view, range and the f_ filter. No comparison, no dev. */
+/** The query for /api/answer: view, range and the f_ filter. No comparison. */
 export function answerParams(state: UrlState): URLSearchParams {
   const params = new URLSearchParams();
   params.set('view', state.view);
@@ -309,7 +305,7 @@ export function answerParams(state: UrlState): URLSearchParams {
 
 /**
  * The page for a validated question: `query` is the one a QuestionResponse carries (view, filter, maybe a range).
- * A range in the query wins; otherwise the current one stays. Comparison, campaign and location are dropped; dev is kept.
+ * A range in the query wins; otherwise the current one stays. Comparison, campaign and location are dropped.
  */
 export function answerHref(state: UrlState, query: string): string {
   const fromQuery = parseUrlState(`?${query}&answer`);
@@ -320,20 +316,14 @@ export function answerHref(state: UrlState, query: string): string {
     campaign: null,
     location: null,
     ...DEFAULT_CHOICES,
-    dev: state.dev,
     print: false,
     answer: fromQuery.answer,
   };
   return `/${toSearch(target)}`;
 }
 
-/** The Overview for the same range, off the answer page. dev is kept. */
+/** The Overview for the same range, off the answer page. */
 export function clearHref(state: UrlState): string {
   return `/${toSearch({ ...state, ...DEFAULT_CHOICES, view: 'overview', compare: null, campaign: null, location: null, print: false, answer: null })}`;
 }
 
-/** An in-app href (path and query) with dev set as the state has it. */
-export function withDevOf(href: string, state: UrlState): string {
-  const target = parseUrlState(href.slice(href.indexOf('?') === -1 ? href.length : href.indexOf('?')));
-  return `/${toSearch({ ...target, dev: state.dev })}`;
-}

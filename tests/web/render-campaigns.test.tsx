@@ -159,13 +159,6 @@ describe('Campaigns screen alerts', () => {
     const html = render({ ...real, alerts: { checked: true, reason: null, flagged: 0, z: 3, minCalls: 20 } });
     expect(html).toContain("No campaign&#x27;s calls changed by more than chance explains.");
   });
-
-  it('has no dev-only content', () => {
-    // ?dev adds the Data notes button in the header; the Campaigns view must not carry it or its panel.
-    const html = render(flagged());
-    expect(html).not.toContain('Data notes');
-    expect(html).not.toContain('data-notes');
-  });
 });
 
 describe('Campaigns screen caveats for the comparison period', () => {

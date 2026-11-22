@@ -103,7 +103,7 @@ The **Upload data** button in the header opens a panel where you add one CSV to 
 - **Campaigns and locations** match on id. The same values are a duplicate. **Different values are a conflict and are not written**, so an upload cannot change a budget or a time zone. A campaign or location row with a problem (for example an invalid time zone or an unreadable budget such as `$150.00`) is bad and not written. A blank budget is a valid row: the campaign is added and its cost estimates are blank.
 - **Repeats inside the file** are caught: a repeated campaign, location or call (same id and time) keeps its first row and later differing rows are conflicts; several versions of one new call (different `updated_at`) are all new rows.
 - **One transaction.** All new rows are written together, or none are; if the write fails nothing is stored and the server keeps its old data. Pressing **Add** again, or uploading the same file twice, adds nothing the second time.
-- **Views and takeaways update without a restart.** After **Add**, "See the new data" reloads the page on the default range, so the date span, the pickers, every view and every takeaway are fetched again. The takeaway service is rebuilt for the new data, so a takeaway written for the old data is not reused. The AI counters on the dev data notes panel (cache hits, checker failures) restart at 0; the spend is read from the call log and carries over.
+- **Views and takeaways update without a restart.** After **Add**, "See the new data" reloads the page on the default range, so the date span, the pickers, every view and every takeaway are fetched again. The takeaway service is rebuilt for the new data, so a takeaway written for the old data is not reused. The spend is read from the call log and carries over.
 - **Bad rows are reported, not stored.** The header's "skipped rows" count only covers rows stored by a seed, so an upload does not change it.
 - **Safety:** uploads are safe only because the server listens on localhost and there is no login. Like every `/api` route, the upload routes refuse a request whose Host is not localhost (or the host the server is bound to); they also refuse a request that a browser marks as cross-site, and one whose Origin does not match its Host. Do not expose the port; the Docker compose file publishes it only on 127.0.0.1.
 - **`DB_PATH=:memory:`** keeps the data in memory, so an upload lasts until the server stops.
@@ -124,7 +124,6 @@ The **Upload data** button in the header opens a panel where you add one CSV to 
 | `/api/takeaway/:view` | as that view | the takeaway: checked AI text, or the template text (AI off, over budget, or the AI text failed its check) |
 | `/api/answer` | range, `view`, `f_*` filter | answer panel: totals and a table for the filter (code only) |
 | `/api/question` | `q` (at most 300 characters) | a validated filter as a query string (the only AI step; needs a key) |
-| `/api/data-notes` | none | data notes (always available) |
 | `POST /api/upload/preview` | one CSV in the multipart field `file` | what the file would add: counts, examples, hints (writes nothing) |
 | `POST /api/upload/commit` | one CSV in the multipart field `file` | what was written, and the fresh `/api/meta` body |
 
@@ -152,7 +151,6 @@ The URL holds the screen, so a link, a refresh or the back button reproduces it:
 | `start`, `end` | a custom range, `YYYY-MM-DD` |
 | `campaign` | the campaign shown in the Campaigns weekly chart |
 | `location` | the office Missed calls is filtered to |
-| `dev` | add `?dev` to the URL to open the Data notes panel |
 | `print` | add `?print` for the one-page print summary |
 | `answer` | bare parameter: show the answer panel for the filter in the `f_` parameters |
 | `f_office`, `f_campaign` | repeatable; office or campaign ids the answer is limited to |
@@ -209,7 +207,7 @@ A one-page, plain document of the whole app, for paper or PDF.
 
 - **On the page:** the five Overview tiles, then Overview's takeaway and one block for each of Campaigns, Locations and Missed calls. Each block holds that view's action (the alert entry sits under Campaigns) and its takeaway, marked `AI` or `template`. The date range and comparison caveats are printed, and a three-line "est." footnote gives the spend formula, the revenue-per-budget-dollar formula and the missed-call value.
 - **How to reach it:** the "Print summary" link in the header, which opens in a new tab so the app stays open in the first, or add `?print` to any URL with the range you want. On the print page, a Print button calls the browser's print and an "Open the app" link goes back to the app.
-- **What it keeps:** the range and the comparison. It ignores the campaign and office choice, so it is always company-wide, and it never shows dev content, even with `?dev`.
+- **What it keeps:** the range and the comparison. It ignores the campaign and office choice, so it is always company-wide.
 - **Print waits for the takeaways.** The Print button stays disabled until the Overview and all four takeaways have loaded or failed, so paper never says "Loading takeaway...". A takeaway that failed leaves its block without one.
 - **What it requests:** `/api/overview` and the four `/api/takeaway/:view` calls, with the same query the screen would send, and nothing else (not the Campaigns, Locations or Missed calls views). It shares the AI cache with browsing. With a key, a first open can make up to four calls (each logged as usual); a repeat is four cache hits at $0.
 - **One page:** it fits one A4 or Letter page by using small print type, never by dropping caveats, numbers or estimate labels.
@@ -218,7 +216,7 @@ A one-page, plain document of the whole app, for paper or PDF.
 ### Visual design and motion
 
 - **The look:** evergreen header, sand neutrals, white panels with soft borders and weight-500 headings. The type pairing is IBM Plex Sans for text with IBM Plex Mono for figures and small labels. The accent green marks only what you can act on (links, buttons, the current tab, focus); bars, heat cells and the up and down status colours are a separate blue and red set, kept at least 40 degrees of hue away from the green. Colours, type, spacing and timing are all set in `src/web/styles/tokens.css`; keep raw colours and durations out of other files (no test checks this any more).
-- **What moves:** a view change (a short fade and small rise below the range control; the header, tabs and range control stay still), the takeaway line (loading text and sentence swap), the Data notes panel under `?dev`, the Missed calls heatmap when you switch between By office and By weekday, the five Overview tiles (each counts to its new value and ends on the server's exact text), and the Campaigns weekly chart when you change its campaign.
+- **What moves:** a view change (a short fade and small rise below the range control; the header, tabs and range control stay still), the takeaway line (loading text and sentence swap), the Missed calls heatmap when you switch between By office and By weekday, the five Overview tiles (each counts to its new value and ends on the server's exact text), and the Campaigns weekly chart when you change its campaign.
 - **Timing:** every duration is 150 to 300 ms, with one easing curve, set in `tokens.css` (`--motion-*`, `--ease-standard`) and read from there at run time. Animation uses the `motion` package (imported from `motion/react`); the `Reveal` wrapper renders a plain div when motion is off, so nothing can stay half-faded.
 - **Reduced motion:** `prefers-reduced-motion: reduce` turns all of it off at once, and the app follows the setting live, without a reload.
 - **Print:** the print summary imports no motion code, and print CSS forces faded content to full strength. A running tile count finishes on the server's number when you print. Two limits: printing during the short exit fade of a tab change shows the outgoing view, and printing while the weekly chart bars are growing can show them part-grown.
@@ -229,7 +227,7 @@ A one-page, plain document of the whole app, for paper or PDF.
 
 Each view shows one short takeaway line under the date control, marked `AI` or `template`. The template sentence is built in code from the view's computed facts. With `ANTHROPIC_API_KEY` set, Claude Haiku 5.5 writes the sentence instead, using `{placeholders}` for every number and name; code checks the text (no digits, no invented names) and fills in the values. If the check fails (after one retry, see below), the call fails, the budget is reached or there is no key, the template sentence is shown, and nothing else about the app changes. The views never wait on it.
 
-- **Off by default:** leave `ANTHROPIC_API_KEY` empty in `.env`. Add `?dev` to the URL to see why a takeaway is a template.
+- **Off by default:** leave `ANTHROPIC_API_KEY` empty in `.env`.
 - **Spend guard:** `AI_SPEND_LIMIT_USD` (default 5). Past it the app stops calling the model and shows template text.
 - **Cache:** results are kept in `.cache/ai-takeaways.json`, so a repeat costs nothing.
 - **Call log:** one line per call, cache hits included at zero cost, in `logs/ai-calls.jsonl` (time, model, view, tokens, cost). Both folders are gitignored.

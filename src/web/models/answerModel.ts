@@ -90,7 +90,6 @@ function linkFor(answer: AnswerResponse): AnswerShow['link'] {
     campaignSort: null,
     locationSort: null,
     heatmap: 'office',
-    dev: false,
     print: false,
     answer: null,
   };

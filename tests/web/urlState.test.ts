@@ -37,7 +37,6 @@ const DEFAULTS: UrlState = {
   campaignSort: null,
   locationSort: null,
   heatmap: 'office',
-  dev: false,
   print: false,
   answer: null,
 };
@@ -101,14 +100,6 @@ describe('parseUrlState', () => {
     expect(parseUrlState('?view=campaigns').compare).toBeNull();
   });
 
-  it('dev by presence', () => {
-    for (const search of ['?dev', '?dev=1', '?dev=0', '?dev=']) {
-      expect(parseUrlState(search).dev).toBe(true);
-    }
-    expect(parseUrlState('').dev).toBe(false);
-    expect(parseUrlState('?devx').dev).toBe(false);
-  });
-
   it.each([
     '?%E0%A4%A',
     '?&&&',
@@ -135,8 +126,8 @@ describe('toSearch', () => {
         compare: { start: '2026-08-01', end: '2026-08-05' },
       }),
     ],
-    ['missed-calls plus location plus dev', state({ view: 'missed-calls', location: 'loc_a', dev: true })],
-    ['preset plus dev', state({ range: { kind: 'preset', preset: 'last7' }, dev: true })],
+    ['missed-calls plus location', state({ view: 'missed-calls', location: 'loc_a' })],
+    ['preset', state({ range: { kind: 'preset', preset: 'last7' } })],
     ['custom with a blank end', state({ range: { kind: 'custom', start: '2026-09-01', end: '' } })],
   ];
 
@@ -147,8 +138,8 @@ describe('toSearch', () => {
   it('is canonical', () => {
     expect(toSearch(DEFAULTS)).toBe('');
     expect(
-      toSearch(state({ view: 'campaigns', range: { kind: 'preset', preset: 'last7' }, dev: true })),
-    ).toBe('?view=campaigns&range=last7&dev');
+      toSearch(state({ view: 'campaigns', range: { kind: 'preset', preset: 'last7' } })),
+    ).toBe('?view=campaigns&range=last7');
   });
 
   it('percent-encodes a campaign id and round-trips it', () => {
@@ -165,7 +156,6 @@ describe('apiParams', () => {
     range: { kind: 'preset', preset: 'last7' },
     campaign: 'camp_a',
     location: 'loc_a',
-    dev: true,
   });
 
   it('overview carries only the range', () => {
@@ -190,17 +180,15 @@ describe('apiParams', () => {
     );
   });
 
-  it('omits blanks and nulls, and never carries view or dev', () => {
+  it('omits blanks and nulls, and never carries view', () => {
     const s = state({
       view: 'campaigns',
       range: { kind: 'custom', start: '2026-09-01', end: '' },
       compare: { start: '', end: '2026-08-05' },
-      dev: true,
     });
     const params = apiParams(s, 'campaigns');
     expect(params.toString()).toBe('start=2026-09-01&compareEnd=2026-08-05');
     expect(params.has('view')).toBe(false);
-    expect(params.has('dev')).toBe(false);
   });
 
   it('the default state yields an empty set', () => {
@@ -217,7 +205,7 @@ describe('with* helpers', () => {
   });
 
   it('withView keeps the rest', () => {
-    const s = state({ range: { kind: 'preset', preset: 'last7' }, campaign: 'camp_a', dev: true });
+    const s = state({ range: { kind: 'preset', preset: 'last7' }, campaign: 'camp_a' });
     expect(withView(s, 'campaigns')).toEqual({ ...s, view: 'campaigns' });
   });
 
@@ -233,7 +221,6 @@ describe('with* helpers', () => {
       range: { kind: 'preset', preset: 'last7' },
       compare: { start: '2026-08-01', end: '2026-08-05' },
       campaign: 'camp_a',
-      dev: true,
     });
     expect(withLocation(s, 'loc_a')).toEqual({ ...s, location: 'loc_a' });
     expect(withLocation(withLocation(s, 'loc_a'), null)).toEqual(s);
@@ -257,8 +244,8 @@ describe('csvHref', () => {
     expect(csvHref(s)).toBe(`${PATH}?start=2026-09-01&end=2026-09-05`);
   });
 
-  it('never carries view, dev or campaign', () => {
-    const href = csvHref(state({ view: 'missed-calls', campaign: 'camp_a', dev: true }));
+  it('never carries view or campaign', () => {
+    const href = csvHref(state({ view: 'missed-calls', campaign: 'camp_a' }));
     expect(href).toBe(PATH);
   });
 
@@ -294,17 +281,16 @@ describe('hrefs', () => {
     range: { kind: 'preset', preset: 'last7' },
     campaign: 'camp_a',
     location: 'loc_stale',
-    dev: true,
   });
 
-  it('actionHref goes to the link view with the location, keeping range and dev', () => {
+  it('actionHref goes to the link view with the location, keeping the range', () => {
     expect(actionHref(from, { view: 'missed-calls', locationId: 'loc_a' })).toBe(
-      '/?view=missed-calls&range=last7&location=loc_a&dev',
+      '/?view=missed-calls&range=last7&location=loc_a',
     );
   });
 
   it('actionHref without a location has no location', () => {
-    expect(actionHref(from, { view: 'locations' })).toBe('/?view=locations&range=last7&dev');
+    expect(actionHref(from, { view: 'locations' })).toBe('/?view=locations&range=last7');
   });
 
   it('actionHref to campaigns carries no stale location or campaign', () => {
@@ -313,12 +299,12 @@ describe('hrefs', () => {
     expect(href).not.toContain('campaign=');
   });
 
-  it('defaultsHref keeps view and dev only', () => {
+  it('defaultsHref keeps the view only', () => {
     const messy = state({
       ...from,
       compare: { start: '2026-08-01', end: '2026-08-05' },
     });
-    expect(defaultsHref(messy)).toBe('/?view=campaigns&dev');
+    expect(defaultsHref(messy)).toBe('/?view=campaigns');
     expect(defaultsHref(DEFAULTS)).toBe('/');
   });
 
@@ -329,7 +315,7 @@ describe('hrefs', () => {
   });
 
   it('defaultsHref from Missed calls drops the office', () => {
-    expect(defaultsHref(state({ view: 'missed-calls', location: 'nope', dev: true }))).toBe('/?view=missed-calls&dev');
+    expect(defaultsHref(state({ view: 'missed-calls', location: 'nope' }))).toBe('/?view=missed-calls');
   });
 
   it('every href starts with a slash', () => {
@@ -367,7 +353,6 @@ describe('withCompare', () => {
     range: { kind: 'custom', start: '2026-09-08', end: '2026-09-14' },
     campaign: 'camp_a',
     location: 'loc_a',
-    dev: true,
   });
 
   it('sets only the comparison', () => {
@@ -431,27 +416,22 @@ describe('the print flag', () => {
     compare: COMPARE,
     campaign: 'cmp_a',
     location: 'loc_a',
-    dev: true,
   });
 
-  it('parses ?print and ?print=1 as true, nothing as false, and ?print&dev as both', () => {
+  it('parses ?print and ?print=1 as true, nothing as false', () => {
     expect(parseUrlState('?print').print).toBe(true);
     expect(parseUrlState('?print=1').print).toBe(true);
     expect(parseUrlState('').print).toBe(false);
-    const both = parseUrlState('?print&dev');
-    expect(both.print).toBe(true);
-    expect(both.dev).toBe(true);
   });
 
-  it('toSearch writes a bare print before a bare dev', () => {
+  it('toSearch writes a bare print', () => {
     expect(toSearch(state({ print: true }))).toBe('?print');
     expect(toSearch(state({ print: true, range: LAST7 }))).toBe('?range=last7&print');
-    expect(toSearch(state({ print: true, dev: true }))).toBe('?print&dev');
     const full = state({ print: true, range: LAST7, compare: COMPARE });
     expect(parseUrlState(toSearch(full))).toEqual(full);
   });
 
-  it('printHref keeps view, range and comparison and drops campaign, location and dev', () => {
+  it('printHref keeps view, range and comparison and drops campaign and location', () => {
     const href = printHref(FILTERED);
     const params = new URLSearchParams(href.slice(href.indexOf('?')));
     expect(href.startsWith('/?')).toBe(true);
@@ -462,7 +442,6 @@ describe('the print flag', () => {
     expect(params.has('print')).toBe(true);
     expect(params.has('campaign')).toBe(false);
     expect(params.has('location')).toBe(false);
-    expect(params.has('dev')).toBe(false);
   });
 
   it('appHref drops only print', () => {
@@ -548,40 +527,38 @@ describe('answer state (S4)', () => {
     expect(parseUrlState(toSearch(parsed))).toEqual(parsed);
   });
 
-  it('toSearch writes view, range, filter, answer, print, dev, and round-trips', () => {
-    const parsed = parseUrlState(`${URL_TEXT}&print&dev`);
+  it('toSearch writes view, range, filter, answer and print, and round-trips', () => {
+    const parsed = parseUrlState(`${URL_TEXT}&print`);
     expect(toSearch(parsed)).toBe(
-      '?view=missed-calls&range=last7&f_office=a&f_office=b&f_unattributed=1&f_weekday=4&f_hour=9&f_hour=10&answer&print&dev',
+      '?view=missed-calls&range=last7&f_office=a&f_office=b&f_unattributed=1&f_weekday=4&f_hour=9&f_hour=10&answer&print',
     );
     expect(parseUrlState(toSearch(parsed))).toEqual(parsed);
   });
 
-  it('answerParams holds view, range and f_ values, not the comparison or dev', () => {
-    const parsed = parseUrlState(`${URL_TEXT}&compareStart=2026-09-01&compareEnd=2026-09-07&dev`);
+  it('answerParams holds view, range and f_ values, not the comparison', () => {
+    const parsed = parseUrlState(`${URL_TEXT}&compareStart=2026-09-01&compareEnd=2026-09-07`);
     const params = answerParams(parsed);
     expect(params.toString()).toBe(
       'view=missed-calls&range=last7&f_office=a&f_office=b&f_unattributed=1&f_weekday=4&f_hour=9&f_hour=10',
     );
     expect(params.has('compareStart')).toBe(false);
-    expect(params.has('dev')).toBe(false);
   });
 
-  it('answerHref keeps the range unless the query has one; drops comparison, campaign and location; keeps dev', () => {
+  it('answerHref keeps the range unless the query has one; drops comparison, campaign and location', () => {
     const current = state({
       range: { kind: 'preset', preset: 'last28' },
       compare: { start: '2026-09-01', end: '2026-09-07' },
       campaign: 'c1',
       location: 'l1',
-      dev: true,
     });
     expect(answerHref(current, 'view=missed-calls&f_weekday=4')).toBe(
-      '/?view=missed-calls&range=last28&f_weekday=4&answer&dev',
+      '/?view=missed-calls&range=last28&f_weekday=4&answer',
     );
     expect(answerHref(current, 'view=missed-calls&f_weekday=4&range=last7')).toBe(
-      '/?view=missed-calls&range=last7&f_weekday=4&answer&dev',
+      '/?view=missed-calls&range=last7&f_weekday=4&answer',
     );
     expect(answerHref(current, 'view=locations&start=2026-09-01&end=2026-09-05')).toBe(
-      '/?view=locations&start=2026-09-01&end=2026-09-05&answer&dev',
+      '/?view=locations&start=2026-09-01&end=2026-09-05&answer',
     );
   });
 

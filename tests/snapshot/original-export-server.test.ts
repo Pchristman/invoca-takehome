@@ -40,15 +40,6 @@ describe('shipped export over HTTP', () => {
     expect(body.locations).toHaveLength(8);
   });
 
-  it('data notes', async () => {
-    const { status, body } = await getJson('/api/data-notes');
-    expect(status).toBe(200);
-    expect(body.dataNotes.rowsRead).toBe(5411);
-    expect(body.dataNotes.callsAfterDedup).toBe(5000);
-    expect(body.dataNotes.unattributedCalls).toBe(144);
-    expect(body.ai.status).toBe('off');
-  });
-
   it('every view answers on the default range', async () => {
     for (const path of ['/api/overview', '/api/campaigns', '/api/locations', '/api/missed-calls']) {
       const { status, body } = await getJson(path);

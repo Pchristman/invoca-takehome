@@ -40,7 +40,7 @@ describe('upload lock', () => {
   it('the header toggle is disabled while locked, like the panel Close button', () => {
     const header = (uploadLocked: boolean) =>
       renderToStaticMarkup(
-        <Header meta={meta} dev={false} dataNotesOpen={false} onToggleDataNotes={noop} printLink="/?print" uploadOpen uploadLocked={uploadLocked} onToggleUpload={noop} />,
+        <Header meta={meta} printLink="/?print" uploadOpen uploadLocked={uploadLocked} onToggleUpload={noop} />,
       );
     expect(tagWithId(header(true), UPLOAD_BUTTON_ID)).toContain('disabled');
     expect(tagWithId(header(false), UPLOAD_BUTTON_ID)).not.toContain('disabled');

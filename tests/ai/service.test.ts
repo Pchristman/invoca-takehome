@@ -94,7 +94,6 @@ describe('takeaway service', () => {
     const lines = logLines();
     expect(lines).toHaveLength(2);
     expect(lines[1]).toMatchObject({ cached: true, costUsd: 0, checkPassed: true });
-    expect(service.status().cacheHits).toBe(1);
     expect(service.status().spendUsd).toBe(spendBefore);
   });
 
@@ -501,7 +500,7 @@ describe('takeaway service', () => {
     });
 
     it('is off with no model', () => {
-      expect(make(null).status()).toEqual({ status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 });
+      expect(make(null).status()).toEqual({ status: 'off', spendUsd: 0 });
     });
 
     it('is on with room under the limit', () => {
@@ -512,7 +511,7 @@ describe('takeaway service', () => {
       expect(make(new FakeModel(textReply(GOOD)), { limitUsd: 0 }).status().status).toBe('budget_reached');
     });
 
-    it('reads the counts back after a restart', async () => {
+    it('reads the spend back after a restart', async () => {
       const first = make(new FakeModel(textReply(GOOD)));
       await first.takeaway(sheet(), TEMPLATE);
       await first.takeaway(sheet(), TEMPLATE); // cache hit
@@ -520,7 +519,7 @@ describe('takeaway service', () => {
       const bad = make(new FakeModel(textReply('Move 5.')));
       await bad.takeaway(sheet(4), TEMPLATE); // checker failure, then its retry fails too
       const restarted = make(new FakeModel(textReply(GOOD))).status();
-      expect(restarted).toEqual({ status: 'on', spendUsd: 0.0012, cacheHits: 1, checkerFailures: 2 });
+      expect(restarted).toEqual({ status: 'on', spendUsd: 0.0012 });
     });
   });
 
@@ -543,8 +542,6 @@ describe('takeaway service', () => {
       expect(last).toMatchObject({ checkPassed: false, cached: false, costUsd: 0, inputTokens: 0, outputTokens: 0 });
       expect(typeof last.failure).toBe('string');
       expect(last.failure).not.toBe('check_failed');
-      expect(service.status().cacheHits).toBe(0);
-      expect(service.status().checkerFailures).toBe(2 - 1); // only the rejected entry (the first call passed)
     });
 
     it('the bad entry is dropped from the cache file and remembered for the session', async () => {
@@ -593,7 +590,7 @@ describe('takeaway service', () => {
   it('offService answers with the template and an off status', async () => {
     const service = offService();
     expect(await service.takeaway(sheet(), TEMPLATE)).toEqual({ text: TEMPLATE, source: 'template', reason: 'ai_off' });
-    expect(service.status()).toEqual({ status: 'off', spendUsd: 0, cacheHits: 0, checkerFailures: 0 });
+    expect(service.status()).toEqual({ status: 'off', spendUsd: 0 });
   });
 });
 

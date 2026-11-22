@@ -11,7 +11,7 @@ import type { CallStore } from '../core/types';
 import { buildCampaigns, buildLocations, buildMissedCalls, buildOverview } from '../core/views';
 import type { FactSheet, ViewName } from '../core/views';
 import { DEFAULT_PRESET, PRESETS, statusFor } from './api';
-import type { AnswerResponse, ApiError, DataNotesResponse, Meta, QuestionResponse, TakeawayResponse } from './api';
+import type { AnswerResponse, ApiError, Meta, QuestionResponse, TakeawayResponse } from './api';
 import { callbacksToCsv } from './csv';
 import { parseAnswerQuery, parseViewQuery } from './params';
 import { QUESTION_MAX_CHARS, questionContext, replyToQuery } from './questionQuery';
@@ -216,12 +216,6 @@ export function createApp(store: CallStore, options: AppOptions = {}): Hono {
           reason: result.reason,
           message: questionMessage(result.reason, result.detail),
         };
-    return c.json(response);
-  });
-
-  app.get('/api/data-notes', (c) => {
-    const { store, ai } = current;
-    const response: DataNotesResponse = { dataNotes: store.dataNotes, ai: ai.status() };
     return c.json(response);
   });
 

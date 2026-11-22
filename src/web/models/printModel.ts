@@ -21,7 +21,7 @@ export interface PrintBlock {
   view: 'campaigns' | 'locations' | 'missed-calls';
   label: string;
   actions: { text: string; actionable: boolean }[]; // this view's topActions entries, API order
-  takeaway: TakeawayShow; // always built without dev notes
+  takeaway: TakeawayShow;
 }
 
 export interface PrintModel {
@@ -56,14 +56,14 @@ export function printModel(input: { view: OverviewView; meta: Meta; span: DateRa
     caveats: caveatsFor(view.notes, span, { comparing: true, range, view: 'overview' }),
     tiles: overview.tiles,
     empty: overview.empty,
-    overviewTakeaway: takeawayModel(takeaways.overview, { dev: false }),
+    overviewTakeaway: takeawayModel(takeaways.overview),
     blocks: BLOCK_VIEWS.map((blockView) => ({
       view: blockView,
       label: VIEW_LABELS[blockView],
       actions: view.topActions
         .filter((entry) => entry.view === blockView)
         .map(({ action }) => ({ text: action.text, actionable: action.actionable })),
-      takeaway: takeawayModel(takeaways[blockView], { dev: false }),
+      takeaway: takeawayModel(takeaways[blockView]),
     })),
     estimateNotes: printEstimateNotes(range.days),
   };

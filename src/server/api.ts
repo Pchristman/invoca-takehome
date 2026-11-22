@@ -1,6 +1,5 @@
 import type { UploadPreview } from '../db/upload/types';
 import type { DateRange, RangeErrorCode } from '../core/ranges';
-import type { DataNotes } from '../core/types';
 import type { ViewName } from '../core/views';
 import type { QuestionReason, TakeawayReason } from '../ai/types';
 import type { AnswerView } from '../core/answer';
@@ -28,17 +27,10 @@ export interface Meta {
   aiStatus: 'on' | 'off' | 'budget_reached';
 }
 
-/** The body of GET /api/data-notes. `ai` has its final shape now; Phase 9 fills it in. */
+/** What the AI service reports: Meta.aiStatus is its status. */
 export interface AiStatus {
   status: 'on' | 'off' | 'budget_reached';
   spendUsd: number;
-  cacheHits: number;
-  checkerFailures: number;
-}
-
-export interface DataNotesResponse {
-  dataNotes: DataNotes;
-  ai: AiStatus;
 }
 
 /** The body of GET /api/takeaway/:view. `reason` is null exactly when the text is AI-written and checked. */

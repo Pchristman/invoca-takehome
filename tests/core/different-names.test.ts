@@ -57,7 +57,6 @@ describe('cleaning a different export', () => {
     expect(store.calls.reduce((sum, c) => sum + c.revenueUsd, 0)).toBe(300);
     expect(store.dataNotes.unattributedCalls).toBe(1);
     expect(store.dataNotes.pendingCalls).toBe(1);
-    expect(store.dataNotes.outcomeLagDays).toBe(3);
   });
 
   test('local dates follow each office zone, including a half-hour offset', () => {

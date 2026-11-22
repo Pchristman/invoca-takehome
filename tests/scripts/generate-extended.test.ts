@@ -391,12 +391,6 @@ describe('generateExtendedCalls: unattributed, pending and duplicate calls', () 
     }
   });
 
-  it('the outcome lag stays what the input had', () => {
-    const own = cleaned(FIXTURE.calls).dataNotes.outcomeLagDays;
-    expect(own).toBeGreaterThan(0);
-    expect(store.dataNotes.outcomeLagDays).toBe(own);
-  });
-
   it('synthetic rows are sorted by updated_at then call_id and come after the original rows', () => {
     expect(out.startsWith(FIXTURE.calls)).toBe(true);
     const keys = synthRaw.map((r) => `${r.updated_at}|${r.call_id}`);

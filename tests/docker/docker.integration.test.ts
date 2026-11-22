@@ -201,7 +201,7 @@ describe.skipIf(import.meta.env.MODE !== 'docker')('real container', () => {
     const page = await getText(`${url}/`);
     expect(page.status).toBe(200);
     expect(page.body).toContain('id="root"');
-    expect((await getJson(`${url}/api/data-notes`)).body.ai.status).toBe('off');
+    expect((await getJson(`${url}/api/meta`)).body.aiStatus).toBe('off');
     const takeaway = (await getJson(`${url}/api/takeaway/overview`)).body;
     expect(takeaway.source).toBe('template');
     expect(takeaway.reason).toBe('ai_off');
@@ -212,7 +212,7 @@ describe.skipIf(import.meta.env.MODE !== 'docker')('real container', () => {
     expect(run.status).toBe(0);
     await waitFor200(`${base(port)}/api/meta`);
     // No /api/takeaway/* here: with a key set that would call the real API.
-    expect((await getJson(`${base(port)}/api/data-notes`)).body.ai.status).toBe('on');
+    expect((await getJson(`${base(port)}/api/meta`)).body.aiStatus).toBe('on');
     const logs = compose(['logs'], { envFile: FAKE_KEY, key: null });
     expect(logs.stdout + logs.stderr).not.toContain('sk-ant-test-not-a-real-key');
   }, 180_000);
@@ -250,7 +250,7 @@ describe.skipIf(import.meta.env.MODE !== 'docker')('real container', () => {
     expect(up.status).toBe(0);
     await waitFor200(`${base(port)}/api/meta`);
     expect((await getJson(`${base(port)}/api/meta`)).body.callCount).toBe(5000);
-    expect((await getJson(`${base(port)}/api/data-notes`)).body.ai.status).toBe('off');
+    expect((await getJson(`${base(port)}/api/meta`)).body.aiStatus).toBe('off');
   }, 300_000);
 
   it('a relative DATA_DIR in the env file is read from the project folder', async () => {
@@ -389,7 +389,7 @@ describe.skipIf(import.meta.env.MODE !== 'docker')('real container', () => {
     expect(run.status).toBe(0);
     await waitFor200(`${base(port)}/api/meta`);
     expect((await getJson(`${base(port)}/api/overview`)).status).toBe(200);
-    expect((await getJson(`${base(port)}/api/data-notes`)).body.ai.status).toBe('off');
+    expect((await getJson(`${base(port)}/api/meta`)).body.aiStatus).toBe('off');
   }, 180_000);
 
   it('docker compose stop returns in under 8 seconds', async () => {
