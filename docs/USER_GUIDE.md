@@ -38,11 +38,10 @@ These controls sit above all four pages. Whatever you choose here stays in the w
 3. **Or set your own dates.** Fill in a start and end date, then press Apply.
 4. **Compare with another period (optional, on Overview and Campaigns).** Leave it empty and the app compares with the same number of days just before your range.
 5. **The takeaway.** A short summary of the page. The tag shows who wrote it: `AI`, or `TEMPLATE` when AI is off or its text failed the checks twice (the AI gets one more try before the app falls back to its own sentence). The numbers always come from the app, never from the AI.
-6. **Yellow notes.** They tell you when to read a number with care, for example when recent bookings and revenue may still rise.
-7. **Data as of.** The latest date in your data. "Last 7 days" counts back from this date, not from today.
-8. **Ask a question.** Type a question in plain English. See "Ask a question" below.
-9. **Print summary.** A one-page version for reporting up.
-10. **Upload data.** Add a newer CSV export.
+6. **Data as of.** The latest date in your data. "Last 7 days" counts back from this date, not from today.
+7. **Ask a question.** Type a question in plain English. See "Ask a question" below.
+8. **Print summary.** A one-page version for reporting up.
+9. **Upload data.** Add a newer CSV export.
 
 ## Overview: how did we do, and what next?
 
@@ -197,5 +196,4 @@ Add `?dev` to the end of the web address to show a Data notes button. It lists w
 - **Lost value is an upper bound.** It counts every unanswered call. The call-back list total is the more realistic figure, because it counts each caller once.
 - **Best and worst do not rank every campaign.** Best needs at least 5 bookings and worst needs at least 10 calls, both with a budget. A campaign below both, or with no budget in the file, is not ranked, so scan the table as well.
 - **Trust the Action line over the takeaway.** An AI takeaway uses only real numbers and names, but the app cannot check that the sentence around them is worded well. The Action lines are written by the app itself.
-- **Recent days can still change.** Bookings and revenue are sometimes recorded a few days after the call. The yellow note tells you when your range is affected.
 - **Times are local to each office.** A 9 AM call in Phoenix and a 9 AM call in New York both show as 9 AM.

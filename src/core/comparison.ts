@@ -1,4 +1,4 @@
-import { addDays, daysBetween, inclusiveDays } from './localDate';
+import { addDays, inclusiveDays } from './localDate';
 import { checkDates } from './ranges';
 import type { DateRange, RangeError } from './ranges';
 
@@ -71,10 +71,3 @@ export function incompleteDays(span: DateRange, range: DateRange): IncompleteDay
   };
 }
 
-/**
- * Whether recent bookings and revenue in `range` may still rise: the measured outcome lag is above zero
- * and the range ends no more than that many days before the as-of date (the last data day).
- */
-export function outcomeLagApplies(span: DateRange, range: DateRange, lagDays: number): boolean {
-  return lagDays > 0 && daysBetween(range.end, span.end) <= lagDays;
-}

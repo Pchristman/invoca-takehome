@@ -5,7 +5,7 @@ import { formatCount } from '../../core/views/format';
 import { formatDateSpan, formatLongDate } from '../format';
 
 export interface Caveat {
-  id: 'clamped' | 'first_day' | 'previous_first_day' | 'outcome_lag' | 'overlap' | 'per_day' | 'outcome_lag_previous';
+  id: 'clamped' | 'first_day' | 'previous_first_day' | 'overlap' | 'per_day';
   text: string;
 }
 
@@ -35,13 +35,6 @@ export function caveatsFor(
   if (showPrevious && notes.incompletePrevious?.includesFirstDay) {
     add('previous_first_day', 'The comparison period includes the first day in the data, which may be incomplete.');
   }
-  if (notes.outcomeLag.applies) {
-    const days = formatCount(notes.outcomeLag.days, ['day', 'days']);
-    add(
-      'outcome_lag',
-      `Recent bookings and revenue may still rise: in this export an outcome can be recorded up to ${days} after the call.`,
-    );
-  }
   if (showPrevious && notes.comparison.overlaps) {
     add('overlap', 'The comparison period overlaps the selected range.');
   }
@@ -54,14 +47,6 @@ export function caveatsFor(
     add(
       'per_day',
       `The two ranges are different lengths (${lengths}), so changes in calls, bookings and revenue compare per day.${callers}`,
-    );
-  }
-  // Both outcome-lag sentences can show: one is about the selected range, this one about the comparison period.
-  if (showPrevious && notes.comparison.outcomeLagPrevious) {
-    const days = formatCount(notes.outcomeLag.days, ['day', 'days']);
-    add(
-      'outcome_lag_previous',
-      `Bookings and revenue in the comparison period may still rise: in this export an outcome can be recorded up to ${days} after the call.`,
     );
   }
   return found;

@@ -326,7 +326,7 @@ describe('RequestFrame with an unknown error code', () => {
 describe('Caveats', () => {
   it('prints each item and nothing for none', () => {
     const html = renderToStaticMarkup(
-      <Caveats items={[{ id: 'first_day', text: 'First note.' }, { id: 'outcome_lag', text: 'Second note.' }]} />,
+      <Caveats items={[{ id: 'first_day', text: 'First note.' }, { id: 'overlap', text: 'Second note.' }]} />,
     );
     expect(html).toContain('First note.');
     expect(html).toContain('Second note.');

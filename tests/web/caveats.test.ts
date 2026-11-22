@@ -42,13 +42,11 @@ function everything(): ViewNotes {
       reason: null,
       overlaps: true,
       perDay: false,
-      outcomeLagPrevious: false,
       currentDays: 7,
       previousDays: 7,
     },
     incompleteCurrent: { includesFirstDay: true },
     incompletePrevious: { includesFirstDay: true },
-    outcomeLag: { days: 3, applies: true },
   };
 }
 
@@ -63,19 +61,17 @@ function quiet(): ViewNotes {
       reason: null,
       overlaps: false,
       perDay: false,
-      outcomeLagPrevious: false,
       currentDays: 7,
       previousDays: 7,
     },
     incompleteCurrent: { includesFirstDay: false },
     incompletePrevious: { includesFirstDay: false },
-    outcomeLag: { days: 0, applies: false },
   };
 }
 
 describe('caveatsFor', () => {
   it('a mid-data range has no caveats', () => {
-    // Ends 14 days before the last day, well past any outcome lag.
+    // Ends 14 days before the last day.
     const { notes, span } = middleNotes('2026-09-10', '2026-09-16');
     expect(notes.comparison.available).toBe(true);
     expect(caveatsFor(notes, span, { comparing: true, range: { start: '2026-09-10', end: '2026-09-16' } })).toEqual([]);
@@ -106,17 +102,14 @@ describe('caveatsFor', () => {
     );
   });
 
-  it('outcome lag', () => {
-    const base = overviewFor('range=last7').notes;
-    const withLag = (days: number, applies: boolean): ViewNotes => ({
-      ...base,
-      outcomeLag: { days, applies },
-    });
-    expect(textOf(withLag(3, true), 'outcome_lag')).toBe(
-      'Recent bookings and revenue may still rise: in this export an outcome can be recorded up to 3 days after the call.',
-    );
-    expect(textOf(withLag(1, true), 'outcome_lag')).toContain('up to 1 day after');
-    expect(ids(withLag(3, false))).not.toContain('outcome_lag');
+  it('a range ending on the last data day carries no outcome-lag note', () => {
+    // The fixture export records outcomes at once, so give it a 3-day lag.
+    const base = serverFixture();
+    const view = overviewFor('range=last7', { ...base, dataNotes: { ...base.dataNotes, outcomeLagDays: 3 } });
+    expect(view.range.end).toBe(SPAN.end);
+    const shown = caveatsFor(view.notes, SPAN, { comparing: false, range: view.range });
+    expect(shown).toEqual([]);
+    expect(JSON.stringify(view.notes)).not.toMatch(/outcomeLag|may still rise/);
   });
 
   it('previous-period caveats need a usable comparison', () => {
@@ -169,8 +162,7 @@ describe('caveatsFor', () => {
         reason: null,
         overlaps: true,
         perDay: false,
-        outcomeLagPrevious: false,
-        currentDays: 7,
+          currentDays: 7,
         previousDays: 7,
       },
     };
@@ -183,7 +175,6 @@ describe('caveatsFor', () => {
       'clamped',
       'first_day',
       'previous_first_day',
-      'outcome_lag',
       'overlap',
     ]);
   });
@@ -192,48 +183,6 @@ describe('caveatsFor', () => {
     const notes = everything();
     const perDay: ViewNotes = { ...notes, comparison: { ...notes.comparison, perDay: true, previousDays: 3 } };
     expect(ids(perDay).at(-1)).toBe('per_day');
-  });
-});
-
-describe('outcome_lag_previous caveat', () => {
-  const lagged = (): ViewNotes => ({
-    ...quiet(),
-    outcomeLag: { days: 3, applies: false },
-    comparison: { ...quiet().comparison, outcomeLagPrevious: true },
-  });
-
-  it('says the comparison period may still gain bookings and revenue', () => {
-    expect(textOf(lagged(), 'outcome_lag_previous')).toBe(
-      'Bookings and revenue in the comparison period may still rise: in this export an outcome can be recorded up to 3 days after the call.',
-    );
-  });
-
-  it('needs a shown, usable comparison, and uses the lag days from the notes', () => {
-    const one: ViewNotes = { ...lagged(), outcomeLag: { days: 1, applies: false } };
-    expect(textOf(one, 'outcome_lag_previous')).toContain('up to 1 day after');
-    expect(ids(lagged(), false)).not.toContain('outcome_lag_previous');
-    const unavailable: ViewNotes = { ...lagged(), comparison: { ...lagged().comparison, available: false, reason: 'x' } };
-    expect(ids(unavailable)).not.toContain('outcome_lag_previous');
-    expect(ids(quiet())).not.toContain('outcome_lag_previous');
-  });
-
-  it('shows next to the range own outcome_lag when both apply, and comes last of all', () => {
-    const base = everything();
-    const both: ViewNotes = { ...base, comparison: { ...base.comparison, outcomeLagPrevious: true, perDay: true, previousDays: 3 } };
-    const found = ids(both);
-    expect(found).toContain('outcome_lag');
-    expect(found.at(-1)).toBe('outcome_lag_previous');
-  });
-
-  it('a later second range ending on the as-of date shows it (real notes)', () => {
-    // The fixture export records outcomes at once, so give it a 3-day lag.
-    const base = serverFixture();
-    const lagStore = { ...base, dataNotes: { ...base.dataNotes, outcomeLagDays: 3 } };
-    const view = overviewFor('start=2026-09-01&end=2026-09-03&compareStart=2026-09-12&compareEnd=2026-09-14', lagStore);
-    expect(view.notes.comparison.outcomeLagPrevious).toBe(true);
-    const found = caveatsFor(view.notes, SPAN, { comparing: true, range: view.range }).map((c) => c.id);
-    expect(found).toContain('outcome_lag_previous');
-    expect(found).not.toContain('outcome_lag');
   });
 });
 

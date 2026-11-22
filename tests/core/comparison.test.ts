@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { incompleteDays, outcomeLagApplies, resolveComparison } from '../../src/core/comparison';
+import { incompleteDays, resolveComparison } from '../../src/core/comparison';
 import type { RangeComparison } from '../../src/core/comparison';
 import type { DateRange } from '../../src/core/ranges';
 
@@ -180,14 +180,5 @@ describe('incompleteDays', () => {
     expect(incompleteDays(span, span)).toEqual({ includesFirstDay: true });
     expect(incompleteDays(span, range('2026-09-10', '2026-09-16'))).toEqual({ includesFirstDay: false });
     expect(incompleteDays(span, range('2026-09-01', '2026-09-01'))).toEqual({ includesFirstDay: true });
-  });
-});
-
-describe('outcomeLagApplies', () => {
-  test('outcomeLagApplies compares the gap to the lag', () => {
-    expect(outcomeLagApplies(span, range('2026-10-23', '2026-10-29'), 3)).toBe(true); // gap 0
-    expect(outcomeLagApplies(span, range('2026-10-23', '2026-10-26'), 3)).toBe(true); // gap 3
-    expect(outcomeLagApplies(span, range('2026-10-23', '2026-10-25'), 3)).toBe(false); // gap 4
-    expect(outcomeLagApplies(span, range('2026-10-23', '2026-10-29'), 0)).toBe(false); // no lag measured
   });
 });

@@ -61,7 +61,7 @@ In order: S1 alerts, S2 compare any two date ranges, S3 print-friendly one-page 
 
 - Default comparison range: the same number of days immediately before the selected range. A second range of another length (stretch S2) is compared per day and labelled as such.
 - If any day of the comparison range falls before the first date in the data, **no change is shown**; the tile shows "No full previous period" with a one-line reason. "All data" therefore never shows a change.
-- If the selected range or the comparison range includes the first date in the data, a note says that day may be incomplete. The last date gets no such note: the data gives no sign that the last day is incomplete, and the outcome-lag note (3.3) already covers recent days.
+- If the selected range or the comparison range includes the first date in the data, a note says that day may be incomplete. The last date gets no such note: the data gives no sign that the last day is incomplete.
 - Counts and money show % change. Rates (answer rate, booking rate) show change in percentage points.
 - If the previous value is 0 and the current isn't, the change reads "new", never infinity or NaN. If both are 0, no change is shown.
 - The comparison engine takes **any two ranges** from the start. "Previous period" is only the default second range. Stretch S2 then only adds UI.
@@ -72,7 +72,7 @@ These sit inline on the view they affect, not behind a panel, because the rules 
 
 - **Estimates:** estimated spend, cost per booking, revenue per budget dollar and missed-call value are labeled "est.", with the formula one click away.
 - **Incomplete periods:** the notes from section 3.2 (no full previous period; the first data day may be incomplete; the last data day gets no note, see 3.2).
-- **Outcome lag:** the longest gap seen in this export between a call starting and a later row updating its outcome. If the selected range ends within that many days of the as-of date, a note says recent bookings and revenue may still rise. The gap is measured from the data, never hard-coded.
+- **Outcome lag:** the longest gap seen in this export between a call starting and a later row updating its outcome. The gap is measured from the data, never hard-coded, and shown only in the data notes panel (3.4). No note on the page says recent bookings and revenue may still rise: calls still waiting for an outcome are spread over the whole export, not concentrated in recent days.
 - **Skipped rows:** if any rows were bad, one line in the header ("12 rows skipped"). The breakdown lives in the data notes panel.
 - **Takeaway source:** the small "AI" or "template" marker on each takeaway.
 
@@ -479,7 +479,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
   - weekly chart switches campaign
   - partial weeks marked
   - with `?dev`, the data notes panel opens from every view; without it, the panel and its entry point are absent
-  - estimates labeled, outcome-lag and incomplete-day notes visible without dev mode
+  - estimates labeled, incomplete-day notes visible without dev mode
 - **Edge cases:**
   - loading and error states for each request
   - empty range

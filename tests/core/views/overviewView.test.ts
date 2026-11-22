@@ -173,7 +173,6 @@ describe('buildOverview edge cases', () => {
     const ctx = makeViewContext(s, week);
     expect(view.notes).toEqual(ctx.notes);
     expect(view.notes.skippedRows).toBe(ctx.notes.skippedRows);
-    expect(view.notes.outcomeLag).toEqual(ctx.notes.outcomeLag);
     expect(view.notes.incompleteCurrent).toEqual(ctx.notes.incompleteCurrent);
   });
 });
