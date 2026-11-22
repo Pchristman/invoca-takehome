@@ -26,8 +26,6 @@ export interface CallbackRow {
 export interface CallbackList {
   /** Value descending, ties by caller hash. */
   rows: CallbackRow[];
-  /** Sum in whole cents. */
-  totalValueUsd: number;
   /** Unanswered calls with no caller hash: they can't be called back. */
   unidentifiedUnanswered: number;
 }
@@ -73,7 +71,6 @@ export function buildCallbackList(
   }
 
   const rows: CallbackRow[] = [];
-  let totalCents = 0;
   for (const [callerHash, group] of byCaller) {
     const last = group.reduce((a, b) => (isLater(b, a) ? b : a));
     const answeredAfter = latestAnswered.get(callerHash);
@@ -90,7 +87,6 @@ export function buildCallbackList(
       campaignName = campaign.name;
     }
     const cents = toCents(estimateMissedCallValue(rates, last).valueUsd);
-    totalCents += cents;
     rows.push({
       callerHash,
       unansweredAttempts: group.length,
@@ -106,5 +102,5 @@ export function buildCallbackList(
   }
 
   rows.sort((a, b) => b.estimatedValueUsd - a.estimatedValueUsd || compareText(a.callerHash, b.callerHash));
-  return { rows, totalValueUsd: totalCents / 100, unidentifiedUnanswered };
+  return { rows, unidentifiedUnanswered };
 }

@@ -35,8 +35,6 @@ const miss = (iso: string, callerHash: string, over: Partial<CleanCall> = {}) =>
 const got = (iso: string, callerHash: string, over: Partial<CleanCall> = {}) =>
   callAt(iso, { callerHash, locationId: 'loc_a', answered: true, outcome: null, booked: false, pending: true, revenueUsd: 0, ...over });
 
-const TUE = 'Office A Tuesday 09:00';
-
 describe('buildMissedCalls', () => {
   test('the heatmap is zero-filled', () => {
     const view = setup([miss('2026-09-10T16:00:00Z', 'h1'), miss('2026-09-10T17:00:00Z', 'h2', { locationId: 'loc_b', localHour: 11 })]);
@@ -113,24 +111,9 @@ describe('buildMissedCalls', () => {
     expect(formula).toContain('whole export');
     expect(formula).toContain('Unattributed calls use their channel');
     expect(formula).toContain('Pending calls');
-    expect(formula).toContain('upper bound');
+    expect(formula).toContain('This is a model, not a measured loss');
+    expect(formula).toContain('likely overstates the loss');
     expect(formula).toContain('every unanswered call');
-  });
-
-  test('busiest slot names the office, weekday and hour', () => {
-    const view = setup([
-      miss('2026-09-10T16:00:00Z', 'h1'),
-      miss('2026-09-10T17:00:00Z', 'h2'),
-      miss('2026-09-10T18:00:00Z', 'h3', { localHour: 14 }),
-    ]);
-    expect(view.busiestSlot).toEqual({ locationId: 'loc_a', weekday: 1, hour: 9, calls: 2, officeName: 'Office A' });
-  });
-
-  test('a tie for the busiest slot names no slot', () => {
-    const view = setup([miss('2026-09-10T16:00:00Z', 'h1'), miss('2026-09-10T17:00:00Z', 'h2', { localHour: 14 })]);
-    expect(view.busiestSlot).toBeNull();
-    expect(view.actions[0]!.text).toBe('Call back 2 callers whose latest call went unanswered (est. $40 in bookings).');
-    expect(view.factSheet.entities).toEqual([]);
   });
 
   test('the call-back action', () => {
@@ -139,18 +122,18 @@ describe('buildMissedCalls', () => {
     expect(view.actions[0]).toMatchObject({
       kind: 'call_back',
       actionable: true,
-      text: `Call back 2 callers whose latest call went unanswered (est. $40 in bookings). Busiest missed slot: ${TUE}.`,
+      text: 'Call back 2 callers whose latest call went unanswered.',
       link: { view: 'missed-calls' },
     });
     expect(view.actions[0]!.link.locationId).toBeUndefined();
     expect(view.templateSentence).toBe(view.actions[0]!.text);
     expect(view.factSheet.view).toBe('missed-calls');
-    expect(view.factSheet.entities).toEqual(['Office A']);
+    expect(view.factSheet.entities).toEqual([]);
+    // The call-back list has no dollar total, so the AI cannot quote one.
+    expect(Object.keys(view.factSheet.facts)).toEqual(['callbacks.callers']);
 
     const one = setup([miss('2026-09-10T16:00:00Z', 'h1')]);
-    expect(one.actions[0]!.text).toBe(
-      `Call back 1 caller whose latest call went unanswered (est. $20 in bookings). Busiest missed slot: ${TUE}.`,
-    );
+    expect(one.actions[0]!.text).toBe('Call back 1 caller whose latest call went unanswered.');
   });
 
   test('everyone has since got through', () => {
@@ -158,7 +141,7 @@ describe('buildMissedCalls', () => {
     expect(view.actions[0]!.kind).toBe('no_callbacks');
     expect(view.actions[0]!.actionable).toBe(false);
     expect(view.lostValue.estimatedUsd).toBeGreaterThan(0);
-    expect(view.actions[0]!.text).toBe(`There is no one to call back from this range. Busiest missed slot: ${TUE}.`);
+    expect(view.actions[0]!.text).toBe('There is no one to call back from this range.');
   });
 
   test('no missed calls in range', () => {
@@ -170,7 +153,6 @@ describe('buildMissedCalls', () => {
       expect(view.heatmap.byWeekday.every((r) => r.total === 0 && r.hours.every((h) => h === 0))).toBe(true);
       expect(view.lostValue.estimatedUsd).toBe(0);
       expect(view.callbacks.rows).toEqual([]);
-      expect(view.busiestSlot).toBeNull();
       expect(view.actions).toHaveLength(1);
       expect(view.actions[0]!.kind).toBe('no_missed_calls');
       expect(view.actions[0]!.text).toBe('No calls went unanswered in this range.');
@@ -214,7 +196,7 @@ describe('buildMissedCalls', () => {
     expect(view.callbacks.rows).toEqual([]);
     expect(view.actions[0]!.kind).toBe('no_callbacks');
     expect(view.actions[0]!.text).toBe(
-      `No call-back list: 2 calls went unanswered without a caller number, so those callers cannot be identified. Busiest missed slot: ${TUE}.`,
+      'No call-back list: 2 calls went unanswered without a caller number, so those callers cannot be identified.',
     );
     expect(view.actions[0]!.text).not.toContain('no one to call back');
     const one = setup([miss('2026-09-10T16:00:00Z', '')]);

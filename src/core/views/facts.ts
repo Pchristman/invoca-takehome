@@ -1,7 +1,7 @@
 // A fact sheet is a flat record of typed facts. Action templates hold {key} placeholders and one
 // function fills them, so template text and, later, AI text read exactly the same facts.
 import {
-  formatCount, formatHour, formatPercentChange, formatPointsChange, formatRate, formatUsd, formatUsdPerDollar, formatWeekday,
+  formatCount, formatPercentChange, formatPointsChange, formatRate, formatUsd, formatUsdPerDollar,
 } from './format';
 
 /** Every view, in menu order. The one list the URL parser and the question schema read. */
@@ -15,8 +15,6 @@ export type Fact =
   | { kind: 'usd'; value: number }
   | { kind: 'usd_per_dollar'; value: number } // revenue per budget dollar, to the cent
   | { kind: 'rate'; value: number } // a fraction, 0 to 1
-  | { kind: 'weekday'; value: number } // 0 = Monday
-  | { kind: 'hour'; value: number }
   | { kind: 'percent_change'; value: number }
   | { kind: 'points_change'; value: number };
 
@@ -36,8 +34,6 @@ export function formatFact(fact: Fact): string {
     case 'usd': return formatUsd(fact.value);
     case 'usd_per_dollar': return formatUsdPerDollar(fact.value);
     case 'rate': return formatRate(fact.value);
-    case 'weekday': return formatWeekday(fact.value);
-    case 'hour': return formatHour(fact.value);
     case 'percent_change': return formatPercentChange(fact.value);
     case 'points_change': return formatPointsChange(fact.value);
   }

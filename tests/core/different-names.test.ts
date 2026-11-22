@@ -107,7 +107,7 @@ describe('ranges and metrics on a different export', () => {
 
     const weeks = callsPerWeek(store.calls, span, span);
     expect(weeks.map((w) => [w.weekStart, w.calls, w.partial])).toEqual([
-      ['2031-05-05', 4, false],
+      ['2031-05-05', 4, true], // holds the data's first date
       ['2031-05-12', 4, false],
     ]);
 

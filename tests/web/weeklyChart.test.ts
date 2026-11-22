@@ -117,9 +117,10 @@ describe('weeklyChartModel on real server data', () => {
   });
 
   it('flags a week the data cuts short even when the range is aligned to weeks', () => {
-    // Data Sep 7 to Sep 17; range Mon Sep 7 to Sun Sep 20. The last week is only partly in the data.
+    // Data Sep 7 to Sep 17; range Mon Sep 7 to Sun Sep 20. The last week is only partly in the data,
+    // and the first holds the data's first date.
     expect(flags(realModel('start=2026-09-07&end=2026-09-20', storeOverDates('2026-09-07', '2026-09-17')))).toEqual([
-      false,
+      true,
       true,
     ]);
   });
@@ -131,12 +132,12 @@ describe('weeklyChartModel on real server data', () => {
   });
 
   it('reads correctly across a year boundary, with the year on every label', () => {
-    // Mon Dec 28 2026 to Sun Jan 10 2027: two whole weeks, so neither is partial.
+    // Mon Dec 28 2026 to Sun Jan 10 2027: two whole weeks; the first holds the data's first date, so it is partial.
     const whole = realModel('range=all', storeOverDates('2026-12-28', '2027-01-10'));
     expect(whole.bars.map((b) => b.label)).toEqual(['Dec 28, 2026', 'Jan 4, 2027']);
     expect(whole.bars.map((b) => b.range)).toEqual(['Dec 28, 2026 – Jan 3, 2027', 'Jan 4, 2027 – Jan 10, 2027']);
     expect(whole.bars.map((b) => b.calls)).toEqual([7, 7]);
-    expect(flags(whole)).toEqual([false, false]);
+    expect(flags(whole)).toEqual([true, false]);
     // Wed Dec 30 to Tue Jan 12: the weeks at both ends are partial and the middle one is not.
     const cut = realModel('range=all', storeOverDates('2026-12-30', '2027-01-12'));
     expect(cut.bars.map((b) => b.range)).toEqual(['Dec 28, 2026 – Jan 3, 2027', 'Jan 4, 2027 – Jan 10, 2027', 'Jan 11, 2027 – Jan 17, 2027']);

@@ -35,7 +35,7 @@ describe('overview tiles', () => {
 
   it('has five tiles in order with the labels', () => {
     expect(model.tiles.map((t) => t.key)).toEqual(['calls', 'uniqueCallers', 'answerRate', 'bookings', 'revenueUsd']);
-    expect(model.tiles.map((t) => t.label)).toEqual(['Calls', 'Unique callers', 'Answer rate', 'Bookings', 'Revenue']);
+    expect(model.tiles.map((t) => t.label)).toEqual(['Calls', 'Unique caller numbers', 'Answer rate', 'Bookings', 'Revenue']);
   });
 
   it('prints the API values', () => {

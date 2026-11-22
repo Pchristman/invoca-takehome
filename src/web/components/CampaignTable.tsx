@@ -1,7 +1,7 @@
 import type { Mark, CampaignRowModel, CampaignSort, CampaignsModel, SortKey } from '../models/campaignsModel';
 import { CellText, SortHeader } from './TableParts';
 
-const MARK_LABELS: Record<Mark, string> = { best: 'Best', worst: 'Worst', jump: 'Calls jumped', drop: 'Calls dropped' };
+const MARK_LABELS: Record<Mark, string> = { best: 'Highest est. return', worst: 'Lowest est. return', jump: 'Calls jumped', drop: 'Calls dropped' };
 
 function cellClass(key: SortKey): string | undefined {
   return key === 'name' || key === 'channel' ? undefined : 'num';

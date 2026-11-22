@@ -328,10 +328,8 @@ button.button:not([aria-pressed]):not(:disabled):hover {
   font-variant-numeric: tabular-nums;
 }
 
-.tone-up { color: var(--color-up); font-weight: 500; }
-.tone-down { color: var(--color-down); font-weight: 500; }
-.tone-flat,
-.tone-new { color: var(--color-text-muted); } /* new: no previous calls to compare with, so neither up nor down */
+/* One neutral colour for every change: the words (up, down, new) carry the direction. */
+.tone-neutral { color: var(--color-text); }
 
 /* ---------- lists of actions: one white panel, a row each ---------- */
 .section > ul {

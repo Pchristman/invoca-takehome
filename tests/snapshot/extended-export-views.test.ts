@@ -53,12 +53,8 @@ describe('extended export views: Locations', () => {
 describe('extended export views: Missed calls filtered to Canyon', () => {
   const view = buildMissedCalls(store, all, undefined, { locationId: 'loc_06' });
 
-  it('names Canyon, finds a weekday-morning slot and counts its misses', () => {
+  it('names Canyon and counts its misses', () => {
     expect(view.officeFilter?.name).toBe(nameOf('loc_06'));
-    expect(view.busiestSlot?.weekday).toBeGreaterThanOrEqual(0);
-    expect(view.busiestSlot?.weekday).toBeLessThanOrEqual(4);
-    expect(view.busiestSlot?.hour).toBeGreaterThanOrEqual(9);
-    expect(view.busiestSlot?.hour).toBeLessThanOrEqual(11);
     const expected = callsInRange(store.calls, all).filter((c) => c.locationId === 'loc_06' && !c.answered).length;
     expect(view.unansweredCalls).toBe(expected);
   });

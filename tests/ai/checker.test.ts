@@ -6,7 +6,7 @@ function sheetWith(names: string[], extraKeys: string[] = []): FactSheet {
   const facts: Record<string, any> = {
     'shift.worst.name': { kind: 'name', value: names[0] },
     'shift.worst.value': { kind: 'usd_per_dollar', value: 1.5 },
-    'slot.office': { kind: 'name', value: names[1] ?? names[0] },
+    'office_answer.office': { kind: 'name', value: names[1] ?? names[0] },
   };
   for (const key of extraKeys) facts[key] = { kind: 'count', value: 1 };
   return makeFactSheet('campaigns', facts);

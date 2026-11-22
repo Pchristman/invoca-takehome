@@ -6,9 +6,7 @@ import type { CallStore } from '../types';
 import { buildCallbackList } from './callbacks';
 import type { CallbackList } from './callbacks';
 import { makeAction, makeFactSheet } from './facts';
-import type { Action, ActionLink, Facts } from './facts';
-import { busiestMissedSlot } from './missedSlots';
-import type { MissedSlot } from './missedSlots';
+import type { Action, ActionLink } from './facts';
 import { makeViewContext } from './viewContext';
 import type { ViewBase } from './viewContext';
 
@@ -38,8 +36,6 @@ export interface MissedCallsView extends ViewBase {
     formula: string;
   };
   callbacks: CallbackList;
-  /** Over the unanswered calls above. */
-  busiestSlot: (MissedSlot & { officeName: string }) | null;
   /** The export carries only a hashed caller number (PLAN.md 4.4). */
   limitNote: string;
 }
@@ -81,13 +77,8 @@ export function buildMissedCalls(
   }
 
   const callbacks = buildCallbackList(store, range, rates, options);
-  const slot = busiestMissedSlot(missed);
-  // Cleaning drops calls at unknown offices, so a slot's office is always in the store.
-  const busiestSlot = slot
-    ? { ...slot, officeName: store.locations.find((l) => l.id === slot.locationId)?.name ?? failUnknownOffice(slot.locationId) }
-    : null;
   const link: ActionLink = filterId === undefined ? { view: 'missed-calls' } : { view: 'missed-calls', locationId: filterId };
-  const action = chooseAction(missed.length, callbacks, busiestSlot, link);
+  const action = chooseAction(missed.length, callbacks, link);
 
   const min = THRESHOLDS.MIN_ANSWERED_FOR_RATE;
   return {
@@ -108,12 +99,12 @@ export function buildMissedCalls(
         `Each missed call is valued at its campaign's booking rate times its average booking value. A campaign with fewer than ${min} answered calls with an outcome uses its channel's rates, ` +
         `and a channel with fewer than ${min} uses the overall rates. Unattributed calls use their channel's rates. ` +
         `Pending calls (answered, no outcome yet) are left out of the rates. Rates come from the whole export, not just this range. ` +
-        `It is an upper bound: it counts every unanswered call, including repeat calls from one caller and callers who later got through.`,
+        `This is a model, not a measured loss: nobody knows what an unanswered caller would have booked. ` +
+        `It likely overstates the loss: it counts every unanswered call, including repeat calls from one caller and callers who later got through.`,
     },
     callbacks,
-    busiestSlot,
     limitNote:
-      'The export carries only a hash of the caller number, so callers are identified by that hash. A person who called from a different number cannot be matched. A marketer can match callers by tracking number and time in their call platform.',
+      'The export carries only a hash of the caller number, so callers are identified by that hash. A person who called from a different number cannot be matched. Use the tracking number and time to find the caller in your call platform.',
   };
 }
 
@@ -122,43 +113,26 @@ function addMiss(row: { hours: number[]; total: number }, hour: number): void {
   row.total += 1;
 }
 
-function chooseAction(unanswered: number, callbacks: CallbackList, slot: MissedCallsView['busiestSlot'], link: ActionLink): Action {
+function chooseAction(unanswered: number, callbacks: CallbackList, link: ActionLink): Action {
   if (unanswered === 0) {
     return makeAction('no_missed_calls', 'No calls went unanswered in this range.', {}, link);
   }
-  // A tie for the busiest slot names none.
-  const slotText = slot ? ' Busiest missed slot: {slot.office} {slot.weekday} {slot.hour}.' : '';
-  const slotFacts: Facts = slot
-    ? {
-        'slot.office': { kind: 'name', value: slot.officeName },
-        'slot.weekday': { kind: 'weekday', value: slot.weekday },
-        'slot.hour': { kind: 'hour', value: slot.hour },
-      }
-    : {};
   if (callbacks.rows.length === 0 && callbacks.unidentifiedUnanswered > 0) {
     // Callers exist but the export has no caller hash for them, so there is nobody we can name.
     return makeAction(
       'no_callbacks',
-      'No call-back list: {missed.unidentified} went unanswered without a caller number, so those callers cannot be identified.' + slotText,
-      { 'missed.unidentified': { kind: 'count', value: callbacks.unidentifiedUnanswered, noun: CALLS }, ...slotFacts },
+      'No call-back list: {missed.unidentified} went unanswered without a caller number, so those callers cannot be identified.',
+      { 'missed.unidentified': { kind: 'count', value: callbacks.unidentifiedUnanswered, noun: CALLS } },
       link,
     );
   }
   if (callbacks.rows.length === 0) {
-    return makeAction('no_callbacks', 'There is no one to call back from this range.' + slotText, slotFacts, link);
+    return makeAction('no_callbacks', 'There is no one to call back from this range.', {}, link);
   }
   return makeAction(
     'call_back',
-    'Call back {callbacks.callers} whose latest call went unanswered (est. {callbacks.value} in bookings).' + slotText,
-    {
-      'callbacks.callers': { kind: 'count', value: callbacks.rows.length, noun: CALLERS },
-      'callbacks.value': { kind: 'usd', value: callbacks.totalValueUsd },
-      ...slotFacts,
-    },
+    'Call back {callbacks.callers} whose latest call went unanswered.',
+    { 'callbacks.callers': { kind: 'count', value: callbacks.rows.length, noun: CALLERS } },
     link,
   );
-}
-
-function failUnknownOffice(locationId: string): never {
-  throw new Error(`Missed slot at unknown office ${locationId}`);
 }

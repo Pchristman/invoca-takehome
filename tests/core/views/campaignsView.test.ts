@@ -126,7 +126,7 @@ describe('buildCampaigns', () => {
     expect(view.rows.find((r) => r.isBest)!.name).toBe('Best');
     expect(view.rows.find((r) => r.isWorst)!.name).toBe('Worst');
     expect(view.actions[0]!.text).toBe(
-      'Shift budget from Worst (est. $3.57 revenue per budget dollar) toward Best (est. $35.71 revenue per budget dollar).',
+      'Consider moving budget from Worst (est. $3.57 revenue per budget dollar) toward Best (est. $35.71 revenue per budget dollar). Returns at a higher budget are unknown.',
     );
   });
 
@@ -138,20 +138,20 @@ describe('buildCampaigns', () => {
     const text = (calls: CleanCall[]) =>
       buildCampaigns(makeStore(calls, { campaigns, locations }), fourteen).actions.find((a) => a.kind === 'fix_attribution')!.text;
     expect(text(blank(2))).toBe(
-      '2 calls (0 bookings, $0) came in on 2 with no tracking number not tied to any campaign. Assign each to a campaign.',
+      '2 calls (0 bookings, $0) came in on 2 with no tracking number not tied to any campaign.',
     );
     expect(text(blank(1))).toBe(
-      '1 call (0 bookings, $0) came in on 1 with no tracking number not tied to any campaign. Assign each to a campaign.',
+      '1 call (0 bookings, $0) came in on 1 with no tracking number not tied to any campaign.',
     );
     expect(text([...blank(1), ...unattributedCalls()])).toBe(
-      '4 calls (2 bookings, $150) came in on 2 tracking numbers and 1 with no tracking number not tied to any campaign. Assign each to a campaign.',
+      '4 calls (2 bookings, $150) came in on 2 tracking numbers and 1 with no tracking number not tied to any campaign.',
     );
   });
 
   it('the shift action names both campaigns with their revenue per budget dollar', () => {
     const view = buildCampaigns(store(mainCalls(), false), fourteen);
     const action = view.actions[0]!;
-    expect(action.text).toBe('Shift budget from Beta (est. $0.89 revenue per budget dollar) toward Alpha (est. $4.29 revenue per budget dollar).');
+    expect(action.text).toBe('Consider moving budget from Beta (est. $0.89 revenue per budget dollar) toward Alpha (est. $4.29 revenue per budget dollar). Returns at a higher budget are unknown.');
     expect(action.kind).toBe('shift_budget');
     expect(action.actionable).toBe(true);
     expect(action.link).toEqual({ view: 'campaigns' });
@@ -177,7 +177,7 @@ describe('buildCampaigns', () => {
     const view = buildCampaigns(store(mainCalls()), fourteen);
     expect(view.actions.map((a) => a.kind)).toEqual(['shift_budget', 'fix_attribution']);
     expect(view.actions[1]!.text).toBe(
-      '3 calls (2 bookings, $150) came in on 2 tracking numbers not tied to any campaign. Assign each to a campaign.',
+      '3 calls (2 bookings, $150) came in on 2 tracking numbers not tied to any campaign.',
     );
     expect(view.actions[1]!.link).toEqual({ view: 'campaigns' });
   });
@@ -186,7 +186,7 @@ describe('buildCampaigns', () => {
     const one = makeCall({ campaignId: null, unattributed: true, trackingNumber: '+1-555-0190', revenueUsd: 100, localDate: '2026-09-05' });
     const view = buildCampaigns(makeStore([one], { campaigns, locations }), fourteen);
     expect(view.actions.find((a) => a.kind === 'fix_attribution')!.text).toBe(
-      '1 call (1 booking, $100) came in on 1 tracking number not tied to any campaign. Assign each to a campaign.',
+      '1 call (1 booking, $100) came in on 1 tracking number not tied to any campaign.',
     );
   });
 
@@ -206,7 +206,7 @@ describe('buildCampaigns', () => {
       ...campaignCalls('cmp_d', 4, 4, 100),
     ];
     const reason =
-      'No two different campaigns qualify: best needs a daily budget and at least 5 bookings, worst a daily budget and at least 10 calls in this range.';
+      'No two different campaigns qualify: highest needs a daily budget and at least 5 bookings, lowest a daily budget and at least 10 calls in this range.';
 
     const plain = buildCampaigns(makeStore(calls, { campaigns, locations }), fourteen);
     expect(plain.rows.some((r) => r.isBest || r.isWorst)).toBe(false);
@@ -216,7 +216,7 @@ describe('buildCampaigns', () => {
       kind: 'no_budget_shift',
       actionable: false,
       text:
-        'No budget shift is suggested: no two different campaigns qualify: best needs a daily budget and at least 5 bookings, worst a daily budget and at least 10 calls in this range.',
+        'No budget shift is suggested: no two different campaigns qualify: highest needs a daily budget and at least 5 bookings, lowest a daily budget and at least 10 calls in this range.',
     });
 
     const withAttribution = buildCampaigns(store(calls), fourteen);
@@ -232,7 +232,7 @@ describe('buildCampaigns', () => {
     expect(view.actions).toHaveLength(1);
     expect(view.actions[0]!.kind).toBe('no_budget_shift');
     const reason =
-      'no campaign with a daily budget and at least 10 calls earns less per budget dollar than the top campaign with at least 5 bookings in this range.';
+      'no campaign with a daily budget and at least 10 calls earns less per budget dollar than the highest of those with at least 5 bookings in this range.';
     expect(view.actions[0]!.text).toBe(`No budget shift is suggested: ${reason}`);
     expect(view.bestWorst).toEqual({ eligibleBest: 2, eligibleWorst: 2, reason: reason.charAt(0).toUpperCase() + reason.slice(1) });
   });
@@ -252,7 +252,7 @@ describe('buildCampaigns', () => {
     const view = buildCampaigns(makeStore(calls, { campaigns, locations }), fourteen);
     expect(view.rows.find((r) => r.isWorst)!.name).toBe('Beta');
     expect(view.actions[0]!.text).toBe(
-      'Shift budget from Beta (est. $0.00 revenue per budget dollar) toward Alpha (est. $4.29 revenue per budget dollar).',
+      'Consider moving budget from Beta (est. $0.00 revenue per budget dollar) toward Alpha (est. $4.29 revenue per budget dollar). Returns at a higher budget are unknown.',
     );
     expect(view.factSheet.facts['shift.worst.value']).toMatchObject({ value: 0 });
   });

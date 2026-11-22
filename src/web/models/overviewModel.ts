@@ -14,7 +14,7 @@ export type { Tone };
 
 export interface TileModel {
   key: 'calls' | 'uniqueCallers' | 'answerRate' | 'bookings' | 'revenueUsd';
-  label: string; // Calls, Unique callers, Answer rate, Bookings, Revenue
+  label: string; // Calls, Unique caller numbers, Answer rate, Bookings, Revenue
   value: string; // BLANK when the API value is null
   previous: string | null; // 'was 1,150'; null when there is no usable previous period
   change: { text: string; tone: Tone } | null; // null: no comparison, or both zero
@@ -39,7 +39,7 @@ const UNIQUE_CALLERS_PER_DAY = 'Not compared across different lengths';
 
 const TILES: { key: TileModel['key']; label: string; kind: FigureKind }[] = [
   { key: 'calls', label: 'Calls', kind: 'count' },
-  { key: 'uniqueCallers', label: 'Unique callers', kind: 'count' },
+  { key: 'uniqueCallers', label: 'Unique caller numbers', kind: 'count' },
   { key: 'answerRate', label: 'Answer rate', kind: 'rate' },
   { key: 'bookings', label: 'Bookings', kind: 'count' },
   { key: 'revenueUsd', label: 'Revenue', kind: 'usd' },

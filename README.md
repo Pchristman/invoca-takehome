@@ -139,7 +139,7 @@ Open `http://127.0.0.1:3000/` after `npm start`. The nav has four views: Overvie
 
 **How do I use it?** The [user guide](docs/USER_GUIDE.md) walks through each page with annotated screenshots.
 
-- **Locations** lists every office with its calls, answer rate, bookings, booking rate, revenue and best campaign there. Each office is compared with all other offices pooled, on answer rate and booking rate; a difference that chance does not explain is flagged, "better" or "worse", with both rates. An office with too few calls reads "Too few calls to compare". If an office is flagged worse, the action links to Missed calls filtered to that office; if none is, the page says no office stands out.
+- **Locations** lists every office with its calls, answer rate, bookings, booking rate, revenue and the campaign with the highest booking rate there (column "Highest booking rate (20+ calls)"). Each office is compared with all other offices pooled, on answer rate and booking rate; a difference whose gap is unlikely to be chance is flagged, "better" or "worse", with both rates. An office with too few calls reads "Too few calls to compare". If an office is flagged worse, the action links to Missed calls filtered to that office; if none is, the page says no office stands out.
 - **Missed calls** shows a heatmap of missed calls by hour, by office or by weekday (office local time), the estimated lost value (marked "est.", with its formula one click away), a call-back list of callers whose latest call went unanswered (25 rows a page, highest value first) and a CSV download of the whole list. It can be filtered to one office.
 
 The URL holds the screen, so a link, a refresh or the back button reproduces it:
@@ -192,9 +192,9 @@ By default the comparison is the same number of days just before the selected ra
 
 ## Alerts
 
-A campaign is flagged when its calls jumped or dropped against the previous period by more than chance explains.
+A campaign is flagged when its calls jumped or dropped against the previous period by more than the usual variation.
 
-- **Where:** the Campaigns table has a "Calls vs previous" column (change and "was N") and a "Calls jumped" or "Calls dropped" badge on flagged rows. Overview's top actions gain one extra entry, right after the Campaigns entry, naming the biggest mover and how many campaigns changed. However many campaigns are flagged, there is one entry.
+- **Where:** the Campaigns table has a "Calls vs previous" column (change and "was N") and a "Calls jumped" or "Calls dropped" badge on flagged rows. Overview's suggested actions by page gain one extra entry, right after the Campaigns entry, naming the biggest mover and how many campaigns changed. However many campaigns are flagged, there is one entry.
 - **The test:** `score = (calls now - calls before) / sqrt(calls now + calls before)`; a campaign is flagged when the score reaches 3 in either direction. A campaign is tested only when its calls across both periods add up to at least 20, so a drop to zero or a jump from zero is caught and a handful of calls is never flagged.
 - **Settings:** `ALERT_Z` (3) and `MIN_CALLS_ALERT` (20) in `src/core/thresholds.ts`. 3, as for offices, because about a dozen campaigns are tested at once: at 2.5 some campaign is flagged by luck about 1 time in 7, at 3 about 1 in 30. On the shipped export no campaign is flagged; on the extended export the planted jump and drop are.
 - **Needs a full previous period of equal length.** Over "All data", or with a comparison of another length (compared per day, see Compare any two ranges), nothing is tested and the page says why. A comparison that overlaps the selected range is not tested either (the two periods must be independent); the change column still shows.

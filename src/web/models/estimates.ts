@@ -9,7 +9,7 @@ export function estimateFormulas(days: number): { kind: EstimateKind; label: str
     {
       kind: 'spend',
       label: 'Est. spend',
-      formula: `Estimated spend = daily budget × ${formatCount(days, ['day', 'days'])} in this range. The export has no actual spend, so this is an estimate. Blank when the budget is not given.`,
+      formula: `Estimated spend = daily budget × ${formatCount(days, ['day', 'days'])} in this range. It assumes the full budget was spent every day. The export has no actual spend, so this is an estimate. Blank when the budget is not given.`,
     },
     {
       kind: 'cost_per_booking',

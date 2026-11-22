@@ -17,7 +17,6 @@ function withRows(n: number): MissedCallsView {
   const view = toJson(real());
   const first = view.callbacks.rows[0]!;
   view.callbacks.rows = Array.from({ length: n }, (_, i) => ({ ...first, callerHash: `h${i + 1}` }));
-  view.callbacks.totalValueUsd = 1234;
   return view;
 }
 
@@ -53,9 +52,9 @@ describe('missedCallsModel', () => {
     expect(m.lostValue.label.toLowerCase()).toContain('est.');
     expect(m.lostValue.formula).toBe(view.lostValue.formula);
     expect(m.lostValue.sources.length).toBeGreaterThan(0);
-    // The upper-bound sentence is said once, in the formula; the note only adds how the call-back list differs.
-    expect(m.lostValue.formula).toContain('upper bound');
-    expect(m.lostValue.note).not.toContain('upper bound');
+    // The model sentence is said once, in the formula; the note only adds how the call-back list differs.
+    expect(m.lostValue.formula).toContain('not a measured loss');
+    expect(m.lostValue.note).not.toContain('not a measured loss');
     expect(m.lostValue.note).toBe(
       'The call-back list is smaller: only callers whose latest call went unanswered, each once.',
     );
@@ -101,10 +100,10 @@ describe('missedCallsModel', () => {
     expect(model(stripped)).toEqual(m);
   });
 
-  test('summary and total', () => {
+  test('summary', () => {
     const view = withRows(40);
     for (const page of [1, 2]) {
-      expect(model(view, page).callbacks.summary).toBe('40 callers whose latest call went unanswered, est. $1,234 in bookings.');
+      expect(model(view, page).callbacks.summary).toBe('40 callers whose latest call went unanswered.');
     }
   });
 
@@ -244,7 +243,6 @@ describe('missedCallsModel', () => {
     const zero = toJson(real());
     zero.unansweredCalls = 0;
     zero.callbacks.rows = [];
-    zero.callbacks.totalValueUsd = 0;
     const views = [real(), zero, missedCallsFor(RANGE, gotThroughStore()), real(`${RANGE}&location=loc_a`), withRows(40)];
     for (const view of views) {
       for (const text of strings(model(view))) {

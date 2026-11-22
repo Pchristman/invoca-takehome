@@ -84,13 +84,13 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 
 ### 4.1 Overview
 
-**Shows:** tiles for calls, unique callers, answer rate, bookings and revenue, each with change against the comparison range. Below that, **Top actions**: the headline action from each of the other three views, in fixed order (Campaigns, Locations, Missed calls), each linking to its view. From stretch S1, when campaign call alerts exist (section 9, S1), one extra entry for them follows the Campaigns entry, so the list has three or four entries; if the alert is already Campaigns' headline it is listed once.
+**Shows:** tiles for calls, unique caller numbers, answer rate, bookings and revenue, each with change against the comparison range. Below that, **Suggested actions by page**: the headline action from each of the other three views, in fixed order (Campaigns, Locations, Missed calls), each linking to its view. From stretch S1, when campaign call alerts exist (section 9, S1), one extra entry for them follows the Campaigns entry, so the list has three or four entries; if the alert is already Campaigns' headline it is listed once.
 
-**Action:** the top actions list itself. Each item carries its number.
+**Action:** the suggested actions list itself. Each item carries its number.
 
 **Definitions:**
 
-- Unique callers: distinct `caller_number_hash` in the range.
+- Unique caller numbers: distinct `caller_number_hash` in the range.
 - Answer rate: answered calls / calls.
 - Bookings: calls whose current outcome is `booked`.
 - Revenue: sum of `revenue_usd` on booked calls only.
@@ -101,18 +101,18 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 
 - A table ranked by calls (sortable by any column): campaign, channel, calls, bookings, booking rate, revenue, estimated spend, estimated cost per booking, revenue per budget dollar.
 - "Unattributed" appears as its own row with calls, bookings and revenue; its spend columns are blank.
-- **Best** and **worst** campaign marked by revenue per budget dollar. Both need a budget above $0. **Best** is the highest among campaigns with at least `MIN_BOOKINGS_TO_RANK` bookings in the range, so its figure means something. **Worst** is the lowest among campaigns with at least `MIN_CALLS_TO_RANK_WORST` calls in the range, other than the best; a campaign with 0 bookings can be worst, because a campaign that took budget and calls and booked almost nothing is exactly what the marketer needs to see. Nothing is marked when no two different campaigns qualify, or when the worst is not below the best, and the view says which.
-- A calls-per-week chart for one selected campaign (default: the top campaign by calls). Weeks run Monday to Sunday by local date. A week only partly inside the range or the data is visibly marked partial.
+- **Best** and **worst** campaign marked by revenue per budget dollar, with the badges "Highest est. return" and "Lowest est. return". Both need a budget above $0. **Best** is the highest among campaigns with at least `MIN_BOOKINGS_TO_RANK` bookings in the range, so its figure means something. **Worst** is the lowest among campaigns with at least `MIN_CALLS_TO_RANK_WORST` calls in the range, other than the best; a campaign with 0 bookings can be worst, because a campaign that took budget and calls and booked almost nothing is exactly what the marketer needs to see. Nothing is marked when no two different campaigns qualify, or when the worst is not below the best, and the view says which.
+- A calls-per-week chart for one selected campaign (default: the top campaign by calls). Weeks run Monday to Sunday by local date. A week only partly inside the range or the data is visibly marked partial, and so is the week holding the data's first date.
 
 **Actions:**
 
-1. **Shift budget:** "Shift budget from {worst} (est. ${x} revenue per budget dollar) toward {best} (est. ${y} revenue per budget dollar)." Do not project extra bookings from the shift; the data can't support that claim.
-2. **Fix attribution** (only when unattributed calls exist in range): "{n} calls ({b} bookings, ${r}) came in on {m} tracking numbers not tied to any campaign. Assign them." The tracking numbers are listed with their call counts.
+1. **Shift budget:** "Consider moving budget from {worst} (est. ${x} revenue per budget dollar) toward {best} (est. ${y} revenue per budget dollar). Returns at a higher budget are unknown." Do not project extra bookings from the shift; the data can't support that claim.
+2. **Fix attribution** (only when unattributed calls exist in range): "{n} calls ({b} bookings, ${r}) came in on {m} tracking numbers not tied to any campaign." The tracking numbers are listed with their call counts.
 
 **Definitions:**
 
 - Booking rate: bookings / calls.
-- Estimated spend: `daily_budget_usd` x number of days in the range. Always labeled "est.".
+- Estimated spend: `daily_budget_usd` x number of days in the range. It assumes the full budget was spent every day. Always labeled "est.".
 - Estimated cost per booking: estimated spend / bookings. **Blank** when the budget is $0 or not given, or there are no bookings. Never infinity.
 - Revenue per budget dollar: revenue / estimated spend. Blank when spend is $0 or the budget is not given.
 - A campaign whose budget is not given (blank or unreadable in `campaigns.csv`) also has a blank estimated spend and is never ranked best or worst.
@@ -121,23 +121,23 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 
 **Shows:**
 
-- A table by office: calls, answer rate, bookings, booking rate, revenue, and the **best campaign at that office** (highest booking rate among campaigns with at least `MIN_CALLS_BEST_CAMPAIGN` calls at that office in the range; blank if none qualifies).
-- An **outlier flag** on an office whose answer rate or booking rate differs from all other offices pooled by more than chance explains. Use a two-proportion z-test of the office against the rest; flag when |z| >= `OUTLIER_Z` and the office has at least `MIN_CALLS_OUTLIER` calls. The flag shows direction (better or worse) and both rates.
+- A table by office: calls, answer rate, bookings, booking rate, revenue, and the campaign with the **highest booking rate at that office** (column "Highest booking rate (`MIN_CALLS_BEST_CAMPAIGN`+ calls)": highest booking rate among campaigns with at least `MIN_CALLS_BEST_CAMPAIGN` calls at that office in the range; blank if none qualifies).
+- An **outlier flag** on an office whose answer rate or booking rate differs from all other offices pooled by a gap that is unlikely to be chance. Use a two-proportion z-test of the office against the rest; flag when |z| >= `OUTLIER_Z` and the office has at least `MIN_CALLS_OUTLIER` calls. The flag shows direction (better or worse) and both rates.
 
 **Action:**
 
-- If an office is flagged worse on answer rate: "{office} answers {a}% of calls versus {b}% at other offices. Its most-missed hour is {weekday} {hour} local." Leave the hour clause out when two or more slots tie for the most missed calls. Links to Missed calls filtered to that office.
-- If flagged worse on booking rate: "{office} books {a}% of calls versus {b}% elsewhere. Its best campaign there is {campaign}."
-- If no office is flagged: when no office had enough calls to be tested, "There are too few calls in this range to compare offices."; otherwise "No office stands out on answer or booking rate.", followed by "Missed calls are a company-wide issue." only when at least one call in the range went unanswered. Links to Missed calls. This is a valid, useful result, not a failure.
-- If an office is flagged only better (none worse): "No office is doing worse than the rest on answer or booking rate.", followed by the same company-wide sentence under the same condition. Links to Missed calls.
-- In both cases above where offices were compared and none is flagged worse, the fact sheet carries the number of offices compared, the combined answer and booking rates and the unanswered calls in range (`offices.*`), and no individual office, so a takeaway can be written without ranking offices. The "too few calls" case has no facts. The Overview leaves these facts out of its own sheet.
+- If an office is flagged worse on answer rate: "{office} answers {a}% of calls versus {b}% at other offices." Links to Missed calls filtered to that office.
+- If flagged worse on booking rate: "{office} books {a}% of calls versus {b}% elsewhere. The campaign with the highest booking rate there is {campaign}."
+- If no office is flagged: when no office had enough calls to be tested, "There are too few calls in this range to compare offices."; otherwise "No office stands out on answer or booking rate.", followed by "Unanswered calls are spread across offices: {x} overall." ({x}: unanswered calls / calls in the range) only when at least one call in the range went unanswered. Links to Missed calls. This is a valid, useful result, not a failure.
+- If an office is flagged only better (none worse): "No office is doing worse than the rest on answer or booking rate.", followed by the same unanswered-share sentence under the same condition. Links to Missed calls.
+- In both cases above where offices were compared and none is flagged worse, the fact sheet carries the number of offices compared, the combined answer and booking rates, the unanswered calls in range and, when that sentence is shown, their share (`offices.*`), and no individual office, so a takeaway can be written without ranking offices. The "too few calls" case has no facts. The Overview leaves these facts out of its own sheet.
 
 ### 4.4 Missed calls
 
 **Shows:**
 
 - A heatmap of unanswered calls by office x local hour, with a toggle to weekday x local hour.
-- **Estimated lost value** for unanswered calls in the range, labeled as an estimate with its formula visible. It is an upper bound: it counts every unanswered call, including repeat attempts and callers who later got through.
+- **Estimated lost value** for unanswered calls in the range, labeled as an estimate with its formula visible. It is a model, not a measured loss: nobody knows what an unanswered caller would have booked. It likely overstates the loss: it counts every unanswered call, including repeat attempts and callers who later got through.
 - A **callback list**, downloadable as CSV.
 
 **Definitions:**
@@ -146,7 +146,7 @@ Every view returns a **fact sheet**: a flat set of named values and entity names
 - **Estimated value of one missed call** = its campaign's booking rate among answered calls with an outcome x that campaign's average booking value. Rates come from the **whole export**, not the selected range, so they are stable. If a campaign has fewer than `MIN_ANSWERED_FOR_RATE` answered calls with outcomes, use its channel's rates; if the channel is also too thin, use the overall rates. Unattributed calls use their `marketing_channel`'s rates.
 - **Callback list:** callers (by `caller_number_hash`) who had at least one unanswered call in the range **and** no answered call after their latest unanswered call in the range, looking through to the end of the export. Each row: caller hash, unanswered attempts in range, last attempt (office local time), office, campaign, tracking number dialed, estimated value. The estimate is for their latest missed call only, because one callback recovers at most one booking. Sorted by estimated value, highest first.
 
-**Action:** "Call back {n} callers whose latest call went unanswered (est. ${x} in bookings). Busiest missed slot: {office} {weekday} {hour}." Leave the slot clause out when two or more slots tie for the most missed calls.
+**Action:** "Call back {n} callers whose latest call went unanswered."
 
 **Stated limit:** the export carries only a hashed caller number. The list identifies callers by hash, tracking number and time, which the marketer matches in their call platform. Say this on the view.
 
@@ -258,7 +258,7 @@ Expected list. **Ask before adding each one, at the start of the phase that need
 
 ### Use
 
-One call per view turns that view's fact sheet into a 2–3 sentence takeaway: what it means and what to do. AI is an add-on; every view is complete without it.
+One call per view turns that view's fact sheet into a 2–3 sentence takeaway: what the facts show, then the page's own suggested action restated. The takeaway adds no advice of its own. AI is an add-on; every view is complete without it.
 
 - **Model:** `claude-haiku-5-5`, the cheapest current model; the task is short, structured writing. Low effort. Structured JSON output.
 - **Input:** the fact sheet only (named values plus entity names), never raw calls.
@@ -533,7 +533,7 @@ Work one phase at a time. Each phase gets its own implementation plan first, end
 
 #### S1: Alerts
 
-- **Delivers:** a flag on campaigns whose calls jumped or dropped against the comparison range by more than chance explains. Use a Poisson-style test on counts, `z = (current − previous) / √(current + previous)`, flagged at `|z| >= ALERT_Z` when current + previous reaches `MIN_CALLS_ALERT` (section 4.5). Unattributed is never flagged. Alerts appear on Overview's top actions (one extra entry, section 4.1) and in the Campaigns table. Detail in `docs/archive/plans/s1-alerts.md`.
+- **Delivers:** a flag on campaigns whose calls jumped or dropped against the comparison range by more than the usual variation. Use a Poisson-style test on counts, `z = (current − previous) / √(current + previous)`, flagged at `|z| >= ALERT_Z` when current + previous reaches `MIN_CALLS_ALERT` (section 4.5). Unattributed is never flagged. Alerts appear on Overview's suggested actions (one extra entry, section 4.1) and in the Campaigns table. Detail in `docs/archive/plans/s1-alerts.md`.
 - **Done when:** fixture tests cover jump, drop, no change, and too-small counts; the README covers what this phase added.
 - **Edge cases:**
   - comparison not available (no alerts, say why)

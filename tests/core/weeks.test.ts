@@ -35,6 +35,15 @@ describe('callsPerWeek', () => {
     expect(weeks[0]!.partial).toBe(true);
   });
 
+  test('the week holding the first date in the data is partial even when that date is a Monday', () => {
+    const startsMonday = range('2026-10-19', '2027-03-01');
+    const weeks = callsPerWeek([], range('2026-10-19', '2026-11-01'), startsMonday);
+    expect(weeks.map((w) => [w.weekStart, w.partial])).toEqual([
+      ['2026-10-19', true],
+      ['2026-10-26', false],
+    ]);
+  });
+
   test('a week cut off by the start of the data is partial', () => {
     const startsThursday = range('2026-10-22', '2027-03-01');
     const weeks = callsPerWeek([], range('2026-10-19', '2026-11-01'), startsThursday);

@@ -172,9 +172,9 @@ describe('best and worst', () => {
     expect(modelRow(model.rows, view.rows[1]!.campaignId!).marks).toEqual([]);
     expect(model.bestWorstNote).toBeNull();
     expect(model.bestWorstRule).toBe(
-      'Best and worst by est. revenue per budget $, among campaigns with a budget above $0 in this range: ' +
-        `best is the highest of the ${view.bestWorst.eligibleBest} with at least ${THRESHOLDS.MIN_BOOKINGS_TO_RANK} bookings, ` +
-        `worst the lowest of the ${view.bestWorst.eligibleWorst} with at least ${THRESHOLDS.MIN_CALLS_TO_RANK_WORST} calls.`,
+      'Highest and lowest est. return (est. revenue per budget $), among campaigns with a budget above $0 in this range: ' +
+        `highest of the ${view.bestWorst.eligibleBest} with at least ${THRESHOLDS.MIN_BOOKINGS_TO_RANK} bookings, ` +
+        `lowest of the ${view.bestWorst.eligibleWorst} with at least ${THRESHOLDS.MIN_CALLS_TO_RANK_WORST} calls.`,
     );
   });
 
@@ -361,7 +361,7 @@ describe('alerts note and rule', () => {
     const notChecked = withAlerts({ checked: false, reason: 'No full previous period: nope.' });
     expect(campaignsModel(notChecked, DEFAULT_SORT).alertsNote).toBe('No full previous period: nope.');
     expect(campaignsModel(withAlerts({}), DEFAULT_SORT).alertsNote).toBe(
-      "No campaign's calls changed by more than chance explains.",
+      "No campaign's calls changed by more than the usual variation.",
     );
     expect(campaignsModel(withAlerts({ flagged: 2 }), DEFAULT_SORT).alertsNote).toBeNull();
   });

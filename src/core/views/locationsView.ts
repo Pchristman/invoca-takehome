@@ -7,7 +7,6 @@ import { THRESHOLDS } from '../thresholds';
 import type { CallStore, CleanCall } from '../types';
 import { makeAction, makeFactSheet } from './facts';
 import type { Action, Facts } from './facts';
-import { busiestMissedSlot } from './missedSlots';
 import { makeViewContext } from './viewContext';
 import type { ViewBase } from './viewContext';
 
@@ -145,7 +144,11 @@ function chooseAction(rows: readonly LocationRow[], current: readonly CleanCall[
       'offices.booking_rate': { kind: 'rate', value: rate(total.bookings, total.calls)! },
       'offices.unanswered': { kind: 'count', value: total.calls - total.answered, noun: CALLS },
     };
-    const companyWide = current.some((c) => !c.answered) ? ' Missed calls are a company-wide issue.' : '';
+    let companyWide = '';
+    if (current.some((c) => !c.answered)) {
+      combined['offices.unanswered_rate'] = { kind: 'rate', value: rate(total.calls - total.answered, total.calls)! };
+      companyWide = ' Unanswered calls are spread across offices: {offices.unanswered_rate} overall.';
+    }
     return anyBetter
       ? makeAction('no_office_worse', 'No office is doing worse than the rest on answer or booking rate.' + companyWide, combined, link)
       : makeAction('no_office_stands_out', 'No office stands out on answer or booking rate.' + companyWide, combined, link);
@@ -159,14 +162,8 @@ function chooseAction(rows: readonly LocationRow[], current: readonly CleanCall[
   };
 
   if (top.kind === 'answer') {
-    const slot = busiestMissedSlot(current.filter((c) => c.locationId === row.locationId));
     const facts: Facts = prefixed('office_answer', rates);
-    let template = '{office_answer.office} answers {office_answer.office_rate} of calls versus {office_answer.rest_rate} at other offices.';
-    if (slot) {
-      facts['office_answer.weekday'] = { kind: 'weekday', value: slot.weekday };
-      facts['office_answer.hour'] = { kind: 'hour', value: slot.hour };
-      template += ' Its most-missed hour is {office_answer.weekday} {office_answer.hour} local.';
-    }
+    const template = '{office_answer.office} answers {office_answer.office_rate} of calls versus {office_answer.rest_rate} at other offices.';
     return makeAction('review_office_answer', template, facts, { view: 'missed-calls', locationId: row.locationId });
   }
 
@@ -174,7 +171,7 @@ function chooseAction(rows: readonly LocationRow[], current: readonly CleanCall[
   let template = '{office_booking.office} books {office_booking.office_rate} of calls versus {office_booking.rest_rate} elsewhere.';
   if (row.bestCampaign) {
     facts['office_booking.campaign'] = { kind: 'name', value: row.bestCampaign.name };
-    template += ' Its best campaign there is {office_booking.campaign}.';
+    template += ' The campaign with the highest booking rate there is {office_booking.campaign}.';
   } else {
     facts['office_booking.min_calls'] = { kind: 'count', value: THRESHOLDS.MIN_CALLS_BEST_CAMPAIGN, noun: CALLS };
     template += ' No campaign there has at least {office_booking.min_calls} to name a best one.';

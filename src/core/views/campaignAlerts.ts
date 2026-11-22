@@ -13,11 +13,11 @@ export interface FlaggedCampaign {
 }
 
 const JUMP_TEMPLATE =
-  'Calls to {alert.top.name} jumped from {alert.top.previous} to {alert.top.current}, more than chance explains. Find out what changed and whether to keep it going.';
+  'Calls to {alert.top.name} jumped from {alert.top.previous} to {alert.top.current}, more than the usual variation. Find out why.';
 const DROP_TEMPLATE =
-  'Calls to {alert.top.name} dropped from {alert.top.previous} to {alert.top.current}, more than chance explains. Check that its tracking numbers, ads and budget are still running.';
+  'Calls to {alert.top.name} dropped from {alert.top.previous} to {alert.top.current}, more than the usual variation. Find out why.';
 const MANY_TEMPLATE =
-  '{alert.count} changed by more than chance explains; {alert.top.name} moved most, from {alert.top.previous} to {alert.top.current}. Review each flagged campaign in the table.';
+  '{alert.count} changed by more than the usual variation; {alert.top.name} moved most, from {alert.top.previous} to {alert.top.current}. Review each flagged campaign in the table.';
 
 /** One action for all flagged campaigns, naming the biggest mover (largest |z|, ties by lower id). Null when none. */
 export function alertAction(flagged: readonly FlaggedCampaign[]): Action | null {

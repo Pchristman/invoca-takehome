@@ -54,7 +54,7 @@ const COLUMNS: LocationsModel['columns'] = [
   { key: 'bookings', label: 'Bookings', numeric: true },
   { key: 'bookingRate', label: 'Booking rate', numeric: true },
   { key: 'revenueUsd', label: 'Revenue', numeric: true },
-  { key: 'bestCampaign', label: 'Best campaign there', numeric: false },
+  { key: 'bestCampaign', label: `Highest booking rate (${formatCount(THRESHOLDS.MIN_CALLS_BEST_CAMPAIGN)}+ calls)`, numeric: false },
   { key: 'flags', label: 'Compared with other offices', numeric: false },
 ];
 
@@ -63,7 +63,7 @@ const NO_OTHERS = 'No other office has calls to compare with.';
 const NO_BEST = 'No campaign has enough calls at this office to name a best one.';
 
 const FLAGS_NOTE =
-  'Each office is compared with all other offices pooled. Only offices with enough calls are tested, and a difference is flagged only when chance does not explain it.';
+  'Each office is compared with all other offices pooled. Only offices with enough calls are tested, and a difference is flagged only when the gap is unlikely to be chance.';
 
 function rateCell(value: number | null): Cell {
   return value === null ? { text: BLANK, note: NO_CALLS } : { text: formatRate(value) };
@@ -93,7 +93,7 @@ function flagNoteFor(row: LocationRow, rows: LocationRow[]): string {
       ? NO_OTHERS
       : 'Too few calls to compare.';
   }
-  return 'In line with other offices.';
+  return 'Not flagged.';
 }
 
 function rowModel(row: LocationRow, rows: LocationRow[]): LocationRowModel {

@@ -87,7 +87,8 @@ describe('shipped export, views over all data', () => {
     expect(missed.actions[0]?.kind).toBe('call_back');
 
     expect(missed.callbacks.rows.length).toBe(OBSERVED.callbackRows);
-    expect(missed.callbacks.totalValueUsd).toBe(OBSERVED.callbackTotalValueUsd);
+    const totalCents = missed.callbacks.rows.reduce((sum, row) => sum + Math.round(row.estimatedValueUsd * 100), 0);
+    expect(totalCents / 100).toBe(OBSERVED.callbackTotalValueUsd);
   });
 });
 

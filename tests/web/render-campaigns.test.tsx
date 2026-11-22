@@ -134,7 +134,7 @@ describe('Campaigns screen alerts', () => {
     const html = render(view);
     expect(html).toContain('How alerts are decided');
     expect(html).toContain('fewer than 20 calls across both periods');
-    expect(html).not.toContain('by more than chance explains.</p>');
+    expect(html).not.toContain('by more than the usual variation.</p>');
   });
 
   it('a name with markup is escaped in the row and the badge', () => {
@@ -157,7 +157,7 @@ describe('Campaigns screen alerts', () => {
 
   it('shows the all-clear when checked and nothing is flagged', () => {
     const html = render({ ...real, alerts: { checked: true, reason: null, flagged: 0, z: 3, minCalls: 20 } });
-    expect(html).toContain("No campaign&#x27;s calls changed by more than chance explains.");
+    expect(html).toContain("No campaign&#x27;s calls changed by more than the usual variation.");
   });
 });
 

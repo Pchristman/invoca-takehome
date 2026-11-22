@@ -374,8 +374,25 @@ describe('OverviewView', () => {
     const real = overviewFor('range=last7');
     const view: OverviewData = { ...real, tiles: { ...real.tiles, calls: { ...real.tiles.calls, change: { kind: 'new' } } } };
     const [callsTile] = tilesOf(render(view));
-    expect(callsTile).toContain('tone-new');
+    expect(callsTile).toContain('tone-neutral');
     expect(callsTile).toContain('new (new)');
+  });
+
+  it('up and down changes share one neutral tone class; the word carries the direction (hand-edited copy of real data)', () => {
+    const real = overviewFor('range=last7');
+    const view: OverviewData = {
+      ...real,
+      tiles: {
+        ...real.tiles,
+        calls: { ...real.tiles.calls, change: { kind: 'percent', value: 0.1 } },
+        bookings: { ...real.tiles.bookings, change: { kind: 'percent', value: -0.1 } },
+      },
+    };
+    const html = render(view);
+    expect(html).toContain('(up)');
+    expect(html).toContain('(down)');
+    expect(html).not.toMatch(/tone-(up|down|flat|new)/);
+    expect(count(html, 'tile-change tone-neutral')).toBe(count(html, '<div class="tile-change tone-'));
   });
 
   it('an empty range says there are no calls', () => {
@@ -399,7 +416,7 @@ describe('OverviewView', () => {
     };
     const state = parseUrlState('?range=last7');
     const html = render(view, state);
-    const section = html.slice(html.indexOf('<h2>Top actions</h2>'));
+    const section = html.slice(html.indexOf('<h2>Suggested actions by page</h2>'));
     const items = section.match(/<li[ >].*?<\/li>/g) ?? [];
     expect(items).toHaveLength(3);
     view.topActions.forEach((item, i) => {
@@ -455,15 +472,15 @@ describe('CampaignTable', () => {
     expect(byName).toMatch(/<th[^>]*aria-sort="ascending"[^>]*><button[^>]*>Campaign<\/button>/);
   });
 
-  it('shows Best and Worst as text and no note when something is marked (hand-edited copy)', () => {
+  it('shows Highest and Lowest est. return as text and no note when something is marked (hand-edited copy)', () => {
     const rows = zeroBudget.rows.map((row, i) => ({
       ...row,
       isBest: i === 0,
       isWorst: i === zeroBudget.rows.length - 1,
     }));
     const html = table({ ...zeroBudget, rows, bestWorst: { eligibleBest: 3, eligibleWorst: 3, reason: null } });
-    expect(html).toContain('>Best</span>');
-    expect(html).toContain('>Worst</span>');
+    expect(html).toContain('>Highest est. return</span>');
+    expect(html).toContain('>Lowest est. return</span>');
     expect(count(html, 'badge-best')).toBe(1);
     expect(count(html, 'badge-worst')).toBe(1);
     expect(html).not.toContain('No best or worst marked');
@@ -639,7 +656,7 @@ describe('LocationTable', () => {
   it('an office in line with the rest says so, with no badge', () => {
     const html = table(locationsFor('range=all', plantedStore('none')));
     expect(html).not.toContain('badge');
-    expect(count(html, 'In line with other offices.')).toBe(3);
+    expect(count(html, 'Not flagged.')).toBe(3);
   });
 
   it('an office with no calls shows dashes with their notes, and the flag column says no calls', () => {
@@ -1040,7 +1057,7 @@ describe('OverviewView with an alert entry', () => {
 
   it('lists the alert once with an Open Campaigns link', () => {
     expect(count(html, alertText)).toBe(1);
-    const items = html.slice(html.indexOf('<h2>Top actions</h2>')).match(/<li[ >].*?<\/li>/g) ?? [];
+    const items = html.slice(html.indexOf('<h2>Suggested actions by page</h2>')).match(/<li[ >].*?<\/li>/g) ?? [];
     expect(items).toHaveLength(4);
     expect(items[1]).toContain(alertText);
     expect(items[1]).toContain('Open Campaigns');

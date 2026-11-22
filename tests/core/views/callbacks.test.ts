@@ -79,7 +79,7 @@ describe('buildCallbackList', () => {
     expect(setup([miss('2026-09-01T16:00:00Z', 'h1')]).rows).toEqual([]);
   });
 
-  test('rows are sorted by value, then caller hash; the total is their sum', () => {
+  test('rows are sorted by value, then caller hash', () => {
     const list = setup([
       miss('2026-09-10T16:00:00Z', 'hb'),
       miss('2026-09-10T16:00:00Z', 'hc', { campaignId: 'cmp_b', channel: 'display' }),
@@ -90,7 +90,6 @@ describe('buildCallbackList', () => {
       ['hb', 20],
       ['hc', 10],
     ]);
-    expect(list.totalValueUsd).toBe(50);
   });
 
   test('an unattributed caller is valued by channel and labelled', () => {
@@ -131,10 +130,10 @@ describe('buildCallbackList', () => {
 
   test('an unknown office id lists nobody', () => {
     const list = setup([miss('2026-09-10T16:00:00Z', 'h1')], { locationId: 'loc_zzz' });
-    expect(list).toEqual({ rows: [], totalValueUsd: 0, unidentifiedUnanswered: 0 });
+    expect(list).toEqual({ rows: [], unidentifiedUnanswered: 0 });
   });
 
   test('no missed calls gives an empty list', () => {
-    expect(setup([])).toEqual({ rows: [], totalValueUsd: 0, unidentifiedUnanswered: 0 });
+    expect(setup([])).toEqual({ rows: [], unidentifiedUnanswered: 0 });
   });
 });

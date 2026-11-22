@@ -8,7 +8,6 @@ export type { BestCampaign, LocationRow, LocationsView } from './locationsView';
 export { buildMissedCalls } from './missedCallsView';
 export type { MissedCallsOptions, MissedCallsView } from './missedCallsView';
 export type { CallbackList, CallbackRow } from './callbacks';
-export type { MissedSlot } from './missedSlots';
 export type { ViewBase, ViewNotes } from './viewContext';
 export { fillPlaceholders } from './facts';
 export type { Action, ActionKind, Fact, FactSheet, ViewName } from './facts';

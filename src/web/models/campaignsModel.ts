@@ -156,11 +156,11 @@ export function sortCampaignRows(rows: CampaignRow[], sort: CampaignSort): Campa
   );
 }
 
-const ALL_CLEAR = "No campaign's calls changed by more than chance explains.";
+const ALL_CLEAR = "No campaign's calls changed by more than the usual variation.";
 
 function alertsRuleText({ minCalls, z }: CampaignsView['alerts']): string {
   return (
-    'A campaign is marked when its calls differ from the comparison period by more than chance explains. ' +
+    'A campaign is marked when its calls differ from the comparison period by more than the usual variation. ' +
     `Campaigns with fewer than ${formatCount(minCalls)} calls across both periods are not tested. ` +
     `Score = (calls now − calls before) ÷ √(calls now + calls before); marked when the score reaches ${formatThreshold(z)} in either direction.`
   );
@@ -168,9 +168,9 @@ function alertsRuleText({ minCalls, z }: CampaignsView['alerts']): string {
 
 function bestWorstRuleText({ eligibleBest, eligibleWorst }: CampaignsView['bestWorst']): string {
   return (
-    'Best and worst by est. revenue per budget $, among campaigns with a budget above $0 in this range: ' +
-    `best is the highest of the ${formatCount(eligibleBest)} with at least ${formatCount(THRESHOLDS.MIN_BOOKINGS_TO_RANK)} bookings, ` +
-    `worst the lowest of the ${formatCount(eligibleWorst)} with at least ${formatCount(THRESHOLDS.MIN_CALLS_TO_RANK_WORST)} calls.`
+    'Highest and lowest est. return (est. revenue per budget $), among campaigns with a budget above $0 in this range: ' +
+    `highest of the ${formatCount(eligibleBest)} with at least ${formatCount(THRESHOLDS.MIN_BOOKINGS_TO_RANK)} bookings, ` +
+    `lowest of the ${formatCount(eligibleWorst)} with at least ${formatCount(THRESHOLDS.MIN_CALLS_TO_RANK_WORST)} calls.`
   );
 }
 

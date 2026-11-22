@@ -91,7 +91,7 @@ describe('Upload data', () => {
       '/api/upload/commit': commit,
     });
     renderApp('/');
-    await screen.findByRole('heading', { name: 'Top actions' });
+    await screen.findByRole('heading', { name: 'Suggested actions by page' });
     fireEvent.click(headerUpload());
     await screen.findByRole('complementary', { name: 'Upload data' });
     return calls;

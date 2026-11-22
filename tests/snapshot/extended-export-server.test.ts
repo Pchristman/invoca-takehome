@@ -33,13 +33,12 @@ describe('extended export over HTTP', () => {
     expect(['review_office_answer', 'review_office_booking']).toContain(body.actions[0].kind);
   });
 
-  it("missed calls for one office carry its name and busiest slot", async () => {
+  it("missed calls for one office carry its name", async () => {
     const meta = (await getJson('/api/meta')).body;
     const office = meta.locations.find((l: { id: string }) => l.id === 'loc_06');
     const { status, body } = await getJson('/api/missed-calls?range=all&location=loc_06');
     expect(status).toBe(200);
     expect(body.officeFilter.name).toBe(office.name);
-    expect(body.busiestSlot).not.toBeNull();
   });
 
   it('campaigns: the weekly chart follows the chosen campaign', async () => {

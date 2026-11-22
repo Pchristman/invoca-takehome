@@ -20,8 +20,8 @@ This guide shows how to read each page of Inbound Call Performance and what to d
 
 ## A weekly routine
 
-1. **Overview.** Pick the period and read the five tiles and the top actions.
-2. **Campaigns.** See which campaigns earn their budget and where to shift it.
+1. **Overview.** Pick the period and read the five tiles and the suggested actions by page.
+2. **Campaigns.** See which campaigns earn their budget and where budget might move.
 3. **Locations.** Check whether any office answers or books differently from the rest.
 4. **Missed calls.** Download the call-back list and hand it to the team.
 5. **Print summary.** One page for whoever you report to.
@@ -36,7 +36,7 @@ These controls sit above all four pages. Whatever you choose here stays in the w
 2. **Pick the period.** Last 28 days is the default. Every number on the page follows this choice.
 3. **Or set your own dates.** Fill in a start and end date, then press Apply.
 4. **Compare with another period (optional, on Overview and Campaigns).** Leave it empty and the app compares with the same number of days just before your range.
-5. **The takeaway.** A short summary of the page. The tag shows who wrote it: `AI`, or `TEMPLATE` when AI is off or its text failed the checks twice (the AI gets one more try before the app falls back to its own sentence). The numbers always come from the app, never from the AI.
+5. **The takeaway.** A short summary of the page that restates its suggested action and adds no advice of its own. The tag shows who wrote it: `AI`, or `TEMPLATE` when AI is off or its text failed the checks twice (the AI gets one more try before the app falls back to its own sentence). The numbers always come from the app, never from the AI.
 6. **Data as of.** The latest date in your data. "Last 7 days" counts back from this date, not from today.
 7. **Ask a question.** Type a question in plain English. See "Ask a question" below.
 8. **Print summary.** A one-page version for reporting up.
@@ -44,12 +44,12 @@ These controls sit above all four pages. Whatever you choose here stays in the w
 
 ## Overview: how did we do, and what next?
 
-Start here each week. Five headline numbers, then the single most useful action from each of the other pages.
+Start here each week. Five headline numbers, then the suggested action from each of the other pages.
 
-![Overview page scrolled to the tiles and the Top actions list](user-guide/02-overview-actions.png)
+![Overview page scrolled to the tiles and the Suggested actions by page list](user-guide/02-overview-actions.png)
 
 1. **Five headline numbers.** Each tile shows the value now, what it was in the comparison period, and the change. Counts and money change in percent. Rates change in points: 79.6% to 77.5% is "-2.1 points".
-2. **Top actions.** One suggestion from each other page, always with the number behind it.
+2. **Suggested actions by page.** One suggestion from each other page, always with the number behind it.
 3. **Go to the detail.** Each action links to the page it came from.
 
 ## Comparing two periods
@@ -62,7 +62,7 @@ On Overview and Campaigns you can compare your range with any other range. If th
 2. **Different lengths.** The note says the periods are not the same length, so changes are worked out per day.
 3. **What is being compared.** The exact dates of both periods.
 4. **"per day" on the tile.** The change compares the daily average, so a longer period does not look bigger just because it is longer.
-5. **Not compared.** Unique callers cannot be averaged per day fairly, so the tile says so and shows no change.
+5. **Not compared.** Unique caller numbers cannot be averaged per day fairly, so the tile says so and shows no change.
 6. **Back to the default.** Returns to comparing with the period just before.
 7. **Clear dates.** Drops your custom range and goes back to the preset.
 
@@ -72,18 +72,18 @@ The page opens with what to do, then shows the table behind it.
 
 ![Campaigns page with the takeaway, two actions and the start of the campaign table](user-guide/04a-campaigns-actions.png)
 
-1. **Shift budget.** Names the weakest and the strongest campaign by estimated revenue per budget dollar.
-2. **Fix attribution.** Calls that came in on phone numbers not tied to any campaign. Assign these numbers in your call platform so the calls are credited.
-3. **How the estimates work.** Click to see the formulas. Spend is not in the data, so it is estimated as daily budget times the days in your range.
+1. **Consider moving budget.** Names the weakest and the strongest campaign by estimated revenue per budget dollar. Returns at a higher budget are unknown.
+2. **Fix attribution.** Calls that came in on phone numbers not tied to any campaign.
+3. **How the estimates work.** Click to see the formulas. Spend is not in the data, so it is estimated as daily budget times the days in your range. It assumes the full budget was spent every day.
 4. **Sort the table.** Click any column heading. Your sort stays when you change the date range and is part of the link.
 
-![Campaign table with best and worst campaigns marked](user-guide/04-campaigns-table.png)
+![Campaign table with the highest and lowest est. return marked](user-guide/04-campaigns-table.png)
 
 5. **Calls vs comparison.** How each campaign's calls changed against the comparison period.
 6. **"Est." columns.** Anything marked est. is an estimate built from the daily budget, not actual spend.
 7. **A dash means "not applicable".** Campaigns with a $0 budget, or no budget in the file, have no cost per booking, so the cell is left empty on purpose.
-8. **Best.** Highest estimated revenue per budget dollar among campaigns with a budget above $0 and at least 5 bookings in the range.
-9. **Worst.** Lowest estimated revenue per budget dollar among campaigns with a budget above $0 and at least 10 calls in the range. A campaign with no bookings at all can be worst. If no two campaigns qualify, or none does worse than the best, nothing is marked and the page says why.
+8. **Highest est. return.** Highest estimated revenue per budget dollar among campaigns with a budget above $0 and at least 5 bookings in the range.
+9. **Lowest est. return.** Lowest estimated revenue per budget dollar among campaigns with a budget above $0 and at least 10 calls in the range. A campaign with no bookings at all can be the lowest. If no two campaigns qualify, or none does worse than the highest, nothing is marked and the page says why.
 
 ![Unattributed row with its tracking numbers, and the calls per week chart](user-guide/05-campaigns-chart.png)
 
@@ -98,9 +98,9 @@ Compares offices on how many calls they answer and how many become bookings.
 
 ![Locations page with the action and the office table](user-guide/06-locations.png)
 
-1. **The action.** If an office is doing worse than the rest, it is named here with both rates. "No office stands out" is a real result: it means the differences are within what chance explains. The takeaway then sums up all offices together rather than singling one out.
-2. **Best campaign there.** The campaign with the highest booking rate at that office, among campaigns with at least 20 calls there.
-3. **Compared with other offices.** Says "better" or "worse" only when the gap is larger than chance explains and the office has at least 50 calls.
+1. **The action.** If an office is doing worse than the rest, it is named here with both rates. "No office stands out" is a real result: it means no office differs from the others by more than is likely to be chance. The takeaway then sums up all offices together rather than singling one out.
+2. **Highest booking rate (20+ calls).** The campaign with the highest booking rate at that office, among campaigns with at least 20 calls there.
+3. **Compared with other offices.** Says "better" or "worse" only when the gap is unlikely to be chance and the office has at least 50 calls.
 4. **Sort** by any column, as on Campaigns.
 
 ## Missed calls: who should we call back?
@@ -109,7 +109,7 @@ Shows when calls go unanswered, what they may be worth, and a list of people to 
 
 ![Missed calls page with the action, office filter and the heatmap by office](user-guide/07-missed-heatmap.png)
 
-1. **The action.** How many callers to call back and the estimated value of those bookings.
+1. **The action.** How many callers to call back.
 2. **Filter to one office.** The heatmap and the list below follow it.
 3. **By office or by weekday.** Switch how the rows are grouped.
 4. **Darker means more missed calls.** Each cell is one office and one hour, in that office's local time.
@@ -118,11 +118,11 @@ Shows when calls go unanswered, what they may be worth, and a list of people to 
 ![Heatmap switched to weekday by hour](user-guide/08-missed-weekday.png)
 
 6. **By weekday.** The same calls, grouped by day of the week. Use it to see which shifts need cover.
-7. **Busiest slot.** If several slots tie for the most, the action sentence does not single one out.
+7. **Darkest cell.** The hour with the most unanswered calls in this view.
 
 ![Estimated lost value with its formula opened](user-guide/07b-missed-lost-value.png)
 
-8. **Estimated lost value.** What the unanswered calls might have been worth. It is an upper bound: it counts every unanswered call, including repeat attempts and callers who got through later.
+8. **Estimated lost value.** What the unanswered calls might have been worth. It is a model, not a measured loss, and likely overstates the loss: it counts every unanswered call, including repeat attempts and callers who got through later.
 9. **How this estimate works.** Click to see the formula: each missed call is valued at its campaign's usual booking rate times its average booking value.
 
 ![Top of the call-back list](user-guide/09a-missed-callbacks-top.png)
@@ -181,8 +181,8 @@ A newer row for a call you already have replaces the older one. Rows with a prob
 
 ## Keep in mind
 
-- **"Est." means estimate.** Spend is not in the export. It is worked out as daily budget times the number of days, so cost per booking and revenue per budget dollar are estimates too.
-- **Lost value is an upper bound.** It counts every unanswered call. The call-back list total is the more realistic figure, because it counts each caller once.
-- **Best and worst do not rank every campaign.** Best needs at least 5 bookings and worst needs at least 10 calls, both with a budget. A campaign below both, or with no budget in the file, is not ranked, so scan the table as well.
+- **"Est." means estimate.** Spend is not in the export. It is worked out as daily budget times the number of days, assuming the full budget was spent every day, so cost per booking and revenue per budget dollar are estimates too.
+- **Lost value is a model, not a measured loss.** It counts every unanswered call, so it likely overstates the loss. The call-back list counts each caller once.
+- **Highest and lowest est. return do not rank every campaign.** Highest needs at least 5 bookings and lowest needs at least 10 calls, both with a budget. A campaign below both, or with no budget in the file, is not ranked, so scan the table as well.
 - **Trust the Action line over the takeaway.** An AI takeaway uses only real numbers and names, but the app cannot check that the sentence around them is worded well. The Action lines are written by the app itself.
 - **Times are local to each office.** A 9 AM call in Phoenix and a 9 AM call in New York both show as 9 AM.

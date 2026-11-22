@@ -40,7 +40,7 @@ export interface CampaignRow {
   /** Calls in the previous period; null when there is no comparison. */
   previousCalls: number | null;
   callsChange: Change;
-  /** Set only when calls changed by more than chance explains. Never set for Unattributed. */
+  /** Set only when calls changed by more than the usual variation. Never set for Unattributed. */
   alert: CampaignAlert | null;
 }
 
@@ -68,13 +68,13 @@ export interface CampaignsOptions {
 }
 
 const SHIFT_TEMPLATE =
-  'Shift budget from {shift.worst.name} (est. {shift.worst.value} revenue per budget dollar) toward {shift.best.name} (est. {shift.best.value} revenue per budget dollar).';
+  'Consider moving budget from {shift.worst.name} (est. {shift.worst.value} revenue per budget dollar) toward {shift.best.name} (est. {shift.best.value} revenue per budget dollar). Returns at a higher budget are unknown.';
 const ATTRIBUTION_START = '{attribution.calls} ({attribution.bookings}, {attribution.revenue}) came in on ';
-const ATTRIBUTION_END = ' not tied to any campaign. Assign each to a campaign.';
+const ATTRIBUTION_END = ' not tied to any campaign.';
 const NO_PAIR_REASON =
-  'no two different campaigns qualify: best needs a daily budget and at least {no_shift.min_bookings}, worst a daily budget and at least {no_shift.min_calls} in this range.';
+  'no two different campaigns qualify: highest needs a daily budget and at least {no_shift.min_bookings}, lowest a daily budget and at least {no_shift.min_calls} in this range.';
 const NO_SPREAD_REASON =
-  'no campaign with a daily budget and at least {no_shift.min_calls} earns less per budget dollar than the top campaign with at least {no_shift.min_bookings} in this range.';
+  'no campaign with a daily budget and at least {no_shift.min_calls} earns less per budget dollar than the highest of those with at least {no_shift.min_bookings} in this range.';
 const NO_SHIFT_PREFIX = 'No budget shift is suggested: ';
 
 const BOOKING = ['booking', 'bookings'] as const;

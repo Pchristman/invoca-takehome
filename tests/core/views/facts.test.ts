@@ -4,13 +4,11 @@ import { ActionKind, fillPlaceholders, formatFact, makeAction, makeFactSheet } f
 describe('formatFact', () => {
   test('each kind', () => {
     expect(formatFact({ kind: 'rate', value: 0.5 })).toBe('50.0%');
-    expect(formatFact({ kind: 'weekday', value: 1 })).toBe('Tuesday');
     expect(formatFact({ kind: 'name', value: 'Alpha' })).toBe('Alpha');
     expect(formatFact({ kind: 'count', value: 1, noun: ['call', 'calls'] })).toBe('1 call');
     expect(formatFact({ kind: 'usd', value: 12 })).toBe('$12');
     expect(formatFact({ kind: 'usd_per_dollar', value: 4.2857 })).toBe('$4.29');
     expect(formatFact({ kind: 'usd_per_dollar', value: 2 })).toBe('$2.00');
-    expect(formatFact({ kind: 'hour', value: 9 })).toBe('09:00');
     expect(formatFact({ kind: 'percent_change', value: 8.2235 })).toBe('+8.2%');
     expect(formatFact({ kind: 'points_change', value: 5 })).toBe('+5.0 points');
   });

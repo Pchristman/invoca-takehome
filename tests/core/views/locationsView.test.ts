@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { buildLocations } from '../../../src/core/views/locationsView';
-import { busiestMissedSlot } from '../../../src/core/views/missedSlots';
 import type { CleanCall } from '../../../src/core/types';
 import { makeCall } from '../helpers';
 import { campaign, expectAllFinite, makeStore, office, officeCalls, range } from './fixtures';
@@ -11,10 +10,6 @@ const r = range('2026-09-01', '2026-09-14');
 
 type Shape = { calls: number; answered: number; booked: number };
 const storeOf = (calls: CleanCall[]) => makeStore(calls, { campaigns, locations });
-const missedAt = (locationId: string, weekday: number, hour: number, n = 1): CleanCall[] =>
-  Array.from({ length: n }, () =>
-    makeCall({ locationId, answered: false, outcome: 'missed', booked: false, revenueUsd: 0, localWeekday: weekday, localHour: hour }),
-  );
 
 function l1(a: Shape, b: Shape = { calls: 500, answered: 250, booked: 150 }, c: Shape = b): CleanCall[] {
   return [
@@ -23,34 +18,6 @@ function l1(a: Shape, b: Shape = { calls: 500, answered: 250, booked: 150 }, c: 
     ...officeCalls('loc_c', c),
   ];
 }
-
-describe('busiestMissedSlot', () => {
-  it('counts only unanswered calls by local weekday and hour', () => {
-    const calls = [
-      ...missedAt('loc_a', 1, 9, 3),
-      ...missedAt('loc_a', 4, 15, 2),
-      makeCall({ locationId: 'loc_a', answered: true, localWeekday: 4, localHour: 15 }),
-      makeCall({ locationId: 'loc_a', answered: true, localWeekday: 4, localHour: 15 }),
-      makeCall({ locationId: 'loc_a', answered: true, localWeekday: 4, localHour: 15 }),
-    ];
-    expect(busiestMissedSlot(calls)).toEqual({ locationId: 'loc_a', weekday: 1, hour: 9, calls: 3 });
-    expect(busiestMissedSlot([makeCall({ answered: true })])).toBeNull();
-  });
-
-  it('a tie for the most names no slot', () => {
-    for (const calls of [
-      [...missedAt('loc_b', 0, 9), ...missedAt('loc_a', 3, 9)],
-      [...missedAt('loc_a', 5, 9), ...missedAt('loc_a', 2, 9)],
-      [...missedAt('loc_a', 2, 14, 2), ...missedAt('loc_a', 2, 9, 2), ...missedAt('loc_a', 1, 9)],
-    ]) {
-      expect(busiestMissedSlot(calls)).toBeNull();
-      expect(busiestMissedSlot([...calls].reverse())).toBeNull();
-    }
-    // A tie below the top does not matter.
-    const clear = [...missedAt('loc_a', 1, 9), ...missedAt('loc_b', 2, 9), ...missedAt('loc_c', 3, 9, 2)];
-    expect(busiestMissedSlot(clear)).toMatchObject({ locationId: 'loc_c', weekday: 3, hour: 9, calls: 2 });
-  });
-});
 
 describe('buildLocations', () => {
   it('rows are every office, ranked by calls, ties by id', () => {
@@ -74,19 +41,19 @@ describe('buildLocations', () => {
     }
   });
 
-  it('the answer action names the office, both rates and its most-missed hour', () => {
+  it('the answer action names the office and both rates', () => {
     const view = buildLocations(storeOf(l1({ calls: 100, answered: 30, booked: 30 })), r);
     expect(view.actions).toHaveLength(1);
     const action = view.actions[0]!;
     expect(action.kind).toBe('review_office_answer');
     expect(action.text).toBe(
-      'Office A answers 30.0% of calls versus 50.0% at other offices. Its most-missed hour is Tuesday 09:00 local.',
+      'Office A answers 30.0% of calls versus 50.0% at other offices.',
     );
     expect(action.link).toEqual({ view: 'missed-calls', locationId: 'loc_a' });
     expect(view.templateSentence).toBe(action.text);
     expect(view.factSheet.entities).toEqual(['Office A']);
     expect(Object.keys(view.factSheet.facts).sort()).toEqual([
-      'office_answer.hour', 'office_answer.office', 'office_answer.office_rate', 'office_answer.rest_rate', 'office_answer.weekday',
+      'office_answer.office', 'office_answer.office_rate', 'office_answer.rest_rate',
     ]);
   });
 
@@ -96,7 +63,7 @@ describe('buildLocations', () => {
     ...officeCalls('loc_b', { calls: 1000, answered: 1000, booked: 500 }),
   ];
 
-  it('a worse booking rate names the best campaign there', () => {
+  it('a worse booking rate names the campaign with the highest booking rate there', () => {
     const view = buildLocations(storeOf(l2()), r);
     const a = view.rows.find((row) => row.locationId === 'loc_a')!;
     expect(a.bookingFlag).toMatchObject({ flagged: true, direction: 'worse', officeRate: 0.3, restRate: 0.5 });
@@ -105,7 +72,7 @@ describe('buildLocations', () => {
     expect(a.bestCampaign).toMatchObject({ campaignId: 'cmp_a', name: 'Alpha', calls: 60, bookings: 25 });
     expect(a.bestCampaign!.bookingRate).toBeCloseTo(0.4167, 4);
     const action = view.actions[0]!;
-    expect(action.text).toBe('Office A books 30.0% of calls versus 50.0% elsewhere. Its best campaign there is Alpha.');
+    expect(action.text).toBe('Office A books 30.0% of calls versus 50.0% elsewhere. The campaign with the highest booking rate there is Alpha.');
     expect(action.kind).toBe('review_office_booking');
     expect(action.link).toEqual({ view: 'campaigns' });
     expect(view.factSheet.entities).toEqual(['Alpha', 'Office A']);
@@ -126,7 +93,7 @@ describe('buildLocations', () => {
     expect(a.answerFlag).toMatchObject({ flagged: true, direction: 'better' });
     expect(view.actions[0]!.kind).toBe('no_office_worse');
     expect(view.actions[0]!.text).toBe(
-      'No office is doing worse than the rest on answer or booking rate. Missed calls are a company-wide issue.',
+      'No office is doing worse than the rest on answer or booking rate. Unanswered calls are spread across offices: 48.2% overall.',
     );
     expect(view.actions[0]!.link).toEqual({ view: 'missed-calls' });
     expect(view.actions[0]!.actionable).toBe(false);
@@ -136,12 +103,12 @@ describe('buildLocations', () => {
     const view = buildLocations(storeOf(l1({ calls: 100, answered: 50, booked: 30 })), r);
     const action = view.actions[0]!;
     expect(action.kind).toBe('no_office_stands_out');
-    expect(action.text).toBe('No office stands out on answer or booking rate. Missed calls are a company-wide issue.');
+    expect(action.text).toBe('No office stands out on answer or booking rate. Unanswered calls are spread across offices: 50.0% overall.');
     expect(action.actionable).toBe(false);
     expect(action.link).toEqual({ view: 'missed-calls' });
   });
 
-  const COMBINED_KEYS = ['offices.answer_rate', 'offices.booking_rate', 'offices.compared', 'offices.unanswered'];
+  const COMBINED_KEYS = ['offices.answer_rate', 'offices.booking_rate', 'offices.compared', 'offices.unanswered', 'offices.unanswered_rate'];
 
   it('when no office stands out, the facts are only combined figures for the range', () => {
     // Office C has too few calls to be tested, so two offices were compared; its calls still count in the totals.
@@ -149,12 +116,14 @@ describe('buildLocations', () => {
     const view = buildLocations(storeOf(l1({ calls: 100, answered: 50, booked: 30 }, { calls: 500, answered: 250, booked: 150 }, few)), r);
     const action = view.actions[0]!;
     expect(action.kind).toBe('no_office_stands_out');
-    expect(action.text).toBe('No office stands out on answer or booking rate. Missed calls are a company-wide issue.');
+    expect(action.text).toBe('No office stands out on answer or booking rate. Unanswered calls are spread across offices: 49.3% overall.');
     expect(Object.keys(action.facts).sort()).toEqual(COMBINED_KEYS);
     expect(action.facts['offices.compared']).toEqual({ kind: 'count', value: 2, noun: ['office', 'offices'] });
     expect(action.facts['offices.answer_rate']).toEqual({ kind: 'rate', value: 309 / 610 });
     expect(action.facts['offices.booking_rate']).toEqual({ kind: 'rate', value: 181 / 610 });
     expect(action.facts['offices.unanswered']).toEqual({ kind: 'count', value: 301, noun: ['call', 'calls'] });
+    // The unanswered share the sentence quotes is a fact, from the same rate helper, so the checker sees it too.
+    expect(action.facts['offices.unanswered_rate']).toEqual({ kind: 'rate', value: 301 / 610 });
     expect(Object.values(action.facts).some((fact) => fact.kind === 'name')).toBe(false);
     expect(view.factSheet.facts).toEqual(action.facts);
     expect(view.factSheet.entities).toEqual([]);
@@ -168,11 +137,12 @@ describe('buildLocations', () => {
     expect(view.factSheet.entities).toEqual([]);
   });
 
-  it('with no unanswered calls, nothing is called a company-wide issue', () => {
+  it('with no unanswered calls, there is no unanswered-share sentence or fact', () => {
     const all = { calls: 500, answered: 500, booked: 150 };
     const view = buildLocations(storeOf(l1({ calls: 100, answered: 100, booked: 30 }, all)), r);
     expect(view.actions[0]!.kind).toBe('no_office_stands_out');
     expect(view.actions[0]!.text).toBe('No office stands out on answer or booking rate.');
+    expect(view.factSheet.facts['offices.unanswered_rate']).toBeUndefined();
   });
 
   it('when no office has enough calls to be tested, it says so', () => {
@@ -194,7 +164,7 @@ describe('buildLocations', () => {
     expect(a.answerFlag.direction).toBe('worse');
     expect(a.bookingFlag.direction).toBe('worse');
     expect(view.actions[0]!.kind).toBe('review_office_booking');
-    expect(view.actions[0]!.text).toBe('Office A books 3.0% of calls versus 50.0% elsewhere. Its best campaign there is Alpha.');
+    expect(view.actions[0]!.text).toBe('Office A books 3.0% of calls versus 50.0% elsewhere. The campaign with the highest booking rate there is Alpha.');
   });
 
   // The two tests below need exactly equal z on offices the row sort would not already order by id. Offices

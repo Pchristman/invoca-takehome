@@ -28,7 +28,7 @@ export function OverviewView({ view, state, span }: { view: OverviewData; state:
             </div>
             {tile.previous !== null && <div className="tile-change muted">{tile.previous}</div>}
             {tile.change !== null && (
-              <div className={`tile-change tone-${tile.change.tone}`}>
+              <div className="tile-change tone-neutral">
                 {tile.change.text} ({TONE_WORD[tile.change.tone]})
               </div>
             )}
@@ -39,7 +39,7 @@ export function OverviewView({ view, state, span }: { view: OverviewData; state:
       {model.comparisonReason !== null && <p className="muted small">{model.comparisonReason}</p>}
       {model.empty && <p role="status">No calls in this range.</p>}
       <section className="section">
-        <h2>Top actions</h2>
+        <h2>Suggested actions by page</h2>
         <ul>
           {model.topActions.map((item) => (
             <li key={`${item.viewLabel}-${item.text}`} className={item.actionable ? undefined : 'muted'}>

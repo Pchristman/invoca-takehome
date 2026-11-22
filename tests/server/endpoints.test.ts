@@ -195,7 +195,8 @@ describe('callbacks CSV', () => {
       expect(hashes.has(cells[0]!)).toBe(true);
       cents += Math.round(Number(cells[cells.length - 1]) * 100);
     }
-    expect(cents).toBe(Math.round(view.callbacks.totalValueUsd * 100));
+    const jsonCents = view.callbacks.rows.reduce((sum: number, x: Body) => sum + Math.round(x.estimatedValueUsd * 100), 0);
+    expect(cents).toBe(jsonCents);
   });
 });
 

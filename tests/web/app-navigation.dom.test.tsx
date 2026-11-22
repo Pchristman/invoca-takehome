@@ -138,10 +138,10 @@ describe('view replies', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('The server hit an unexpected error');
     expect(alert.textContent).not.toContain('boom'); // the server's internal text never reaches the screen
-    expect(screen.queryByRole('heading', { name: 'Top actions' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Suggested actions by page' })).toBeNull();
 
     fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
-    await screen.findByRole('heading', { name: 'Top actions' });
+    await screen.findByRole('heading', { name: 'Suggested actions by page' });
     expect(screen.queryByRole('alert')).toBeNull();
     expect(callsTo(calls, '/api/overview')).toHaveLength(2);
   });

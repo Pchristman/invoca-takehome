@@ -47,7 +47,7 @@ const COLUMNS: MissedCallsModel['callbacks']['columns'] = [
   { label: 'Est. value', numeric: true, estimate: true },
 ];
 
-// The "upper bound" sentence lives in the formula (the API and the print summary use it too), so it is not repeated here.
+// The "model, not a measured loss" sentences live in the formula (the API and the print summary use it too), so it is not repeated here.
 const LOST_VALUE_NOTE =
   'The call-back list is smaller: only callers whose latest call went unanswered, each once.';
 const EMPTY_NOTE = 'No one to call back from this range.';
@@ -89,7 +89,7 @@ export function missedCallsModel(view: MissedCallsView, span: DateRange, page = 
       view.unansweredCalls === 0
         ? `No calls went unanswered${officeLabel === null ? '' : ` at ${officeLabel}`} in this range.`
         : null,
-    unanswered: formatCount(view.unansweredCalls, UNANSWERED),
+    unanswered: `${formatCount(view.unansweredCalls, UNANSWERED)} (including voicemail)`,
     lostValue: {
       label: 'Est. lost value',
       value: formatUsd(view.lostValue.estimatedUsd),
@@ -98,7 +98,7 @@ export function missedCallsModel(view: MissedCallsView, span: DateRange, page = 
       sources,
     },
     callbacks: {
-      summary: `${formatCount(total, CALLERS)} whose latest call went unanswered, est. ${formatUsd(view.callbacks.totalValueUsd)} in bookings.`,
+      summary: `${formatCount(total, CALLERS)} whose latest call went unanswered.`,
       columns: COLUMNS,
       rows: shown.map((r) => ({
         key: r.callerHash,

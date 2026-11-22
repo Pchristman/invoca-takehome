@@ -33,7 +33,7 @@ describe('columns', () => {
       'Bookings',
       'Booking rate',
       'Revenue',
-      'Best campaign there',
+      'Highest booking rate (20+ calls)',
       'Compared with other offices',
     ]);
     expect(columns.map((c) => c.key)).toEqual([
@@ -195,7 +195,7 @@ describe('flags', () => {
     const model = locationsModel(planted('none'), DEFAULT_LOCATION_SORT);
     for (const row of model.rows) {
       expect(row.flags).toEqual([]);
-      expect(row.flagNote).toBe('In line with other offices.');
+      expect(row.flagNote).toBe('Not flagged.');
     }
     expect(model.action.kind).toBe('no_office_stands_out');
     expect(model.action.link).toEqual({ view: 'missed-calls' });
@@ -234,7 +234,7 @@ describe('flags', () => {
 
   it('explains how offices are compared', () => {
     expect(locationsModel(planted('none'), DEFAULT_LOCATION_SORT).flagsNote).toBe(
-      'Each office is compared with all other offices pooled. Only offices with enough calls are tested, and a difference is flagged only when chance does not explain it.',
+      'Each office is compared with all other offices pooled. Only offices with enough calls are tested, and a difference is flagged only when the gap is unlikely to be chance.',
     );
   });
 });

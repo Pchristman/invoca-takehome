@@ -33,7 +33,7 @@ const endInput = () => screen.getByLabelText('End date') as HTMLInputElement;
 
 /** Wait for the first overview reply, so later counts start from a settled page. */
 async function ready(): Promise<void> {
-  await screen.findByRole('heading', { name: 'Top actions' });
+  await screen.findByRole('heading', { name: 'Suggested actions by page' });
 }
 
 describe('range presets', () => {
