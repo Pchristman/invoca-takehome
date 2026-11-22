@@ -35,7 +35,7 @@ With Docker instead, `docker compose up --build` is the only command needed, and
 | `npm start` | available; builds the web app, then serves it and the JSON API at `http://127.0.0.1:3000`; reads `.env` (`HOST`, default 127.0.0.1; `PORT`, default 3000; `DATA_DIR`; `DB_PATH`, default `data/calls.db`) |
 | `docker compose up --build` | available; builds one image and serves the app at `http://localhost:3000`; see Docker below |
 | `npm run test:docker` | available; real Docker checks (needs Docker running; builds the image, starts containers, makes no real API call) |
-| `npm run ai:try -- <view|all>` | available; makes REAL API calls (needs a key); see AI takeaways below |
+| `npm run ai:try -- <view\|all>` | available; makes REAL API calls (needs a key); see AI takeaways below |
 | `npm run ai:try -- --question "..."` | available; one REAL call per question (needs a key); see Ask a question below |
 | `npm run dev` | available; the server (restarting on change) and Vite with hot reload together, `/api` proxied to the server; the page is at the address Vite prints on start |
 
